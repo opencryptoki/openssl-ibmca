@@ -1,0 +1,28 @@
+
+ README for the OpenSSL 0.9.8 IBMCA engine
+
+ Author: Mike Halcrow <mhalcrow@us.ibm.com>
+ Report bugs: opencryptoki-users@lists.sf.net
+
+
+ABOUT
+
+This package contains the dynamic IBMCA engine.
+
+BUILDING
+
+ Requirements: OpenSSL 0.9.8, libICA
+
+ By default, the build will assume that you have a custom openssl installed
+in /usr/local/ssl.
+
+ $ configure [--enable-debug] [--with-openssl=/path/to/custom/openssl]
+ $ make
+ # make install
+
+RUNNING
+
+Included in this package is a sample openssl.cnf file
+(openssl.cnf.sample), which can be used to turn on use of the IBMCA
+engine in apps where OpenSSL config support is compiled in.
+
