@@ -29,6 +29,8 @@ static void ERR_IBMCA_error(int function, int reason, char *file,
 #define IBMCA_F_IBMCA_AES_128_CIPHER			 111
 #define IBMCA_F_IBMCA_AES_192_CIPHER			 112
 #define IBMCA_F_IBMCA_AES_256_CIPHER			 113
+#define IBMCA_F_IBMCA_SHA256_UPDATE			 114
+#define IBMCA_F_IBMCA_SHA256_FINAL			 115
 
 /* Reason codes. */
 #define IBMCA_R_ALREADY_LOADED				 100

@@ -69,6 +69,7 @@
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/sha.h>
+#include <openssl/obj_mac.h>
 
 #ifndef OPENSSL_NO_HW
 #ifndef OPENSSL_NO_HW_IBMCA
@@ -102,6 +103,14 @@ typedef struct ibmca_sha1_ctx {
 } IBMCA_SHA_CTX;
 #endif
 
+#ifndef OPENSSL_NO_SHA256
+typedef struct ibmca_sha256_ctx {
+	ICA_SHA256_CONTEXT c;
+	unsigned char tail[SHA256_BLOCK_SIZE];
+	unsigned int tail_len;
+} IBMCA_SHA256_CTX;
+#endif
+
 static int cipher_nids[] = { 
 	NID_des_ecb,
 	NID_des_cbc,
@@ -118,6 +127,9 @@ static int cipher_nids[] = {
 static int digest_nids[] = { 
 #ifndef OPENSSL_NO_SHA1
 	NID_sha1,
+#endif
+#ifndef OPENSSL_NO_SHA256
+	NID_sha256
 #endif
 };
 
@@ -138,6 +150,7 @@ static const char *IBMCA_F9 = "icaTDesEncrypt";
 static const char *IBMCA_F10 = "icaTDesDecrypt";
 static const char *IBMCA_F11 = "icaAesEncrypt";
 static const char *IBMCA_F12 = "icaAesDecrypt";
+static const char *IBMCA_F13 = "icaSha256";
 
 static ICA_ADAPTER_HANDLE ibmca_handle = 0;
 
@@ -227,6 +240,17 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *data,
 static int ibmca_sha1_final(EVP_MD_CTX * ctx, unsigned char *md);
 
 static int ibmca_sha1_cleanup(EVP_MD_CTX * ctx);
+#endif
+
+#ifndef OPENSSL_NO_SHA256
+static int ibmca_sha256_init(EVP_MD_CTX * ctx);
+
+static int ibmca_sha256_update(EVP_MD_CTX * ctx, const void *data,
+			     unsigned long count);
+
+static int ibmca_sha256_final(EVP_MD_CTX * ctx, unsigned char *md);
+
+static int ibmca_sha256_cleanup(EVP_MD_CTX * ctx);
 #endif
 
 /* WJH - check for more commands, like in nuron */
@@ -487,6 +511,23 @@ static const EVP_MD ibmca_sha1 = {
 };
 #endif
 
+#ifndef OPENSSL_NO_SHA256
+static const EVP_MD ibmca_sha256 = {
+	NID_sha256,
+	NID_sha256WithRSAEncryption,
+	LENGTH_SHA_HASH,
+	0,
+	ibmca_sha256_init,
+	ibmca_sha256_update,
+	ibmca_sha256_final,
+	NULL,
+	ibmca_sha256_cleanup,
+	EVP_PKEY_RSA_method,
+	SHA_BLOCK_SIZE,
+	sizeof(EVP_MD *) + sizeof(struct ibmca_sha256_ctx)
+};
+#endif
+
 /* Constants used when creating the ENGINE */
 static const char *engine_ibmca_id = "ibmca";
 static const char *engine_ibmca_name = "Ibmca hardware engine support";
@@ -618,6 +659,7 @@ static unsigned int (ICA_CALL * p_icaTDesEncrypt) ();
 static unsigned int (ICA_CALL * p_icaTDesDecrypt) ();
 static unsigned int (ICA_CALL * p_icaAesEncrypt) ();
 static unsigned int (ICA_CALL * p_icaAesDecrypt) ();
+static unsigned int (ICA_CALL * p_icaSha256) ();
 
 /* utility function to obtain a context */
 static int get_context(ICA_ADAPTER_HANDLE * p_handle)
@@ -652,6 +694,7 @@ static int ibmca_init(ENGINE * e)
 	void (*p10) ();
 	void (*p11) ();
 	void (*p12) ();
+	void (*p13) ();
 
 	if (ibmca_dso != NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_ALREADY_LOADED);
@@ -685,7 +728,8 @@ static int ibmca_init(ENGINE * e)
 	    || !(p9 = DSO_bind_func(ibmca_dso, IBMCA_F9))
 	    || !(p10 = DSO_bind_func(ibmca_dso, IBMCA_F10))
 	    || !(p11 = DSO_bind_func(ibmca_dso, IBMCA_F11))
-	    || !(p12 = DSO_bind_func(ibmca_dso, IBMCA_F12))) {
+	    || !(p12 = DSO_bind_func(ibmca_dso, IBMCA_F12))
+	    || !(p13 = DSO_bind_func(ibmca_dso, IBMCA_F13))) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
@@ -704,6 +748,7 @@ static int ibmca_init(ENGINE * e)
 	p_icaTDesDecrypt = (unsigned int (ICA_CALL *) ()) p10;
 	p_icaAesEncrypt = (unsigned int (ICA_CALL *) ()) p11;
 	p_icaAesDecrypt = (unsigned int (ICA_CALL *) ()) p12;
+	p_icaSha256 = (unsigned int (ICA_CALL *) ()) p13;
 
 	if (!get_context(&ibmca_handle)) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_UNIT_FAILURE);
@@ -729,6 +774,7 @@ err:
 	p_icaTDesDecrypt = NULL;
 	p_icaAesEncrypt = NULL;
 	p_icaAesDecrypt = NULL;
+	p_icaSha256 = NULL;
 
 	return 0;
 }
@@ -1168,6 +1214,11 @@ static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
 		*digest = &ibmca_sha1;
 		break;
 #endif
+#ifndef OPENSSL_NO_SHA256
+	case NID_sha256:
+		*digest = &ibmca_sha256;
+		break;
+#endif
 	default:
 		*digest = NULL;
 		break;
@@ -1353,6 +1404,184 @@ static int ibmca_sha1_cleanup(EVP_MD_CTX * ctx)
 }				// end ibmca_sha1_cleanup
 
 #endif // OPENSSL_NO_SHA1
+
+#ifndef OPENSSL_NO_SHA256
+static int ibmca_sha256_init(EVP_MD_CTX *ctx)
+{
+	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
+	memset((unsigned char *)ibmca_sha256_ctx, 0, sizeof(*ibmca_sha256_ctx));
+	return 1;
+}				// end ibmca_sha256_init                                                
+
+static int
+ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
+{
+	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
+	unsigned int message_part = SHA_MSG_PART_MIDDLE, fill_size = 0,
+		tmp_len = LENGTH_SHA256_HASH;
+	unsigned long in_data_len = inlen;
+	unsigned char tmp_hash[LENGTH_SHA256_HASH];
+
+	if (in_data_len == 0)
+		return 1;
+
+	if (ibmca_sha256_ctx->c.runningLength == 0 
+	    && ibmca_sha256_ctx->tail_len == 0) {
+		message_part = SHA_MSG_PART_FIRST;
+
+		ibmca_sha256_ctx->tail_len = in_data_len & 0x3f;
+		if(ibmca_sha256_ctx->tail_len) {
+			in_data_len &= ~0x3f;
+			memcpy(ibmca_sha256_ctx->tail, in_data + in_data_len,
+			       ibmca_sha256_ctx->tail_len);
+		}
+	} else if (ibmca_sha256_ctx->c.runningLength == 0
+		   && ibmca_sha256_ctx->tail_len > 0 ) {
+		/* Here we need to fill out the temporary tail buffer until
+		 * it has 64 bytes in it, then call icaSha256 on that buffer.
+		 * If there weren't enough bytes passed in to fill it out,
+		 * just copy in what we can and return success without calling
+		 * icaSha256. - KEY
+		 */
+
+		fill_size = SHA_BLOCK_SIZE - ibmca_sha256_ctx->tail_len;
+		if (fill_size < in_data_len) {
+			memcpy(ibmca_sha256_ctx->tail 
+			       + ibmca_sha256_ctx->tail_len, in_data,
+			       fill_size);
+
+			/* Submit the filled out tail buffer */
+			if (p_icaSha256(ibmca_handle,
+					(unsigned int)SHA_MSG_PART_FIRST,
+					(unsigned int)SHA_BLOCK_SIZE,
+					ibmca_sha256_ctx->tail,
+					(unsigned int)LENGTH_SHA256_CONTEXT,
+					&ibmca_sha256_ctx->c,
+					&tmp_len, tmp_hash)) {
+				IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, 
+					 IBMCA_R_REQUEST_FAILED);
+				return 0;
+			}
+		} else {
+			memcpy(ibmca_sha256_ctx->tail
+			       + ibmca_sha256_ctx->tail_len, in_data,
+			       in_data_len);
+			ibmca_sha256_ctx->tail_len += in_data_len;
+			return 1;
+		}
+
+		/* We had to use 'fill_size' bytes from in_data to fill out the
+		 * empty part of save data, so adjust in_data_len */
+		in_data_len -= fill_size;
+
+		ibmca_sha256_ctx->tail_len = in_data_len & 0x3f;
+		if(ibmca_sha256_ctx->tail_len) {
+			in_data_len &= ~0x3f;
+			memcpy(ibmca_sha256_ctx->tail,
+			       in_data + fill_size + in_data_len,
+			       ibmca_sha256_ctx->tail_len);
+			/* fill_size is added to in_data down below */
+		}
+	} else if (ibmca_sha256_ctx->c.runningLength > 0) {
+		if (ibmca_sha256_ctx->tail_len) {
+			fill_size = SHA_BLOCK_SIZE - ibmca_sha256_ctx->tail_len;
+			if (fill_size < in_data_len) {
+				memcpy(ibmca_sha256_ctx->tail 
+				       + ibmca_sha256_ctx->tail_len, in_data,
+				       fill_size);
+
+				/* Submit the filled out save buffer */
+				if (p_icaSha256(ibmca_handle, message_part,
+						(unsigned int)SHA_BLOCK_SIZE,
+						ibmca_sha256_ctx->tail,
+						(unsigned int)
+						LENGTH_SHA256_CONTEXT,
+						&ibmca_sha256_ctx->c,
+						&tmp_len, tmp_hash)) {
+					IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, 
+						 IBMCA_R_REQUEST_FAILED);
+					return 0;
+				}
+			} else {
+				memcpy(ibmca_sha256_ctx->tail
+				       + ibmca_sha256_ctx->tail_len, in_data,
+				       in_data_len);
+				ibmca_sha256_ctx->tail_len += in_data_len;
+				return 1;
+			}
+
+			/* 
+			 * We had to use some of the data from in_data to 
+			 * fill out the empty part of save data, so adjust
+			 * in_data_len
+			 */
+			in_data_len -= fill_size;
+
+			ibmca_sha256_ctx->tail_len = in_data_len & 0x3f;
+			if (ibmca_sha256_ctx->tail_len) {
+				in_data_len &= ~0x3f;
+				memcpy(ibmca_sha256_ctx->tail, 
+				       in_data + fill_size + in_data_len,
+					ibmca_sha256_ctx->tail_len);
+			}
+		} else {
+			/* This is the odd case, where we need to go
+			 * ahead and send the first X * 64 byte chunks
+			 * in to be processed and copy the last <64
+			 * byte area into the tail. -KEY */
+			ibmca_sha256_ctx->tail_len = in_data_len & 0x3f;
+			if (ibmca_sha256_ctx->tail_len) {
+				in_data_len &= ~0x3f;
+				memcpy(ibmca_sha256_ctx->tail,
+				       in_data + in_data_len,
+				       ibmca_sha256_ctx->tail_len);
+			}
+		}
+	}
+
+	/* If the data passed in was <64 bytes, in_data_len will be 0 */
+        if (in_data_len && 
+	    p_icaSha256(ibmca_handle, message_part,
+			(unsigned int)in_data_len, in_data + fill_size,
+			(unsigned int)LENGTH_SHA256_CONTEXT,
+			&ibmca_sha256_ctx->c,
+			&tmp_len, tmp_hash)) {
+		IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, IBMCA_R_REQUEST_FAILED);
+		return 0;
+	}
+
+	return 1;
+}				// end ibmca_sha256_update                                                 
+
+static int ibmca_sha256_final(EVP_MD_CTX *ctx, unsigned char *md)
+{
+	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
+	unsigned int message_part = 0;
+	int outlen = LENGTH_SHA256_HASH;
+
+	if (ibmca_sha256_ctx->c.runningLength)
+		message_part = SHA_MSG_PART_FINAL;
+	else
+		message_part = SHA_MSG_PART_ONLY;
+
+	if (p_icaSha256(ibmca_handle,
+			message_part,
+			ibmca_sha256_ctx->tail_len,
+			ibmca_sha256_ctx->tail,
+			LENGTH_SHA256_CONTEXT, &ibmca_sha256_ctx->c, &outlen,
+			md)) {
+		IBMCAerr(IBMCA_F_IBMCA_SHA256_FINAL, IBMCA_R_REQUEST_FAILED);
+		return 0;
+	}
+
+	return 1;
+}				// end ibmca_sha256_final
+
+static int ibmca_sha256_cleanup(EVP_MD_CTX *ctx)
+{
+	return 1;
+}				// end ibmca_sha256_cleanup
+#endif // OPENSSL_NO_SHA256
 
 static int ibmca_mod_exp(BIGNUM * r, const BIGNUM * a, const BIGNUM * p,
 			 const BIGNUM * m, BN_CTX * ctx)
