@@ -73,14 +73,10 @@
 #ifndef OPENSSL_NO_HW
 #ifndef OPENSSL_NO_HW_IBMCA
 
-#ifdef FLAT_INC
 #include "ica_openssl_api.h"
-#else
-#include "vendor_defns/ica_openssl_api.h"
-#endif
 
 #define IBMCA_LIB_NAME "ibmca engine"
-#include "hw_ibmca_err.c"
+#include "e_ibmca_err.c"
 
 typedef struct ibmca_des_context {
 	unsigned char key[sizeof(ICA_KEY_DES_TRIPLE)];
