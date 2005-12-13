@@ -23,6 +23,11 @@ fi
 
 OPENSSL_LIB_DIR="/usr/local/ssl/lib"
 
+# libica
+AC_MSG_CHECKING([libICA])
+AC_CHECK_LIB(ica, icaOpenAdapter, [LIBICA="-lica"], \
+             AC_MSG_ERROR([*** libICA not found]))
+
 # Non-standard OpenSSL
 AC_MSG_CHECKING([Non-standard OpenSSL])
 AC_ARG_WITH(openssl,
@@ -52,4 +57,3 @@ AC_SUBST(CFLAGS)
 AC_OUTPUT(Makefile)
 
 echo "CFLAGS=$CFLAGS"
-
