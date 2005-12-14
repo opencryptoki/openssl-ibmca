@@ -1437,12 +1437,11 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 		}
 	} else if (ibmca_sha256_ctx->c.runningLength == 0
 		   && ibmca_sha256_ctx->tail_len > 0 ) {
-		/* Here we need to fill out the temporary tail buffer until
-		 * it has 64 bytes in it, then call icaSha256 on that buffer.
-		 * If there weren't enough bytes passed in to fill it out,
-		 * just copy in what we can and return success without calling
-		 * icaSha256. - KEY
-		 */
+		/* Here we need to fill out the temporary tail buffer
+		 * until it has 64 bytes in it, then call icaSha256 on
+		 * that buffer.  If there weren't enough bytes passed
+		 * in to fill it out, just copy in what we can and
+		 * return success without calling icaSha256. - KEY */
 
 		fill_size = SHA_BLOCK_SIZE - ibmca_sha256_ctx->tail_len;
 		if (fill_size < in_data_len) {
