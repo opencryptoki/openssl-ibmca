@@ -29,7 +29,7 @@ This package contains a shared object OpenSSL dynamic engine for the IBM
 eServer Cryptographic Accelerator (ICA).
 
 %prep
-%setup -n ibmca-1.0.0-rc2
+%setup -n openssl-ibmca-1.0.0-rc2
 
 %build
 autoreconf --force --install
