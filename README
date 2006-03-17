@@ -16,13 +16,36 @@ BUILDING
  By default, the build will assume that you have a custom openssl installed
 in /usr/local/ssl.
 
- $ configure [--enable-debug] [--with-openssl=/path/to/custom/openssl]
+ $ configure [--enable-debug] [--with-openssl=/path/to/custom/openssl] \
+             [--with-engines-dir=/path/to/openssl/engines/directory]
  $ make
  # make install
 
-RUNNING
+Included in this package is a sample openssl.cnf file (openssl.cnf.sample),
+which can be used to turn on use of the IBMCA engine in apps where OpenSSL
+config support is compiled in. In order to enable the IBMCA engine, the
+content from this file should be concatenated to the existing openssl.cnf file
+on the host.
 
-Included in this package is a sample openssl.cnf file
-(openssl.cnf.sample), which can be used to turn on use of the IBMCA
-engine in apps where OpenSSL config support is compiled in.
+During the build process, the path to the engines/ directory is substituted in
+for the dynamic_path parameter in the ibmca section. By default, this path to
+the engines/ directory is relative to the OpenSSL installation target. With no
+parameters passed to the ./configure script, this target is /usr/local/ssl,
+and so the default entry in the sample openssl.cnf file is:
 
+dynamic_path = /usr/local/ssl/lib/engines/libibmca.so
+
+If OpenSSL is installed to a different location, then the --with-openssl=
+option should be passed to the ./configure script. For instance, if
+--with-openssl=/usr is given, then the entry in the sample openssl.cnf file
+is:
+
+dynamic_path = /usr/lib/engines/libibmca.so
+
+If the OpenSSL engines directory is located elsewhere, then that location must
+be specified in the --with-engines-dir= option. For instance, if the engines/
+directory is under /usr/lib64, then the ./configure script will need the
+option --with-engines-dir=/usr/lib64/engines, which will produce this entry in
+the sample openssl.cnf file:
+
+dynamic_path = /usr/lib64/engines/libibmca.so
