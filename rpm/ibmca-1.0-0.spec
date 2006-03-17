@@ -18,11 +18,14 @@ Version:        1.0.0
 Release:        0
 License:        Other License(s), see package, IBM Public License
 Group:          Hardware/Other
-Source:         http://sourceforge.net/project/showfiles.php?group_id=128009&package_id=141377&release_id=384644
-Source1:        openssl-ibmca-1.0.0-rc2.tar.bz2
+Source:         openssl-ibmca-1.0.0-rc2.tar.bz2
 URL:            http://sourceforge.net/projects/opencryptoki
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 PreReq:         %fillup_prereq %insserv_prereq
+
+%define ibmca_64bit_arch s390x ppc64
+%define ibmca_32bit_arch %ix86 s390 ppc %arm
+ExclusiveArch: %ibmca_32bit_arch %ibmca_64bit_arch
 
 %description
 This package contains a shared object OpenSSL dynamic engine for the IBM
@@ -39,7 +42,7 @@ export CPPFLAGS="$RPM_OPT_FLAGS"
 make
 
 %install
-make install
+%makeinstall
 
 %post
 %run_ldconfig
@@ -49,12 +52,8 @@ make install
 %files
 %defattr(-, root, root)
 %doc README
-%ifarch s390
-/usr/lib/engines/libibmca.so
-%endif
-%ifarch s390x
-/usr/lib64/engines/libibmca.so
-%endif
+%doc openssl.cnf.sample
+%{_libdir}/engines/libibmca.so
 
 %changelog -n ibmca
 * Fri Mar 17 2006 - mhalcrow@us.ibm.com
