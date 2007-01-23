@@ -1858,6 +1858,7 @@ static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
 			 IBMCA_R_UNDERFLOW_CONDITION);
 		goto err;
 	}
+	memset(argument, 0, pbytes + qbytes);
 	BN_bn2bin(a, ((unsigned char *)argument
 		      + outLen
 		      - BN_num_bytes(a)));
