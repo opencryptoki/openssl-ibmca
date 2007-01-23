@@ -1582,133 +1582,92 @@ static int ibmca_sha256_cleanup(EVP_MD_CTX *ctx)
 }				// end ibmca_sha256_cleanup
 #endif // OPENSSL_NO_SHA256
 
-static int ibmca_mod_exp(BIGNUM * r, const BIGNUM * a, const BIGNUM * p,
-			 const BIGNUM * m, BN_CTX * ctx)
+static int ibmca_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
+			 const BIGNUM *m, BN_CTX *ctx)
 {
-	/* I need somewhere to store temporary serialised values for
-	 * use with the Ibmca API calls. A neat cheat - I'll use
-	 * BIGNUMs from the BN_CTX but access their arrays directly as
-	 * byte arrays <grin>. This way I don't have to clean anything
-	 * up. */
-
-	BIGNUM *argument = NULL;
-	BIGNUM *result = NULL;
-	BIGNUM *key = NULL;
-	int to_return;
+	char *argument;
+	char *result;
+	char *key;
+	ICA_KEY_RSA_MODEXPO *pubkey;
 	int inLen, outLen, tmpLen;
-
-
-
-	ICA_KEY_RSA_MODEXPO *publKey = NULL;
 	unsigned int rc;
-
-	to_return = 0;		/* expect failure */
+	int to_return = 0; /* fail code set by default */
 
 	if (!ibmca_dso) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_NOT_LOADED);
 		goto err;
 	}
-	/* Prepare the params */
-	BN_CTX_start(ctx);
-	argument = BN_CTX_get(ctx);
-	result = BN_CTX_get(ctx);
-	key = BN_CTX_get(ctx);
-
-	if (!argument || !result || !key) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_BN_CTX_FULL);
-		goto err;
-	}
-
-
-	if (!bn_wexpand(argument, m->top) || !bn_wexpand(result, m->top) ||
-	    !bn_wexpand(key, sizeof(*publKey) / BN_BYTES)) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_BN_EXPAND_FAIL);
-		goto err;
-	}
-
-	publKey = (ICA_KEY_RSA_MODEXPO *) key->d;
-
-	if (publKey == NULL) {
-		goto err;
-	}
-	memset(publKey, 0, sizeof(ICA_KEY_RSA_MODEXPO));
-
-	publKey->keyType = CORRECT_ENDIANNESS(ME_KEY_TYPE);
-	publKey->keyLength =
-	    CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_MODEXPO));
-	publKey->expOffset =
-	    (char *) publKey->keyRecord - (char *) publKey;
-
-	/* A quirk of the card: the exponent length has to be the same
-	   as the modulus (key) length */
-
 	outLen = BN_num_bytes(m);
-
-/* check for modulus length SAB*/
-	if (outLen > 256) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP,
-			 IBMCA_R_MEXP_LENGTH_TO_LARGE);
-		goto err;
-	}
-/* check for modulus length SAB*/
-
-
-	publKey->expLength = publKey->nLength = outLen;
-/* SAB Check for underflow condition
-    the size of the exponent is less than the size of the parameter
-    then we have a big problem and will underflow the keyRecord
-   buffer.  Bad stuff could happen then
-*/
-	if (outLen < BN_num_bytes(p)) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP,
-			 IBMCA_R_UNDERFLOW_KEYRECORD);
-		goto err;
-	}
-/* SAB End check for underflow */
-
-
-	BN_bn2bin(p, &publKey->keyRecord[publKey->expLength -
-					 BN_num_bytes(p)]);
-	BN_bn2bin(m, &publKey->keyRecord[publKey->expLength]);
-
-
-
-	publKey->modulusBitLength =
-	    CORRECT_ENDIANNESS(publKey->nLength * 8);
-	publKey->nOffset =
-	    CORRECT_ENDIANNESS(publKey->expOffset + publKey->expLength);
-
-	publKey->expOffset =
-	    CORRECT_ENDIANNESS((char *) publKey->keyRecord -
-			       (char *) publKey);
-
-	tmpLen = outLen;
-	publKey->expLength = publKey->nLength = CORRECT_ENDIANNESS(tmpLen);
-
-	/* Prepare the argument */
-
-	memset(argument->d, 0, outLen);
-	BN_bn2bin(a, (unsigned char *) argument->d + outLen -
-		  BN_num_bytes(a));
-
-	inLen = outLen;
-
-	/* Perform the operation */
-
-	if ((rc = p_icaRsaModExpo(ibmca_handle, inLen,
-				  (unsigned char *) argument->d,
-				  publKey, &outLen,
-				  (unsigned char *) result->d)) != 0) {
+	argument = malloc(outLen);
+	if (!argument) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-
-
-	/* Convert the response */
-	BN_bin2bn((unsigned char *) result->d, outLen, r);
+	result = malloc(outLen);
+	if (!result) {
+		free(argument);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
+		goto err;
+	}
+	key = malloc(sizeof(*pubkey));
+	if (!key) {
+		free(argument);
+		free(result);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
+		goto err;
+	}
+	pubkey = (ICA_KEY_RSA_MODEXPO *)key;
+	memset(pubkey, 0, sizeof(*pubkey));
+	pubkey->keyType = CORRECT_ENDIANNESS(ME_KEY_TYPE);
+	pubkey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_MODEXPO));
+	pubkey->expOffset = (char *)pubkey->keyRecord - (char *)pubkey;
+#define IBMCA_MAX_EXP_LEN 256
+	if (outLen > IBMCA_MAX_EXP_LEN) {
+		free(argument);
+		free(result);
+		free(key);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_MEXP_LENGTH_TO_LARGE);
+		goto err;
+	}
+	pubkey->expLength = pubkey->nLength = outLen;
+	if (outLen < BN_num_bytes(p)) { /* Key record underflow check */
+		free(argument);
+		free(result);
+		free(key);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_UNDERFLOW_KEYRECORD);
+		goto err;
+	}
+	BN_bn2bin(p,
+		  &pubkey->keyRecord[(pubkey->expLength - BN_num_bytes(p))]);
+	BN_bn2bin(m, &pubkey->keyRecord[pubkey->expLength]);
+	pubkey->modulusBitLength =  CORRECT_ENDIANNESS((pubkey->nLength * 8));
+	pubkey->nOffset =
+		CORRECT_ENDIANNESS((pubkey->expOffset + pubkey->expLength));
+	pubkey->expOffset = CORRECT_ENDIANNESS(((char *)pubkey->keyRecord -
+						(char *)pubkey));
+	tmpLen = outLen;
+	pubkey->expLength = pubkey->nLength = CORRECT_ENDIANNESS(tmpLen);
+	memset(argument, 0, outLen);
+	BN_bn2bin(a, ((unsigned char *)argument
+		      + outLen
+		      - BN_num_bytes(a)));
+	inLen = outLen;
+	if ((rc = p_icaRsaModExpo(ibmca_handle, inLen,
+				  (unsigned char *)argument,
+				  pubkey, &outLen,
+				  (unsigned char *)result)) != 0) {
+		free(argument);
+		free(result);
+		free(key);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
+		goto err;
+	}
+	BN_bin2bn((unsigned char *)result, outLen, r);
 	to_return = 1;
+	free(argument);
+	free(result);
+	free(key);
 err:
-	BN_CTX_end(ctx);
 	return to_return;
 }
 
