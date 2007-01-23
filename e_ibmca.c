@@ -1711,95 +1711,78 @@ static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
 			     const BIGNUM * dmp1, const BIGNUM * dmq1,
 			     const BIGNUM * iqmp, BN_CTX * ctx)
 {
-
-	BIGNUM *argument = NULL;
-	BIGNUM *result = NULL;
-	BIGNUM *key = NULL;
-
-	int to_return = 0;	/* expect failure */
-
-	char *pkey = NULL;
-	ICA_KEY_RSA_CRT *privKey = NULL;
+	char *argument;
+	char *result;
+	char *key;
+	unsigned char *pkey;
+	ICA_KEY_RSA_CRT *privkey;
 	int inLen, outLen;
-
 	int rc;
 	unsigned int offset, pSize, qSize;
-	/* SAB New variables */
 	unsigned int keyRecordSize;
 	unsigned int pbytes = BN_num_bytes(p);
 	unsigned int qbytes = BN_num_bytes(q);
 	unsigned int dmp1bytes = BN_num_bytes(dmp1);
 	unsigned int dmq1bytes = BN_num_bytes(dmq1);
 	unsigned int iqmpbytes = BN_num_bytes(iqmp);
+	int to_return = 0;
 
-	/* Prepare the params */
-
-	BN_CTX_start(ctx);
-	argument = BN_CTX_get(ctx);
-	result = BN_CTX_get(ctx);
-	key = BN_CTX_get(ctx);
-
-	if (!argument || !result || !key) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT, IBMCA_R_BN_CTX_FULL);
+	argument = malloc((pbytes + qbytes));
+	if (!argument) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-
-	if (!bn_wexpand(argument, p->top + q->top) ||
-	    !bn_wexpand(result, p->top + q->top) ||
-	    !bn_wexpand(key, sizeof(*privKey) / BN_BYTES)) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_BN_EXPAND_FAIL);
+	result = malloc((pbytes + qbytes));
+	if (!result) {
+		free(argument);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-
-
-	privKey = (ICA_KEY_RSA_CRT *) key->d;
-	/* SAB Add check for total size in bytes of the parms does not 
-	 * exceed the buffer space we have do this first
-	 */
-	keyRecordSize =
-	    pbytes + qbytes + dmp1bytes + dmq1bytes + iqmpbytes;
-	if (keyRecordSize > sizeof(privKey->keyRecord)) {
+	key = malloc(sizeof(*privkey));
+	if (!key) {
+		free(argument);
+		free(result);
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
+		goto err;
+	}
+	privkey = (ICA_KEY_RSA_CRT *)key;
+	keyRecordSize = (pbytes + qbytes + dmp1bytes + dmq1bytes + iqmpbytes);
+	if (keyRecordSize > sizeof(privkey->keyRecord)) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_OPERANDS_TO_LARGE);
 		goto err;
 	}
-
 	if ((qbytes + dmq1bytes) > 256) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_OPERANDS_TO_LARGE);
 		goto err;
 	}
-
 	if (pbytes + dmp1bytes > 256) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_OPERANDS_TO_LARGE);
 		goto err;
 	}
-
-	/* end SAB additions */
-
-	memset(privKey, 0, sizeof(ICA_KEY_RSA_CRT));
-	privKey->keyType = CORRECT_ENDIANNESS(CRT_KEY_TYPE);
-	privKey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_CRT));
-	privKey->modulusBitLength =
-	    CORRECT_ENDIANNESS(BN_num_bytes(q) * 2 * 8);
-
-	/*
-	 * p,dp & qInv are 1 QWORD Larger
-	 */
-	privKey->pLength = CORRECT_ENDIANNESS(BN_num_bytes(p) + 8);
-	privKey->qLength = CORRECT_ENDIANNESS(BN_num_bytes(q));
-	privKey->dpLength = CORRECT_ENDIANNESS(BN_num_bytes(dmp1) + 8);
-	privKey->dqLength = CORRECT_ENDIANNESS(BN_num_bytes(dmq1));
-	privKey->qInvLength = CORRECT_ENDIANNESS(BN_num_bytes(iqmp) + 8);
-
-	offset = (char *) privKey->keyRecord - (char *) privKey;
-
-	qSize = BN_num_bytes(q);
-	pSize = qSize + 8;	/*  1 QWORD larger */
-
-
+	memset(privkey, 0, sizeof(*privkey));
+	privkey->keyType = CORRECT_ENDIANNESS(CRT_KEY_TYPE);
+	privkey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_CRT));
+	privkey->modulusBitLength = CORRECT_ENDIANNESS(qbytes * 2 * 8);
+	privkey->pLength = CORRECT_ENDIANNESS(pbytes + 8);
+	privkey->qLength = CORRECT_ENDIANNESS(qbytes);
+	privkey->dpLength = CORRECT_ENDIANNESS(dmp1bytes + 8);
+	privkey->dqLength = CORRECT_ENDIANNESS(dmq1bytes);
+	privkey->qInvLength = CORRECT_ENDIANNESS(iqmpbytes + 8);
+	offset = ((char *)privkey->keyRecord - (char *)privkey);
+	qSize = qbytes;
+	pSize = (qSize + 8);	/*  1 QWORD larger */
 	/* SAB  probably aittle redundant, but we'll verify that each 
 	 * of the components which make up a key record sent ot the card 
 	 * does not exceed the space that is allocated for it.  this 
@@ -1808,105 +1791,96 @@ static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
 	 * could cause potential side affects on either the card or the 
 	 * result
 	 */
-
 	if ((pbytes > pSize) || (dmp1bytes > pSize) ||
 	    (iqmpbytes > pSize) || (qbytes > qSize) ||
 	    (dmq1bytes > qSize)) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_OPERANDS_TO_LARGE);
 		goto err;
-
 	}
-
-
-	privKey->dpOffset = CORRECT_ENDIANNESS(offset);
-
+	privkey->dpOffset = CORRECT_ENDIANNESS(offset);
 	offset += pSize;
-	privKey->dqOffset = CORRECT_ENDIANNESS(offset);
-
+	privkey->dqOffset = CORRECT_ENDIANNESS(offset);
 	offset += qSize;
-	privKey->pOffset = CORRECT_ENDIANNESS(offset);
-
+	privkey->pOffset = CORRECT_ENDIANNESS(offset);
 	offset += pSize;
-	privKey->qOffset = CORRECT_ENDIANNESS(offset);
-
+	privkey->qOffset = CORRECT_ENDIANNESS(offset);
 	offset += qSize;
-	privKey->qInvOffset = CORRECT_ENDIANNESS(offset);
-
-	pkey = (char *) privKey->keyRecord;
-
-
-	/* SAB first check that we don;t under flow the buffer */
+	privkey->qInvOffset = CORRECT_ENDIANNESS(offset);
+	pkey = (char *)privkey->keyRecord;
 	if (pSize < pbytes) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_UNDERFLOW_CONDITION);
 		goto err;
 	}
-
-	/* pkey += pSize - BN_num_bytes(p); WROING this should be dmp1) */
-	pkey += pSize - BN_num_bytes(dmp1);
+	pkey += pSize - dmp1bytes;
 	BN_bn2bin(dmp1, pkey);
-	pkey += BN_num_bytes(dmp1);	/* move the pointer */
-
-	BN_bn2bin(dmq1, pkey);	/* Copy over dmq1 */
-
-	pkey += qSize;	/* move pointer */
-	pkey += pSize - BN_num_bytes(p); /* set up for zero padding of next field */
-
+	pkey += dmp1bytes;
+	BN_bn2bin(dmq1, pkey);
+	pkey += qSize;
+	pkey += pSize - pbytes; /* set up for zero padding of next field */
 	BN_bn2bin(p, pkey);
-	pkey += BN_num_bytes(p); /* increment pointer by number of bytes moved  */
-
+	pkey += pbytes;
 	BN_bn2bin(q, pkey);
-	pkey += qSize;		/* move the pointer */
-	pkey += pSize - BN_num_bytes(iqmp);	/* Adjust for padding */
+	pkey += qSize;
+	pkey += pSize - iqmpbytes; /* Adjust for padding */
 	BN_bn2bin(iqmp, pkey);
-
 	/* Prepare the argument and response */
-
-	outLen = CORRECT_ENDIANNESS(privKey->qLength) * 2; /* Correct endianess 
-							      is used because the 
-							      fields were converted 
+	outLen = CORRECT_ENDIANNESS(privkey->qLength) * 2; /* Correct
+							      endianess
+							      is used
+							      because
+							      the
+							      fields
+							      were
+							      converted
 							      above */
-
 	if (outLen > 256) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_OUTLEN_TO_LARGE);
 		goto err;
 	}
-
 	/* SAB check for underflow here on the argeument */
 	if (outLen < BN_num_bytes(a)) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_UNDERFLOW_CONDITION);
 		goto err;
 	}
-
-	BN_bn2bin(a, (unsigned char *) argument->d + outLen -
-		  BN_num_bytes(a));
+	BN_bn2bin(a, ((unsigned char *)argument
+		      + outLen
+		      - BN_num_bytes(a)));
 	inLen = outLen;
-
-	memset(result->d, 0, outLen);
-
-	/* Perform the operation */
-
+	memset(result, 0, outLen);
 	if ((rc = p_icaRsaCrt(ibmca_handle, inLen,
-			      (unsigned char *) argument->d,
-			      privKey, &outLen,
-			      (unsigned char *) result->d)) != 0) {
+			      (unsigned char *)argument,
+			      privkey, &outLen,
+			      (unsigned char *)result)) != 0) {
+		free(argument);
+		free(result);
+		free(key);
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
 			 IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-
-	/* Convert the response */
-
-	BN_bin2bn((unsigned char *) result->d, outLen, r);
+	BN_bin2bn((unsigned char *)result, outLen, r);
 	to_return = 1;
-
+	free(argument);
+	free(result);
+	free(key);
 err:
-	BN_CTX_end(ctx);
 	return to_return;
-
 }
 
 #ifndef OPENSSL_NO_DSA
