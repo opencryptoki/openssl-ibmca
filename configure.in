@@ -21,39 +21,17 @@ if test "$test_CFLAGS" != set; then
 	fi
 fi
 
-OPENSSL_LIB_DIR="/usr/local/ssl/lib"
-
 # libica
-AC_MSG_CHECKING([libICA])
-AC_CHECK_LIB(ica, icaOpenAdapter, [LIBICA="-lica"], \
-             AC_MSG_ERROR([*** libICA not found]))
+AC_MSG_CHECKING([libica-2.x])
+AC_CHECK_HEADER([ica_api.h], [], \
+             AC_MSG_ERROR([*** libica header not found]))
+AC_CHECK_LIB(ica, ica_open_adapter, [], \
+             AC_MSG_ERROR([*** libica-2.x library not found]), [-lssl])
 
 # OpenSSL location
-AC_MSG_CHECKING([OpenSSL location])
-AC_ARG_WITH(openssl,
-	[  --with-openssl=PATH     Location of openssl libs/includes],
-	[OPENSSL_INCLUDE_DIR="$withval/include"
-	 OPENSSL_LIB_DIR="$withval/lib"
-	 if [[ ! -d $OPENSSL_INCLUDE_DIR -o ! -d $OPENSSL_LIB_DIR ]]; then
-		AC_MSG_ERROR([$OPENSSL_INCLUDE_DIR or $OPENSSL_LIB_DIR doen't exist!])
-	 else
-		AC_MSG_RESULT([yes])
-		CFLAGS="$CFLAGS -L$OPENSSL_LIB_DIR -I$OPENSSL_INCLUDE_DIR"
-	 fi],
-	[AC_MSG_RESULT([no])
-	 AC_SUBST([OPENSSL_LIB_DIR], [/usr/local/ssl/lib])
-	 AC_SUBST([OPENSSL_INCLUDE_DIR], [/usr/local/ssl/include]) ] )
-
-# Is the library specified?
-AC_MSG_CHECKING([Engines library directory])
-AC_ARG_WITH(engines-dir,
-	    [  --with-engines-dir=PATH Location of OpenSSL engines],
-	    [OPENSSL_ENGINES_DIR="$withval/"],
-	    [AC_MSG_RESULT([no])
-	     AC_SUBST([OPENSSL_ENGINES_DIR], [$OPENSSL_LIB_DIR/engines])])
-
-# for the correct install target
-libdir=$OPENSSL_ENGINES_DIR
+AC_MSG_CHECKING([OpenSSL])
+AC_CHECK_LIB(crypto, RAND_add, [], \
+             AC_MSG_ERROR([*** libcrypto not found]))
 
 AC_DISABLE_STATIC
 AC_PROG_CC

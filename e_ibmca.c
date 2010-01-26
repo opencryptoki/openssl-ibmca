@@ -74,42 +74,46 @@
 #ifndef OPENSSL_NO_HW
 #ifndef OPENSSL_NO_HW_IBMCA
 
-#include "ica_openssl_api.h"
+#include <ica_api.h>
 
 #define IBMCA_LIB_NAME "ibmca engine"
 #include "e_ibmca_err.c"
 
 typedef struct ibmca_des_context {
-	unsigned char key[sizeof(ICA_KEY_DES_TRIPLE)];
+	unsigned char key[sizeof(ica_des_key_triple_t)];
 } ICA_DES_CTX;
 
 typedef struct ibmca_aes_128_context {
-	unsigned char key[AES_KEY_LEN128];
+	unsigned char key[sizeof(ica_aes_key_len_128_t)];
 } ICA_AES_128_CTX;
 
 typedef struct ibmca_aes_192_context {
-	unsigned char key[AES_KEY_LEN192];
+	unsigned char key[sizeof(ica_aes_key_len_192_t)];
 } ICA_AES_192_CTX;
 
 typedef struct ibmca_aes_256_context {
-	unsigned char key[AES_KEY_LEN256];
+	unsigned char key[sizeof(ica_aes_key_len_256_t)];
 } ICA_AES_256_CTX;
 
 #ifndef OPENSSL_NO_SHA1
+#define SHA_BLOCK_SIZE 64
 typedef struct ibmca_sha1_ctx {
-	ICA_SHA_CONTEXT c;
+	sha_context_t c;
 	unsigned char tail[SHA_BLOCK_SIZE];
 	unsigned int tail_len;
 } IBMCA_SHA_CTX;
 #endif
 
 #ifndef OPENSSL_NO_SHA256
+#define SHA256_BLOCK_SIZE 64
 typedef struct ibmca_sha256_ctx {
-	ICA_SHA256_CONTEXT c;
+	sha256_context_t c;
 	unsigned char tail[SHA256_BLOCK_SIZE];
 	unsigned int tail_len;
 } IBMCA_SHA256_CTX;
 #endif
+
+static const char *IBMCA_LIBNAME = "ica";
 
 static int cipher_nids[] = { 
 	NID_des_ecb,
@@ -138,21 +142,21 @@ static int ibmca_init(ENGINE * e);
 static int ibmca_finish(ENGINE * e);
 static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ());
 
-static const char *IBMCA_F1 = "icaOpenAdapter";
-static const char *IBMCA_F2 = "icaCloseAdapter";
-static const char *IBMCA_F3 = "icaRsaModExpo";
-static const char *IBMCA_F4 = "icaRandomNumberGenerate";
-static const char *IBMCA_F5 = "icaRsaCrt";
-static const char *IBMCA_F6 = "icaSha1";
-static const char *IBMCA_F7 = "icaDesEncrypt";
-static const char *IBMCA_F8 = "icaDesDecrypt";
-static const char *IBMCA_F9 = "icaTDesEncrypt";
-static const char *IBMCA_F10 = "icaTDesDecrypt";
-static const char *IBMCA_F11 = "icaAesEncrypt";
-static const char *IBMCA_F12 = "icaAesDecrypt";
-static const char *IBMCA_F13 = "icaSha256";
+static const char *IBMCA_F1 = "ica_open_adapter";
+static const char *IBMCA_F2 = "ica_close_adapter";
+static const char *IBMCA_F3 = "ica_rsa_mod_expo";
+static const char *IBMCA_F4 = "ica_random_number_generate";
+static const char *IBMCA_F5 = "ica_rsa_crt";
+static const char *IBMCA_F6 = "ica_sha1";
+static const char *IBMCA_F7 = "ica_des_encrypt";
+static const char *IBMCA_F8 = "ica_des_decrypt";
+static const char *IBMCA_F9 = "ica_3des_encrypt";
+static const char *IBMCA_F10 = "ica_3des_decrypt";
+static const char *IBMCA_F11 = "ica_aes_encrypt";
+static const char *IBMCA_F12 = "ica_aes_decrypt";
+static const char *IBMCA_F13 = "ica_sha256";
 
-static ICA_ADAPTER_HANDLE ibmca_handle = 0;
+static ica_adapter_handle_t ibmca_handle = 0;
 
 /* BIGNUM stuff */
 static int ibmca_mod_exp(BIGNUM * r, const BIGNUM * a, const BIGNUM * p,
@@ -165,7 +169,8 @@ static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
 
 #ifndef OPENSSL_NO_RSA
 /* RSA stuff */
-static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa);
+static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
+                             BN_CTX *ctx);
 
 static int ibmca_rsa_init(RSA *rsa);
 #endif
@@ -268,26 +273,26 @@ static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
 #ifndef OPENSSL_NO_RSA
 /* Our internal RSA_METHOD that we provide pointers to */
 static RSA_METHOD ibmca_rsa = {
-	"Ibmca RSA method",
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	ibmca_rsa_mod_exp,
-	ibmca_mod_exp_mont,
-	ibmca_rsa_init,
-	NULL,
-	0,
-	NULL,
-	NULL,
-	NULL
+	"Ibmca RSA method",      /* name */
+	NULL,                    /* rsa_pub_enc */
+	NULL,                    /* rsa_pub_dec */
+	NULL,                    /* rsa_priv_enc */
+	NULL,                    /* rsa_priv_dec */
+	ibmca_rsa_mod_exp,       /* rsa_mod_exp */
+	ibmca_mod_exp_mont,      /* bn_mod_exp */
+	ibmca_rsa_init,          /* init */
+	NULL,                    /* finish */
+	0,                       /* flags */
+	NULL,                    /* app_data */
+	NULL,                    /* rsa_sign */
+	NULL                     /* rsa_verify */
 };
 #endif
 
 #ifndef OPENSSL_NO_DSA
 /* Our internal DSA_METHOD that we provide pointers to */
 static DSA_METHOD ibmca_dsa = {
-	"Ibmca DSA method",
+	"Ibmca DSA method",     /* name */
 	NULL,			/* dsa_do_sign */
 	NULL,			/* dsa_sign_setup */
 	NULL,			/* dsa_do_verify */
@@ -303,50 +308,50 @@ static DSA_METHOD ibmca_dsa = {
 #ifndef OPENSSL_NO_DH
 /* Our internal DH_METHOD that we provide pointers to */
 static DH_METHOD ibmca_dh = {
-	"Ibmca DH method",
-	NULL,
-	NULL,
-	ibmca_mod_exp_dh,
-	NULL,
-	NULL,
-	0,
-	NULL
+	"Ibmca DH method",     /* name */
+	NULL,                  /* generate_key */
+	NULL,                  /* compute_key */
+	ibmca_mod_exp_dh,      /* bn_mod_exp */
+	NULL,                  /* init */
+	NULL,                  /* finish */
+	0,                     /* flags */
+	NULL                   /* app_data */
 };
 #endif
 
 static RAND_METHOD ibmca_rand = {
 	/* "IBMCA RAND method", */
-	NULL,
-	ibmca_rand_bytes,
-	NULL,
-	NULL,
-	ibmca_rand_bytes,
-	ibmca_rand_status,
+	NULL,                  /* seed */
+	ibmca_rand_bytes,      /* bytes */
+	NULL,                  /* cleanup */
+	NULL,                  /* add */
+	ibmca_rand_bytes,      /* pseudorand */
+	ibmca_rand_status,     /* status */
 };
 
 /* DES ECB EVP */
 const EVP_CIPHER ibmca_des_ecb = {
-	NID_des_ecb,
-	sizeof(ICA_DES_VECTOR),
-	sizeof(ICA_KEY_DES_SINGLE),
-	sizeof(ICA_DES_VECTOR),
-	EVP_CIPH_ECB_MODE,
-	ibmca_init_key,
-	ibmca_des_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_des_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
+	NID_des_ecb,                  /* nid */
+	sizeof(ica_des_vector_t),     /* block_size */
+	sizeof(ica_des_key_single_t), /* key_len */
+	sizeof(ica_des_vector_t),     /* iv_len */
+	EVP_CIPH_ECB_MODE,            /* flags */
+	ibmca_init_key,               /* init */
+	ibmca_des_cipher,             /* do_cipher */
+	ibmca_cipher_cleanup,         /* cleanup */
+	sizeof(struct ibmca_des_context), /* ctx_size */
+	EVP_CIPHER_set_asn1_iv,       /* set_asn1_parameters */
+	EVP_CIPHER_get_asn1_iv,       /* get_asn1_parameters */
+	NULL,                         /* ctrl */
+	NULL                          /* app_data */
 };
 
 /* DES CBC EVP */
 const EVP_CIPHER ibmca_des_cbc = {
 	NID_des_cbc,
-	sizeof(ICA_DES_VECTOR),
-	sizeof(ICA_KEY_DES_SINGLE),
-	sizeof(ICA_DES_VECTOR),
+	sizeof(ica_des_vector_t),
+	sizeof(ica_des_key_single_t),
+	sizeof(ica_des_vector_t),
 	EVP_CIPH_CBC_MODE,
 	ibmca_init_key,
 	ibmca_des_cipher,
@@ -361,9 +366,9 @@ const EVP_CIPHER ibmca_des_cbc = {
 /* 3DES ECB EVP	*/
 const EVP_CIPHER ibmca_tdes_ecb = {
 	NID_des_ede3_ecb,
-	sizeof(ICA_DES_VECTOR),
-	sizeof(ICA_KEY_DES_TRIPLE),
-	sizeof(ICA_DES_VECTOR),
+	sizeof(ica_des_vector_t),
+	sizeof(ica_des_key_triple_t),
+	sizeof(ica_des_vector_t),
 	EVP_CIPH_ECB_MODE,
 	ibmca_init_key,
 	ibmca_tdes_cipher,
@@ -378,9 +383,9 @@ const EVP_CIPHER ibmca_tdes_ecb = {
 /* 3DES CBC EVP	*/
 const EVP_CIPHER ibmca_tdes_cbc = {
 	NID_des_ede3_cbc,
-	sizeof(ICA_DES_VECTOR),
-	sizeof(ICA_KEY_DES_TRIPLE),
-	sizeof(ICA_DES_VECTOR),
+	sizeof(ica_des_vector_t),
+	sizeof(ica_des_key_triple_t),
+	sizeof(ica_des_vector_t),
 	EVP_CIPH_CBC_MODE,
 	ibmca_init_key,
 	ibmca_tdes_cipher,
@@ -395,9 +400,9 @@ const EVP_CIPHER ibmca_tdes_cbc = {
 /* AES-128 ECB EVP */
 const EVP_CIPHER ibmca_aes_128_ecb = {
 	NID_aes_128_ecb,
-	sizeof(ICA_AES_VECTOR),
-	sizeof(ICA_KEY_AES_LEN128),
-	sizeof(ICA_AES_VECTOR),
+	sizeof(ica_aes_vector_t),
+	sizeof(ica_aes_key_len_128_t),
+	sizeof(ica_aes_vector_t),
 	EVP_CIPH_ECB_MODE,
 	ibmca_init_key,
 	ibmca_aes_128_cipher,
@@ -412,9 +417,9 @@ const EVP_CIPHER ibmca_aes_128_ecb = {
 /* AES-128 CBC EVP */
 const EVP_CIPHER ibmca_aes_128_cbc = {
 	NID_aes_128_cbc,
-	sizeof(ICA_AES_VECTOR),
-	sizeof(ICA_KEY_AES_LEN128),
-	sizeof(ICA_AES_VECTOR),
+	sizeof(ica_aes_vector_t),
+	sizeof(ica_aes_key_len_128_t),
+	sizeof(ica_aes_vector_t),
 	EVP_CIPH_CBC_MODE,
 	ibmca_init_key,
 	ibmca_aes_128_cipher,
@@ -429,9 +434,9 @@ const EVP_CIPHER ibmca_aes_128_cbc = {
 /* AES-192 ECB EVP */
 const EVP_CIPHER ibmca_aes_192_ecb = {
 	NID_aes_192_ecb,
-	sizeof(ICA_AES_VECTOR),
-	sizeof(ICA_KEY_AES_LEN192),
-	sizeof(ICA_AES_VECTOR),
+	sizeof(ica_aes_vector_t),
+	sizeof(ica_aes_key_len_192_t),
+	sizeof(ica_aes_vector_t),
 	EVP_CIPH_ECB_MODE,
 	ibmca_init_key,
 	ibmca_aes_192_cipher,
@@ -446,9 +451,9 @@ const EVP_CIPHER ibmca_aes_192_ecb = {
 /* AES-192 CBC EVP */
 const EVP_CIPHER ibmca_aes_192_cbc = {
 	NID_aes_192_cbc,
-	sizeof(ICA_AES_VECTOR),
-	sizeof(ICA_KEY_AES_LEN192),
-	sizeof(ICA_AES_VECTOR),
+	sizeof(ica_aes_vector_t),
+	sizeof(ica_aes_key_len_192_t),
+	sizeof(ica_aes_vector_t),
 	EVP_CIPH_CBC_MODE,
 	ibmca_init_key,
 	ibmca_aes_192_cipher,
@@ -463,9 +468,9 @@ const EVP_CIPHER ibmca_aes_192_cbc = {
 /* AES-256 ECB EVP */
 const EVP_CIPHER ibmca_aes_256_ecb = {
 	NID_aes_256_ecb,
-	sizeof(ICA_AES_VECTOR),
-	sizeof(ICA_KEY_AES_LEN256),
-	sizeof(ICA_AES_VECTOR),
+	sizeof(ica_aes_vector_t),
+	sizeof(ica_aes_key_len_256_t),
+	sizeof(ica_aes_vector_t),
 	EVP_CIPH_ECB_MODE,
 	ibmca_init_key,
 	ibmca_aes_256_cipher,
@@ -480,9 +485,9 @@ const EVP_CIPHER ibmca_aes_256_ecb = {
 /* AES-256 CBC EVP */
 const EVP_CIPHER ibmca_aes_256_cbc = {
 	NID_aes_256_cbc,
-	sizeof(ICA_AES_VECTOR),
-	sizeof(ICA_KEY_AES_LEN256),
-	sizeof(ICA_AES_VECTOR),
+	sizeof(ica_aes_vector_t),
+	sizeof(ica_aes_key_len_256_t),
+	sizeof(ica_aes_vector_t),
 	EVP_CIPH_CBC_MODE,
 	ibmca_init_key,
 	ibmca_aes_256_cipher,
@@ -498,7 +503,7 @@ const EVP_CIPHER ibmca_aes_256_cbc = {
 static const EVP_MD ibmca_sha1 = {
 	NID_sha1,
 	NID_sha1WithRSAEncryption,
-	LENGTH_SHA_HASH,
+	SHA_HASH_LENGTH,
 	0,
 	ibmca_sha1_init,
 	ibmca_sha1_update,
@@ -515,7 +520,7 @@ static const EVP_MD ibmca_sha1 = {
 static const EVP_MD ibmca_sha256 = {
 	NID_sha256,
 	NID_sha256WithRSAEncryption,
-	LENGTH_SHA_HASH,
+	SHA_HASH_LENGTH,
 	0,
 	ibmca_sha256_init,
 	ibmca_sha256_update,
@@ -647,35 +652,35 @@ static DSO *ibmca_dso = NULL;
 /* These are the function pointers that are (un)set when the library has
  * successfully (un)loaded. */
 
-static unsigned int (ICA_CALL * p_icaOpenAdapter) ();
-static unsigned int (ICA_CALL * p_icaCloseAdapter) ();
-static unsigned int (ICA_CALL * p_icaRsaModExpo) ();
-static unsigned int (ICA_CALL * p_icaRandomNumberGenerate) ();
-static unsigned int (ICA_CALL * p_icaRsaCrt) ();
-static unsigned int (ICA_CALL * p_icaSha1) ();
-static unsigned int (ICA_CALL * p_icaDesEncrypt) ();
-static unsigned int (ICA_CALL * p_icaDesDecrypt) ();
-static unsigned int (ICA_CALL * p_icaTDesEncrypt) ();
-static unsigned int (ICA_CALL * p_icaTDesDecrypt) ();
-static unsigned int (ICA_CALL * p_icaAesEncrypt) ();
-static unsigned int (ICA_CALL * p_icaAesDecrypt) ();
-static unsigned int (ICA_CALL * p_icaSha256) ();
+static unsigned int (ICA_CALL * p_ica_open_adapter) ();
+static unsigned int (ICA_CALL * p_ica_close_adapter) ();
+static unsigned int (ICA_CALL * p_ica_rsa_mod_expo) ();
+static unsigned int (ICA_CALL * p_ica_random_number_generate) ();
+static unsigned int (ICA_CALL * p_ica_rsa_crt) ();
+static unsigned int (ICA_CALL * p_ica_sha1) ();
+static unsigned int (ICA_CALL * p_ica_des_encrypt) ();
+static unsigned int (ICA_CALL * p_ica_des_decrypt) ();
+static unsigned int (ICA_CALL * p_ica_3des_encrypt) ();
+static unsigned int (ICA_CALL * p_ica_3des_decrypt) ();
+static unsigned int (ICA_CALL * p_ica_aes_encrypt) ();
+static unsigned int (ICA_CALL * p_ica_aes_decrypt) ();
+static unsigned int (ICA_CALL * p_ica_sha256) ();
 
 /* utility function to obtain a context */
-static int get_context(ICA_ADAPTER_HANDLE * p_handle)
+static int get_context(ica_adapter_handle_t * p_handle)
 {
 	unsigned int status = 0;
 
-	status = p_icaOpenAdapter(0, p_handle);
+	status = p_ica_open_adapter(p_handle);
 	if (status != 0)
 		return 0;
 	return 1;
 }
 
 /* similarly to release one. */
-static void release_context(ICA_ADAPTER_HANDLE i_handle)
+static void release_context(ica_adapter_handle_t i_handle)
 {
-	p_icaCloseAdapter(i_handle);
+	p_ica_close_adapter(i_handle);
 }
 
 /* (de)initialisation functions. */
@@ -736,19 +741,19 @@ static int ibmca_init(ENGINE * e)
 
 	/* Copy the pointers */
 
-	p_icaOpenAdapter = (unsigned int (ICA_CALL *) ()) p1;
-	p_icaCloseAdapter = (unsigned int (ICA_CALL *) ()) p2;
-	p_icaRsaModExpo = (unsigned int (ICA_CALL *) ()) p3;
-	p_icaRandomNumberGenerate = (unsigned int (ICA_CALL *) ()) p4;
-	p_icaRsaCrt = (unsigned int (ICA_CALL *) ()) p5;
-	p_icaSha1 = (unsigned int (ICA_CALL *) ()) p6;
-	p_icaDesEncrypt = (unsigned int (ICA_CALL *) ()) p7;
-	p_icaDesDecrypt = (unsigned int (ICA_CALL *) ()) p8;
-	p_icaTDesEncrypt = (unsigned int (ICA_CALL *) ()) p9;
-	p_icaTDesDecrypt = (unsigned int (ICA_CALL *) ()) p10;
-	p_icaAesEncrypt = (unsigned int (ICA_CALL *) ()) p11;
-	p_icaAesDecrypt = (unsigned int (ICA_CALL *) ()) p12;
-	p_icaSha256 = (unsigned int (ICA_CALL *) ()) p13;
+	p_ica_open_adapter = (unsigned int (ICA_CALL *) ()) p1;
+	p_ica_close_adapter = (unsigned int (ICA_CALL *) ()) p2;
+	p_ica_rsa_mod_expo = (unsigned int (ICA_CALL *) ()) p3;
+	p_ica_random_number_generate = (unsigned int (ICA_CALL *) ()) p4;
+	p_ica_rsa_crt = (unsigned int (ICA_CALL *) ()) p5;
+	p_ica_sha1 = (unsigned int (ICA_CALL *) ()) p6;
+	p_ica_des_encrypt = (unsigned int (ICA_CALL *) ()) p7;
+	p_ica_des_decrypt = (unsigned int (ICA_CALL *) ()) p8;
+	p_ica_3des_encrypt = (unsigned int (ICA_CALL *) ()) p9;
+	p_ica_3des_decrypt = (unsigned int (ICA_CALL *) ()) p10;
+	p_ica_aes_encrypt = (unsigned int (ICA_CALL *) ()) p11;
+	p_ica_aes_decrypt = (unsigned int (ICA_CALL *) ()) p12;
+	p_ica_sha256 = (unsigned int (ICA_CALL *) ()) p13;
 
 	if (!get_context(&ibmca_handle)) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_UNIT_FAILURE);
@@ -762,19 +767,19 @@ err:
 		ibmca_dso = NULL;
 	}
 
-	p_icaOpenAdapter = NULL;
-	p_icaCloseAdapter = NULL;
-	p_icaRsaModExpo = NULL;
-	p_icaRandomNumberGenerate = NULL;
-	p_icaRsaCrt = NULL;
-	p_icaSha1 = NULL;
-	p_icaDesEncrypt = NULL;
-	p_icaDesDecrypt = NULL;
-	p_icaTDesEncrypt = NULL;
-	p_icaTDesDecrypt = NULL;
-	p_icaAesEncrypt = NULL;
-	p_icaAesDecrypt = NULL;
-	p_icaSha256 = NULL;
+	p_ica_open_adapter = NULL;
+	p_ica_close_adapter = NULL;
+	p_ica_rsa_mod_expo = NULL;
+	p_ica_random_number_generate = NULL;
+	p_ica_rsa_crt = NULL;
+	p_ica_sha1 = NULL;
+	p_ica_des_encrypt = NULL;
+	p_ica_des_decrypt = NULL;
+	p_ica_3des_encrypt = NULL;
+	p_ica_3des_decrypt = NULL;
+	p_ica_aes_encrypt = NULL;
+	p_ica_aes_decrypt = NULL;
+	p_ica_sha256 = NULL;
 
 	return 0;
 }
@@ -888,15 +893,14 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			    const unsigned char *in, unsigned int inlen)
 {
 	int mode;
-	int outlen = inlen;
 	int rv;
 	ICA_DES_CTX *pCtx = ctx->cipher_data;
-	ICA_DES_VECTOR pre_iv;
+	ica_des_vector_t pre_iv;
 
 	if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_ECB_MODE) {
-		mode = MODE_DES_ECB;
+		mode = MODE_ECB;
 	} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CBC_MODE) {
-		mode = MODE_DES_CBC;
+		mode = MODE_CBC;
 	} else {
 		IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, 
 				IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
@@ -904,13 +908,12 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	}
 
 	if (ctx->encrypt) {
-		rv = p_icaDesEncrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_des_encrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_DES_VECTOR *) ctx->iv,
-				     (ICA_KEY_DES_SINGLE *) pCtx->key,
-				     &outlen, out);
+				     (ica_des_vector_t *) ctx->iv,
+				     (ica_des_key_single_t *) pCtx->key,
+				     out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, 
@@ -924,14 +927,14 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 	} else {
 		/* Protect against decrypt in place */
+                /* FIXME: Shouldn't we use EVP_CIPHER_CTX_iv_length() instead? */
 		memcpy(pre_iv, in + inlen - sizeof(pre_iv), sizeof(pre_iv));
-		rv = p_icaDesDecrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_des_decrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_DES_VECTOR *) ctx->iv,
-				     (ICA_KEY_DES_SINGLE *) pCtx->key,
-				     &outlen, out);
+				     (ica_des_vector_t *) ctx->iv,
+				     (ica_des_key_single_t *) pCtx->key,
+				     out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, 
@@ -939,6 +942,8 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			return 0;
 		} else {
 			memcpy(ctx->iv, pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
+
+                        /* FIXME: clean this up */
 #if 0
 			memcpy(ctx->iv,
 			       in + inlen - ctx->cipher->iv_len,
@@ -953,15 +958,14 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			     const unsigned char *in, unsigned int inlen)
 {
 	int mode;
-	int outlen = inlen;
 	int rv;
 	ICA_DES_CTX *pCtx = ctx->cipher_data;
-	ICA_DES_VECTOR pre_iv;
+	ica_des_vector_t pre_iv;
 
 	if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_ECB_MODE) {
-		mode = MODE_DES_ECB;
+		mode = MODE_ECB;
 	} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CBC_MODE) {
-		mode = MODE_DES_CBC;
+		mode = MODE_CBC;
 	} else {
 		IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, 
 				IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
@@ -969,13 +973,12 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	}
 
 	if (ctx->encrypt) {
-		rv = p_icaTDesEncrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				      mode,
+		rv = p_ica_3des_encrypt(mode,
 				      inlen,
 				      in,
-				      (ICA_DES_VECTOR *) ctx->iv,
-				      (ICA_KEY_DES_TRIPLE *) pCtx->key,
-				      &outlen, out);
+				      (ica_des_vector_t *) ctx->iv,
+				      (ica_des_key_triple_t *) pCtx->key,
+				      out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, 
@@ -989,14 +992,14 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 	} else {
 		/* Protect against decrypt in place */
+                /* FIXME: Again, check if EVP_CIPHER_CTX_iv_length() should be used */
 		memcpy(pre_iv, in + inlen - sizeof(pre_iv), sizeof(pre_iv));
-		rv = p_icaTDesDecrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				      mode,
+		rv = p_ica_3des_decrypt(mode,
 				      inlen,
 				      in,
-				      (ICA_DES_VECTOR *) ctx->iv,
-				      (ICA_KEY_DES_TRIPLE *) pCtx->key,
-				      &outlen, out);
+				      (ica_des_vector_t *) ctx->iv,
+				      (ica_des_key_triple_t *) pCtx->key,
+				      out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, 
@@ -1004,6 +1007,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			return 0;
 		} else {
 			memcpy(ctx->iv, pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
+                        /* FIXME: clean up below */
 #if 0
 			memcpy(ctx->iv,
 			       in + inlen - ctx->cipher->iv_len,
@@ -1014,19 +1018,19 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	}
 }				// end ibmca_tdes_cipher
 
+/* FIXME: a lot of common code between ica_aes_[128|192|256]_cipher() fncs */
 static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				const unsigned char *in, unsigned int inlen)
 {
 	int mode;
-	int outlen = inlen;
 	int rv;
 	ICA_AES_128_CTX *pCtx = ctx->cipher_data;
-	ICA_AES_VECTOR pre_iv;
+	ica_aes_vector_t pre_iv;
 
 	if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_ECB_MODE) {
-		mode = MODE_AES_ECB;
+		mode = MODE_ECB;
 	} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CBC_MODE) {
-		mode = MODE_AES_CBC;
+		mode = MODE_CBC;
 	} else {
 		IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, 
 			 IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
@@ -1034,14 +1038,13 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	}
 
 	if (ctx->encrypt) {
-		rv = p_icaAesEncrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_aes_encrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_AES_VECTOR *)ctx->iv,
+				     (ica_aes_vector_t *)ctx->iv,
 				     AES_KEY_LEN128,
-				     (ICA_KEY_AES_LEN128 *)pCtx->key,
-				     &outlen, out);
+				     (ica_aes_key_len_128_t *)pCtx->key,
+				     out);
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, 
 				 IBMCA_R_REQUEST_FAILED);
@@ -1054,15 +1057,15 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 	} else {
 		/* Protect against decrypt in place */
+                /* FIXME: Again, check if EVP_CIPHER_CTX_iv_length() should be used */
 		memcpy(pre_iv, in + inlen - sizeof(pre_iv), sizeof(pre_iv));
-		rv = p_icaAesDecrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_aes_decrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_AES_VECTOR *)ctx->iv,
+				     (ica_aes_vector_t *)ctx->iv,
 				     AES_KEY_LEN128,
-				     (ICA_KEY_AES_LEN128 *)pCtx->key,
-				     &outlen, out);
+				     (ica_aes_key_len_128_t *)pCtx->key,
+				     out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, 
@@ -1079,15 +1082,14 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				const unsigned char *in, unsigned int inlen)
 {
 	int mode;
-	int outlen = inlen;
 	int rv;
 	ICA_AES_192_CTX *pCtx = ctx->cipher_data;
-	ICA_AES_VECTOR pre_iv;
+	ica_aes_vector_t pre_iv;
 
 	if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_ECB_MODE) {
-		mode = MODE_AES_ECB;
+		mode = MODE_ECB;
 	} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CBC_MODE) {
-		mode = MODE_AES_CBC;
+		mode = MODE_CBC;
 	} else {
 		IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, 
 			 IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
@@ -1095,14 +1097,13 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	}
 
 	if (ctx->encrypt) {
-		rv = p_icaAesEncrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_aes_encrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_AES_VECTOR *)ctx->iv,
+				     (ica_aes_vector_t *)ctx->iv,
 				     AES_KEY_LEN192,
-				     (ICA_KEY_AES_LEN192 *)pCtx->key,
-				     &outlen, out);
+				     (ica_aes_key_len_192_t *)pCtx->key,
+				     out);
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, 
 				 IBMCA_R_REQUEST_FAILED);
@@ -1116,14 +1117,13 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	} else {
 		/* Protect against decrypt in place */
 		memcpy(pre_iv, in + inlen - sizeof(pre_iv), sizeof(pre_iv));
-		rv = p_icaAesDecrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_aes_decrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_AES_VECTOR *)ctx->iv,
+				     (ica_aes_vector_t *)ctx->iv,
 				     AES_KEY_LEN192,
-				     (ICA_KEY_AES_LEN192 *)pCtx->key,
-				     &outlen, out);
+				     (ica_aes_key_len_192_t *)pCtx->key,
+				     out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, 
@@ -1140,15 +1140,14 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				const unsigned char *in, unsigned int inlen)
 {
 	int mode;
-	int outlen = inlen;
 	int rv;
 	ICA_AES_256_CTX *pCtx = ctx->cipher_data;
-	ICA_AES_VECTOR pre_iv;
+	ica_aes_vector_t pre_iv;
 
 	if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_ECB_MODE) {
-		mode = MODE_AES_ECB;
+		mode = MODE_ECB;
 	} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CBC_MODE) {
-		mode = MODE_AES_CBC;
+		mode = MODE_CBC;
 	} else {
 		IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, 
 			 IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
@@ -1156,14 +1155,13 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	}
 
 	if (ctx->encrypt) {
-		rv = p_icaAesEncrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_aes_encrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_AES_VECTOR *)ctx->iv,
+				     (ica_aes_vector_t *)ctx->iv,
 				     AES_KEY_LEN256,
-				     (ICA_KEY_AES_LEN256 *)pCtx->key,
-				     &outlen, out);
+				     (ica_aes_key_len_256_t *)pCtx->key,
+				     out);
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, 
 				 IBMCA_R_REQUEST_FAILED);
@@ -1177,14 +1175,13 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	} else {
 		/* Protect against decrypt in place */
 		memcpy(pre_iv, in + inlen - sizeof(pre_iv), sizeof(pre_iv));
-		rv = p_icaAesDecrypt((ICA_ADAPTER_HANDLE) ibmca_handle,
-				     mode,
+		rv = p_ica_aes_decrypt(mode,
 				     inlen,
 				     in,
-				     (ICA_AES_VECTOR *)ctx->iv,
+				     (ica_aes_vector_t *)ctx->iv,
 				     AES_KEY_LEN256,
-				     (ICA_KEY_AES_LEN256 *)pCtx->key,
-				     &outlen, out);
+				     (ica_aes_key_len_256_t *)pCtx->key,
+				     out);
 
 		if (rv) {
 			IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, 
@@ -1245,10 +1242,9 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 {
 	IBMCA_SHA_CTX *ibmca_sha_ctx = ctx->md_data;
 	unsigned int message_part=SHA_MSG_PART_MIDDLE,
-		fill_size=0,
-		tmp_len=LENGTH_SHA_HASH;
+		fill_size=0;
 	unsigned long in_data_len=inlen;
-	unsigned char tmp_hash[LENGTH_SHA_HASH];
+	unsigned char tmp_hash[SHA_HASH_LENGTH];
 
 	if (in_data_len == 0)
 		return 1;
@@ -1265,10 +1261,10 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 	else if( ibmca_sha_ctx->c.runningLength == 0 && ibmca_sha_ctx->tail_len > 0 ) {
 
 		/* Here we need to fill out the temporary tail buffer until
-		 * it has 64 bytes in it, then call icaSha1 on that buffer.
+		 * it has 64 bytes in it, then call ica_sha1 on that buffer.
 		 * If there weren't enough bytes passed in to fill it out,
 		 * just copy in what we can and return success without calling
-		 * icaSha1. - KEY
+		 * ica_sha1. - KEY
 		 */
 
 		fill_size = SHA_BLOCK_SIZE - ibmca_sha_ctx->tail_len;
@@ -1276,10 +1272,10 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 			memcpy(ibmca_sha_ctx->tail + ibmca_sha_ctx->tail_len, in_data, fill_size);
 
 			/* Submit the filled out tail buffer */
-			if( p_icaSha1(  ibmca_handle, (unsigned int)SHA_MSG_PART_FIRST,
+			if( p_ica_sha1( (unsigned int)SHA_MSG_PART_FIRST,
 					(unsigned int)SHA_BLOCK_SIZE, ibmca_sha_ctx->tail,
-					(unsigned int)LENGTH_SHA_CONTEXT, &ibmca_sha_ctx->c,
-					&tmp_len, tmp_hash)) {
+					&ibmca_sha_ctx->c,
+					tmp_hash)) {
 
 				IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE, 
 						IBMCA_R_REQUEST_FAILED);
@@ -1315,10 +1311,10 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 						in_data, fill_size);
 
 				/* Submit the filled out save buffer */
-				if( p_icaSha1(  ibmca_handle, message_part,
+				if( p_ica_sha1( message_part,
 						(unsigned int)SHA_BLOCK_SIZE, ibmca_sha_ctx->tail,
-						(unsigned int)LENGTH_SHA_CONTEXT, &ibmca_sha_ctx->c,
-						&tmp_len, tmp_hash)) {
+						&ibmca_sha_ctx->c,
+						tmp_hash)) {
 
 					IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE, 
 							IBMCA_R_REQUEST_FAILED);
@@ -1362,10 +1358,10 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 
 	/* If the data passed in was <64 bytes, in_data_len will be 0 */
         if( in_data_len && 
-		p_icaSha1(ibmca_handle, message_part,
+		p_ica_sha1(message_part,
 			(unsigned int)in_data_len, in_data + fill_size,
-			(unsigned int)LENGTH_SHA_CONTEXT, &ibmca_sha_ctx->c,
-			&tmp_len, tmp_hash)) {
+			&ibmca_sha_ctx->c,
+			tmp_hash)) {
 
 		IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE, IBMCA_R_REQUEST_FAILED);
 		return 0;
@@ -1378,18 +1374,16 @@ static int ibmca_sha1_final(EVP_MD_CTX * ctx, unsigned char *md)
 {
 	IBMCA_SHA_CTX *ibmca_sha_ctx = ctx->md_data;
 	unsigned int message_part = 0;
-	int outlen = LENGTH_SHA_HASH;
 
 	if (ibmca_sha_ctx->c.runningLength)
 		message_part = SHA_MSG_PART_FINAL;
 	else
 		message_part = SHA_MSG_PART_ONLY;
 
-	if( p_icaSha1(ibmca_handle,
-		       message_part,
+	if( p_ica_sha1(message_part,
 		       ibmca_sha_ctx->tail_len,
 		       ibmca_sha_ctx->tail,
-		       LENGTH_SHA_CONTEXT, &ibmca_sha_ctx->c, &outlen, md)) {
+		       &ibmca_sha_ctx->c, md)) {
 		
 		IBMCAerr(IBMCA_F_IBMCA_SHA1_FINAL, IBMCA_R_REQUEST_FAILED);
 		return 0;
@@ -1417,10 +1411,9 @@ static int
 ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 {
 	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
-	unsigned int message_part = SHA_MSG_PART_MIDDLE, fill_size = 0,
-		tmp_len = LENGTH_SHA256_HASH;
+	unsigned int message_part = SHA_MSG_PART_MIDDLE, fill_size = 0;
 	unsigned long in_data_len = inlen;
-	unsigned char tmp_hash[LENGTH_SHA256_HASH];
+	unsigned char tmp_hash[SHA256_HASH_LENGTH];
 
 	if (in_data_len == 0)
 		return 1;
@@ -1438,10 +1431,10 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 	} else if (ibmca_sha256_ctx->c.runningLength == 0
 		   && ibmca_sha256_ctx->tail_len > 0 ) {
 		/* Here we need to fill out the temporary tail buffer
-		 * until it has 64 bytes in it, then call icaSha256 on
+		 * until it has 64 bytes in it, then call ica_sha256 on
 		 * that buffer.  If there weren't enough bytes passed
 		 * in to fill it out, just copy in what we can and
-		 * return success without calling icaSha256. - KEY */
+		 * return success without calling ica_sha256. - KEY */
 
 		fill_size = SHA_BLOCK_SIZE - ibmca_sha256_ctx->tail_len;
 		if (fill_size < in_data_len) {
@@ -1450,13 +1443,11 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 			       fill_size);
 
 			/* Submit the filled out tail buffer */
-			if (p_icaSha256(ibmca_handle,
-					(unsigned int)SHA_MSG_PART_FIRST,
+			if (p_ica_sha256((unsigned int)SHA_MSG_PART_FIRST,
 					(unsigned int)SHA_BLOCK_SIZE,
 					ibmca_sha256_ctx->tail,
-					(unsigned int)LENGTH_SHA256_CONTEXT,
 					&ibmca_sha256_ctx->c,
-					&tmp_len, tmp_hash)) {
+					tmp_hash)) {
 				IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, 
 					 IBMCA_R_REQUEST_FAILED);
 				return 0;
@@ -1490,13 +1481,11 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 				       fill_size);
 
 				/* Submit the filled out save buffer */
-				if (p_icaSha256(ibmca_handle, message_part,
+				if (p_ica_sha256(message_part,
 						(unsigned int)SHA_BLOCK_SIZE,
 						ibmca_sha256_ctx->tail,
-						(unsigned int)
-						LENGTH_SHA256_CONTEXT,
 						&ibmca_sha256_ctx->c,
-						&tmp_len, tmp_hash)) {
+						tmp_hash)) {
 					IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, 
 						 IBMCA_R_REQUEST_FAILED);
 					return 0;
@@ -1540,11 +1529,10 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 
 	/* If the data passed in was <64 bytes, in_data_len will be 0 */
         if (in_data_len && 
-	    p_icaSha256(ibmca_handle, message_part,
+	    p_ica_sha256(message_part,
 			(unsigned int)in_data_len, in_data + fill_size,
-			(unsigned int)LENGTH_SHA256_CONTEXT,
 			&ibmca_sha256_ctx->c,
-			&tmp_len, tmp_hash)) {
+			tmp_hash)) {
 		IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, IBMCA_R_REQUEST_FAILED);
 		return 0;
 	}
@@ -1556,18 +1544,16 @@ static int ibmca_sha256_final(EVP_MD_CTX *ctx, unsigned char *md)
 {
 	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
 	unsigned int message_part = 0;
-	int outlen = LENGTH_SHA256_HASH;
 
 	if (ibmca_sha256_ctx->c.runningLength)
 		message_part = SHA_MSG_PART_FINAL;
 	else
 		message_part = SHA_MSG_PART_ONLY;
 
-	if (p_icaSha256(ibmca_handle,
-			message_part,
+	if (p_ica_sha256(message_part,
 			ibmca_sha256_ctx->tail_len,
 			ibmca_sha256_ctx->tail,
-			LENGTH_SHA256_CONTEXT, &ibmca_sha256_ctx->c, &outlen,
+			&ibmca_sha256_ctx->c,
 			md)) {
 		IBMCAerr(IBMCA_F_IBMCA_SHA256_FINAL, IBMCA_R_REQUEST_FAILED);
 		return 0;
@@ -1585,90 +1571,103 @@ static int ibmca_sha256_cleanup(EVP_MD_CTX *ctx)
 static int ibmca_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 			 const BIGNUM *m, BN_CTX *ctx)
 {
-	char *argument;
-	char *result;
-	char *key;
-	ICA_KEY_RSA_MODEXPO *pubkey;
-	int inLen, outLen, tmpLen;
+	/* r = (a^p) mod m
+	                        r = output
+	                        a = input
+	                        p = exponent
+	                        m = modulus
+	*/
+
+	unsigned char *input = NULL, *output =  NULL;
+	ica_rsa_key_mod_expo_t *key = NULL;
 	unsigned int rc;
-	int to_return = 0; /* fail code set by default */
+	int plen, mlen, inputlen;
 
 	if (!ibmca_dso) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_NOT_LOADED);
 		goto err;
 	}
-	outLen = BN_num_bytes(m);
-	argument = malloc(outLen);
-	if (!argument) {
+
+	/*
+	 make necessary memory allocations
+	 FIXME: Would it be possible to minimize memory allocation overhead by either
+                allocating it all at once or having a static storage?
+	*/
+	key = (ica_rsa_key_mod_expo_t *) calloc(1, sizeof(ica_rsa_key_mod_expo_t));
+	if (key == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	result = malloc(outLen);
-	if (!result) {
-		free(argument);
+
+	key->key_length = mlen = BN_num_bytes(m);
+
+	key->modulus = (unsigned char *) calloc(1, key->key_length);
+	if (key->modulus == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	key = malloc(sizeof(*pubkey));
-	if (!key) {
-		free(argument);
-		free(result);
+
+	plen = BN_num_bytes(p);
+
+	/* despite plen, key->exponent must be key->key_length in size */
+	key->exponent = (unsigned char *) calloc(1, key->key_length);
+	if (key->exponent == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	pubkey = (ICA_KEY_RSA_MODEXPO *)key;
-	memset(pubkey, 0, sizeof(*pubkey));
-	pubkey->keyType = CORRECT_ENDIANNESS(ME_KEY_TYPE);
-	pubkey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_MODEXPO));
-	pubkey->expOffset = (char *)pubkey->keyRecord - (char *)pubkey;
-#define IBMCA_MAX_EXP_LEN 256
-	if (outLen > IBMCA_MAX_EXP_LEN) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_MEXP_LENGTH_TO_LARGE);
-		goto err;
-	}
-	pubkey->expLength = pubkey->nLength = outLen;
-	if (outLen < BN_num_bytes(p)) { /* Key record underflow check */
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_UNDERFLOW_KEYRECORD);
-		goto err;
-	}
-	BN_bn2bin(p,
-		  &pubkey->keyRecord[(pubkey->expLength - BN_num_bytes(p))]);
-	BN_bn2bin(m, &pubkey->keyRecord[pubkey->expLength]);
-	pubkey->modulusBitLength =  CORRECT_ENDIANNESS((pubkey->nLength * 8));
-	pubkey->nOffset =
-		CORRECT_ENDIANNESS((pubkey->expOffset + pubkey->expLength));
-	pubkey->expOffset = CORRECT_ENDIANNESS(((char *)pubkey->keyRecord -
-						(char *)pubkey));
-	tmpLen = outLen;
-	pubkey->expLength = pubkey->nLength = CORRECT_ENDIANNESS(tmpLen);
-	memset(argument, 0, outLen);
-	BN_bn2bin(a, ((unsigned char *)argument
-		      + outLen
-		      - BN_num_bytes(a)));
-	inLen = outLen;
-	if ((rc = p_icaRsaModExpo(ibmca_handle, inLen,
-				  (unsigned char *)argument,
-				  pubkey, &outLen,
-				  (unsigned char *)result)) != 0) {
-		free(argument);
-		free(result);
-		free(key);
+
+	inputlen = BN_num_bytes(a);
+
+	/* despite inputlen, input and output must be key->key_length in size */
+	input = (unsigned char *) calloc(1, key->key_length);
+	if (input == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	BN_bin2bn((unsigned char *)result, outLen, r);
-	to_return = 1;
-	free(argument);
-	free(result);
-	free(key);
+
+	output = (unsigned char *) calloc(1, key->key_length);
+	if (output == NULL) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
+		goto err;
+	}
+
+	/* Now convert from BIGNUM representation.
+	 * Everything must be right-justified
+	 */
+	BN_bn2bin(m, key->modulus);
+
+	BN_bn2bin(p, key->exponent + key->key_length - plen);
+
+	BN_bn2bin(a, input + key->key_length - inputlen);
+
+	/* execute the ica mod_exp call */
+	rc = p_ica_rsa_mod_expo(ibmca_handle, input, key, output);
+	if (rc != 0) {
+		goto err;
+	}
+	else {
+		rc = 1;
+	}
+
+        /* Convert output to BIGNUM representation.
+	 * right-justified output applies
+	 */
+	/* BN_bin2bn((unsigned char *) (output + key->key_length - inputlen), inputlen, r); */
+	BN_bin2bn((unsigned char *) output, key->key_length, r);
+
+	goto end;
+
 err:
-	return to_return;
+	rc = 0;    /* error condition */
+
+end:
+	free(key->exponent);
+	free(key->modulus);
+	free(key);
+	free(input);
+	free(output);
+
+	return rc;
 }
 
 #ifndef OPENSSL_NO_RSA
@@ -1679,13 +1678,11 @@ static int ibmca_rsa_init(RSA *rsa)
 	return 1;
 }
 
-static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa)
+static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
+                             BN_CTX *ctx)
 {
-	BN_CTX *ctx;
 	int to_return = 0;
 
-	if ((ctx = BN_CTX_new()) == NULL)
-		goto err;
 	if (!rsa->p || !rsa->q || !rsa->dmp1 || !rsa->dmq1 || !rsa->iqmp) {
 		if (!rsa->d || !rsa->n) {
 			IBMCAerr(IBMCA_F_IBMCA_RSA_MOD_EXP,
@@ -1699,8 +1696,6 @@ static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa)
 				      rsa->dmq1, rsa->iqmp, ctx);
 	}
 err:
-	if (ctx)
-		BN_CTX_free(ctx);
 	return to_return;
 }
 #endif
@@ -1711,177 +1706,141 @@ static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
 			     const BIGNUM * dmp1, const BIGNUM * dmq1,
 			     const BIGNUM * iqmp, BN_CTX * ctx)
 {
-	char *argument;
-	char *result;
-	char *key;
-	unsigned char *pkey;
-	ICA_KEY_RSA_CRT *privkey;
-	int inLen, outLen;
-	int rc;
-	unsigned int offset, pSize, qSize;
-	unsigned int keyRecordSize;
-	unsigned int pbytes = BN_num_bytes(p);
-	unsigned int qbytes = BN_num_bytes(q);
-	unsigned int dmp1bytes = BN_num_bytes(dmp1);
-	unsigned int dmq1bytes = BN_num_bytes(dmq1);
-	unsigned int iqmpbytes = BN_num_bytes(iqmp);
-	int to_return = 0;
+	/*
+	r = output
+	a = input
+	p and q are themselves
+	dmp1, dmq1 are dp and dq respectively
+	iqmp is qInverse
+	*/
 
-	argument = malloc((pbytes + qbytes));
-	if (!argument) {
+	ica_rsa_key_crt_t *key = NULL;
+	unsigned char *output = NULL, *input = NULL;
+	int rc;
+	int plen, qlen, dplen, dqlen, qInvlen;
+	int inputlen;
+
+	/*
+	 make necessary memory allocations
+	 FIXME: Would it be possible to minimize memory allocation overhead by either
+                allocating it all at once or having a static storage?
+	*/
+	key = (ica_rsa_key_crt_t *) calloc(1, sizeof(ica_rsa_key_crt_t));
+	if (key == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	result = malloc((pbytes + qbytes));
-	if (!result) {
-		free(argument);
+
+	/* buffers pointed by p, q, dp, dq and qInverse in struct
+	 * ica_rsa_key_crt_t must be of size key_legth/2 or larger.
+	 * p, dp and qInverse have an additional 8-byte padding. */
+
+	plen = BN_num_bytes(p);
+	qlen = BN_num_bytes(q);
+	key->key_length = 2 * (plen > qlen ? plen : qlen);
+
+	key->p = (unsigned char *) calloc(1, (key->key_length/2) + 8);
+	if (key->p == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	key = malloc(sizeof(*privkey));
-	if (!key) {
-		free(argument);
-		free(result);
+
+	dplen = BN_num_bytes(dmp1);
+	key->dp = (unsigned char *) calloc(1, (key->key_length/2) + 8);
+	if (key->dp == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	privkey = (ICA_KEY_RSA_CRT *)key;
-	keyRecordSize = (pbytes + qbytes + dmp1bytes + dmq1bytes + iqmpbytes);
-	if (keyRecordSize > sizeof(privkey->keyRecord)) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_OPERANDS_TO_LARGE);
+
+	key->q = (unsigned char *) calloc(1, key->key_length/2);
+	if (key->q == NULL) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	if ((qbytes + dmq1bytes) > 256) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_OPERANDS_TO_LARGE);
+
+	dqlen = BN_num_bytes(dmq1);
+	key->dq = (unsigned char *) calloc(1, key->key_length/2);
+	if (key->dq == NULL) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	if (pbytes + dmp1bytes > 256) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_OPERANDS_TO_LARGE);
+
+	qInvlen = BN_num_bytes(iqmp);
+	key->qInverse = (unsigned char *) calloc(1, (key->key_length/2) + 8);
+	if (key->qInverse == NULL) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	memset(privkey, 0, sizeof(*privkey));
-	privkey->keyType = CORRECT_ENDIANNESS(CRT_KEY_TYPE);
-	privkey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_CRT));
-	privkey->modulusBitLength = CORRECT_ENDIANNESS(qbytes * 2 * 8);
-	privkey->pLength = CORRECT_ENDIANNESS(pbytes + 8);
-	privkey->qLength = CORRECT_ENDIANNESS(qbytes);
-	privkey->dpLength = CORRECT_ENDIANNESS(dmp1bytes + 8);
-	privkey->dqLength = CORRECT_ENDIANNESS(dmq1bytes);
-	privkey->qInvLength = CORRECT_ENDIANNESS(iqmpbytes + 8);
-	offset = ((char *)privkey->keyRecord - (char *)privkey);
-	qSize = qbytes;
-	pSize = (qSize + 8);	/*  1 QWORD larger */
-	/* SAB  probably aittle redundant, but we'll verify that each 
-	 * of the components which make up a key record sent ot the card 
-	 * does not exceed the space that is allocated for it.  this 
-	 * handles the case where even if the total length does not 
-	 * exceed keyrecord zied, if the operands are funny sized they 
-	 * could cause potential side affects on either the card or the 
-	 * result
-	 */
-	if ((pbytes > pSize) || (dmp1bytes > pSize) ||
-	    (iqmpbytes > pSize) || (qbytes > qSize) ||
-	    (dmq1bytes > qSize)) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_OPERANDS_TO_LARGE);
+
+	inputlen = BN_num_bytes(a);
+	if (inputlen > key->key_length) {     /* input can't be larger than key */
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	privkey->dpOffset = CORRECT_ENDIANNESS(offset);
-	offset += pSize;
-	privkey->dqOffset = CORRECT_ENDIANNESS(offset);
-	offset += qSize;
-	privkey->pOffset = CORRECT_ENDIANNESS(offset);
-	offset += pSize;
-	privkey->qOffset = CORRECT_ENDIANNESS(offset);
-	offset += qSize;
-	privkey->qInvOffset = CORRECT_ENDIANNESS(offset);
-	pkey = (char *)privkey->keyRecord;
-	if (pSize < pbytes) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_UNDERFLOW_CONDITION);
+
+	/* allocate input to the size of key_length in bytes, and
+	 * pad front with zero if inputlen < key->key_length */
+	input = (unsigned char *) calloc(1, key->key_length);
+	if (input == NULL) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	pkey += pSize - dmp1bytes;
-	BN_bn2bin(dmp1, pkey);
-	pkey += dmp1bytes;
-	BN_bn2bin(dmq1, pkey);
-	pkey += qSize;
-	pkey += pSize - pbytes; /* set up for zero padding of next field */
-	BN_bn2bin(p, pkey);
-	pkey += pbytes;
-	BN_bn2bin(q, pkey);
-	pkey += qSize;
-	pkey += pSize - iqmpbytes; /* Adjust for padding */
-	BN_bn2bin(iqmp, pkey);
-	/* Prepare the argument and response */
-	outLen = CORRECT_ENDIANNESS(privkey->qLength) * 2; /* Correct
-							      endianess
-							      is used
-							      because
-							      the
-							      fields
-							      were
-							      converted
-							      above */
-	if (outLen > 256) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_OUTLEN_TO_LARGE);
+
+	/* output must also be key_length in size */
+	output = (unsigned char *) calloc(1, key->key_length);
+	if (output == NULL) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	/* SAB check for underflow here on the argeument */
-	if (outLen < BN_num_bytes(a)) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_UNDERFLOW_CONDITION);
+
+
+	/* Now convert from BIGNUM representation.
+	 * p, dp and qInverse have an additional 8-byte padding,
+	 * and everything must be right-justified */
+	BN_bn2bin(p, key->p + 8 + (key->key_length/2) - plen);
+
+	BN_bn2bin(dmp1, key->dp + 8 + (key->key_length/2) - dplen);
+
+	BN_bn2bin(q, key->q + (key->key_length/2) - qlen);
+
+	BN_bn2bin(dmq1, key->dq + (key->key_length/2) - dqlen);
+
+	BN_bn2bin(iqmp, key->qInverse + 8 + (key->key_length/2) - qInvlen);
+
+	BN_bn2bin(a, input + key->key_length - inputlen);
+
+	/* execute the ica crt call */
+
+	rc = p_ica_rsa_crt(ibmca_handle, input, key, output);
+	if (rc != 0) {
+		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
 		goto err;
 	}
-	memset(argument, 0, pbytes + qbytes);
-	BN_bn2bin(a, ((unsigned char *)argument
-		      + outLen
-		      - BN_num_bytes(a)));
-	inLen = outLen;
-	memset(result, 0, outLen);
-	if ((rc = p_icaRsaCrt(ibmca_handle, inLen,
-			      (unsigned char *)argument,
-			      privkey, &outLen,
-			      (unsigned char *)result)) != 0) {
-		free(argument);
-		free(result);
-		free(key);
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP_CRT,
-			 IBMCA_R_REQUEST_FAILED);
-		goto err;
+	else {
+		rc = 1;
 	}
-	BN_bin2bn((unsigned char *)result, outLen, r);
-	to_return = 1;
-	free(argument);
-	free(result);
-	free(key);
+
+	/* Convert output to BIGNUM representation */
+	/* BN_bin2bn((unsigned char *) (output + key->key_length - inputlen), inputlen, r); */
+	BN_bin2bn((unsigned char *) output, key->key_length, r);
+
+
+	goto end;
+
 err:
-	return to_return;
+	rc = 0;    /* error condition */
+
+end:
+	free(key->p);
+	free(key->q);
+	free(key->dp);
+	free(key->dq);
+	free(key->qInverse);
+	free(key);
+	free(input);
+	free(output);
+
+	return rc;
 }
 
 #ifndef OPENSSL_NO_DSA
@@ -1947,24 +1906,15 @@ static int ibmca_mod_exp_dh(DH const *dh, BIGNUM * r,
 /* Random bytes are good */
 static int ibmca_rand_bytes(unsigned char *buf, int num)
 {
-	int to_return = 0;	/* assume failure */
-	unsigned int ret;
+	unsigned int rc;
 
 
-	if (ibmca_handle == 0) {
-		IBMCAerr(IBMCA_F_IBMCA_RAND_BYTES,
-			 IBMCA_R_NOT_INITIALISED);
-		goto err;
-	}
-
-	ret = p_icaRandomNumberGenerate(ibmca_handle, num, buf);
-	if (ret < 0) {
+	rc = p_ica_random_number_generate(num, buf);
+	if (rc < 0) {
 		IBMCAerr(IBMCA_F_IBMCA_RAND_BYTES, IBMCA_R_REQUEST_FAILED);
-		goto err;
+		return 0;
 	}
-	to_return = 1;
-err:
-	return to_return;
+	return 1;
 }
 
 static int ibmca_rand_status(void)
