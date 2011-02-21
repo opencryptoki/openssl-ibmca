@@ -20,6 +20,25 @@ foo = ibmca_section
 [ibmca_section]
 dynamic_path = @libdir@/libibmca.so
 engine_id = ibmca
-default_algorithms = ALL
-#default_algorithms = RAND,RSA
 init = 1
+#
+# The following ibmca algorithms will be enabled by these parameters
+# to the default_algorithms line. Any combination of these is valid,
+# with "ALL" denoting the same as all of them in a comma separated
+# list.
+#
+# RSA
+# - RSA encrypt, decrypt, sign and verify, key lengths 512-4096
+#
+# RAND
+# - Hardware random number generation
+#
+# CIPHERS
+# - DES-ECB, DES-CBC, DES-EDE3, DES-EDE3-CBC, AES-128-ECB, AES-128-CBC,
+#   AES-192-ECB, AES-192-CBC, AES-256-ECB, AES-256-CBC symmetric crypto
+#
+# DIGESTS
+# - SHA1, SHA256 digests
+#
+default_algorithms = ALL
+#default_algorithms = RAND,RSA,CIPHERS,DIGESTS
