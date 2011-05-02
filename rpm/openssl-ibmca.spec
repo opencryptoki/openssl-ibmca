@@ -14,11 +14,11 @@
 Name:           ibmca
 BuildRequires:  openssl-devel
 Summary:        An IBMCA OpenSSL dynamic engine
-Version:        1.0.0
+Version:        1.2.0
 Release:        0
 License:        Other License(s), see package, IBM Public License
 Group:          Hardware/Other
-Source:         openssl-ibmca-1.0.0-rc2.tar.bz2
+Source:         openssl-ibmca-1.2.0.tar.bz2
 URL:            http://sourceforge.net/projects/opencryptoki
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 PreReq:         %fillup_prereq %insserv_prereq
@@ -28,11 +28,11 @@ PreReq:         %fillup_prereq %insserv_prereq
 ExclusiveArch: %ibmca_32bit_arch %ibmca_64bit_arch
 
 %description
-This package contains a shared object OpenSSL dynamic engine for the IBM
-eServer Cryptographic Accelerator (ICA).
+This package contains a shared object OpenSSL dynamic engine which interfaces
+to libica, a library enabling the IBM s390/x CPACF crypto instructions.
 
 %prep
-%setup -n openssl-ibmca-1.0.0-rc2
+%setup -n openssl-ibmca-1.2.0
 
 %build
 autoreconf --force --install
@@ -56,5 +56,8 @@ make
 %{_libdir}/engines/libibmca.so
 
 %changelog -n ibmca
+* Mon May 2 2011 - yoder1@us.ibm.com
+- updates for s390 MSA4 features, engine version 1.2
+
 * Fri Mar 17 2006 - mhalcrow@us.ibm.com
 - initial version

@@ -2,7 +2,7 @@
 # configure.in for the OpenSSL IBMCA engine project
 #
 
-AC_INIT(openssl-ibmca-engine, 0.1, opencryptoki-users@lists.sf.net)
+AC_INIT(openssl-ibmca-engine, 1.2, opencryptoki-users@lists.sf.net)
 AM_INIT_AUTOMAKE(1.6.3)
 
 # Debugging support
@@ -25,8 +25,11 @@ fi
 AC_MSG_CHECKING([libica-2.x])
 AC_CHECK_HEADER([ica_api.h], [], \
              AC_MSG_ERROR([*** libica header not found]))
+# libica is dlopened, so do not add it to LIBS
+save_LIBS=$LIBS
 AC_CHECK_LIB(ica, ica_open_adapter, [], \
              AC_MSG_ERROR([*** libica-2.x library not found]), [-lssl])
+LIBS=$save_LIBS
 
 # OpenSSL location
 AC_MSG_CHECKING([OpenSSL])
