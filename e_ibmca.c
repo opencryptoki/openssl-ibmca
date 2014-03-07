@@ -727,7 +727,7 @@ static const EVP_MD ibmca_sha1 = {
 static const EVP_MD ibmca_sha256 = {
 	NID_sha256,
 	NID_sha256WithRSAEncryption,
-	SHA_HASH_LENGTH,
+	SHA256_HASH_LENGTH,
 	0,
 	ibmca_sha256_init,
 	ibmca_sha256_update,
