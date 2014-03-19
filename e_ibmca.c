@@ -883,8 +883,7 @@ typedef unsigned int (*ica_sha256_t)(unsigned int, unsigned int, unsigned char *
 			sha256_context_t *, unsigned char *);
 typedef unsigned int (*ica_des_ofb_t)(const unsigned char *in_data, unsigned char *out_data,
 			 unsigned long data_length, const unsigned char *key,
-			 unsigned int key_length, unsigned char *iv,
-			 unsigned int direction);
+			 unsigned char *iv, unsigned int direction);
 typedef unsigned int (*ica_des_cfb_t)(const unsigned char *in_data, unsigned char *out_data,
 			 unsigned long data_length, const unsigned char *key,
 			 unsigned char *iv, unsigned int lcfb,
@@ -894,8 +893,7 @@ typedef unsigned int (*ica_3des_cfb_t)(const unsigned char *, unsigned char *,
 			unsigned int, unsigned int);
 typedef unsigned int (*ica_3des_ofb_t)(const unsigned char *in_data, unsigned char *out_data,
 			  unsigned long data_length, const unsigned char *key,
-			  unsigned int key_length, unsigned char *iv,
-			  unsigned int direction);
+			  unsigned char *iv, unsigned int direction);
 typedef unsigned int (*ica_aes_ofb_t)(const unsigned char *in_data, unsigned char *out_data,
 			 unsigned long data_length, const unsigned char *key,
 			 unsigned int key_length, unsigned char *iv,
@@ -1197,7 +1195,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			rv = p_ica_des_cfb(in, out, len, pCtx->key, ctx->iv,
 					   8, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
-			rv = p_ica_des_ofb(in, out, len, pCtx->key, 8, ctx->iv,
+			rv = p_ica_des_ofb(in, out, len, pCtx->key, ctx->iv,
 					   ICA_ENCRYPT);
 		} else {
 			rv = p_ica_des_encrypt(mode, len, (unsigned char *)in,
@@ -1223,7 +1221,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			rv = p_ica_des_cfb(in, out, len, pCtx->key, ctx->iv,
 					   8, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
-			rv = p_ica_des_ofb(in, out, len, pCtx->key, 8, ctx->iv,
+			rv = p_ica_des_ofb(in, out, len, pCtx->key, ctx->iv,
 					   ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
@@ -1279,7 +1277,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 					ctx->iv, 8, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_3des_ofb(in, out, len, pCtx->key,
-					8, ctx->iv, ICA_ENCRYPT);
+					ctx->iv, ICA_ENCRYPT);
 		} else {
 			rv = p_ica_3des_encrypt(mode, len, (unsigned char *)in,
 						(ica_des_vector_t *) ctx->iv,
@@ -1305,7 +1303,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 					ctx->iv, 8, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_3des_ofb(in, out, len, pCtx->key,
-					8, ctx->iv, ICA_DECRYPT);
+					ctx->iv, ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
 			/* FIXME: Again, check if EVP_CIPHER_CTX_iv_length() should be used */
