@@ -76,9 +76,9 @@
 #ifndef OPENSSL_NO_HW_IBMCA
 
 #include <ica_api.h>
+#include "e_ibmca_err.h"
 
 #define IBMCA_LIB_NAME "ibmca engine"
-#include "e_ibmca_err.c"
 
 typedef struct ibmca_des_context {
 	unsigned char key[sizeof(ica_des_key_triple_t)];

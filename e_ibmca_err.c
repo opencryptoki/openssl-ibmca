@@ -116,7 +116,7 @@ static ERR_STRING_DATA IBMCA_lib_name[] = {
 static int IBMCA_lib_error_code = 0;
 static int IBMCA_error_init = 1;
 
-static void ERR_load_IBMCA_strings(void)
+void ERR_load_IBMCA_strings(void)
 {
 	if (IBMCA_lib_error_code == 0)
 		IBMCA_lib_error_code = ERR_get_next_error_library();
@@ -136,7 +136,7 @@ static void ERR_load_IBMCA_strings(void)
 	}
 }
 
-static void ERR_unload_IBMCA_strings(void)
+void ERR_unload_IBMCA_strings(void)
 {
 	if (IBMCA_error_init == 0) {
 #ifndef OPENSSL_NO_ERR
@@ -152,7 +152,7 @@ static void ERR_unload_IBMCA_strings(void)
 	}
 }
 
-static void ERR_IBMCA_error(int function, int reason, char *file, int line)
+void ERR_IBMCA_error(int function, int reason, char *file, int line)
 {
 	if (IBMCA_lib_error_code == 0)
 		IBMCA_lib_error_code = ERR_get_next_error_library();
