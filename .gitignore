@@ -1,6 +1,11 @@
+.deps
+.libs
+*.lo
+*.o
 Makefile.in
 aclocal.m4
 autom4te.cache
+config.status
 config.guess
 config.log
 config.sub
@@ -9,3 +14,5 @@ depcomp
 install-sh
 ltmain.sh
 missing
+libtool
+openssl.cnf.sample
