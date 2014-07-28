@@ -15,7 +15,7 @@ engines = engine_section
 
 [engine_section]
 
-foo = ibmca_section
+ibmca = ibmca_section
 
 [ibmca_section]
 # The openssl engine path for libibmca.so.
@@ -44,7 +44,7 @@ init = 1
 #   AES-256-CBC, AES-256-CFB, AES-256-OFB symmetric crypto
 #
 # DIGESTS
-# - SHA1, SHA256 digests
+# - SHA1, SHA256, SHA512 digests
 #
 default_algorithms = ALL
 #default_algorithms = RAND,RSA,CIPHERS,DIGESTS

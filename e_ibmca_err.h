@@ -30,6 +30,8 @@ void ERR_IBMCA_error(int function, int reason, char *file, int line);
 #define IBMCA_F_IBMCA_AES_256_CIPHER			 113
 #define IBMCA_F_IBMCA_SHA256_UPDATE			 114
 #define IBMCA_F_IBMCA_SHA256_FINAL			 115
+#define IBMCA_F_IBMCA_SHA512_UPDATE			 116
+#define IBMCA_F_IBMCA_SHA512_FINAL			 117
 
 /* Reason codes. */
 #define IBMCA_R_ALREADY_LOADED				 100
