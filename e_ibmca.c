@@ -62,6 +62,8 @@
 /* (C) COPYRIGHT International Business Machines Corp. 2001, 2010, 2011 */
 
 #include <stdio.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <openssl/crypto.h>
 #include "cryptlib.h"
 #include <openssl/dso.h>
@@ -79,6 +81,8 @@
 #include "e_ibmca_err.h"
 
 #define IBMCA_LIB_NAME "ibmca engine"
+
+#define AP_PATH "/sys/devices/ap"
 
 typedef struct ibmca_des_context {
 	unsigned char key[sizeof(ica_des_key_triple_t)];
@@ -123,7 +127,7 @@ typedef struct ibmca_sha512_ctx {
 } IBMCA_SHA512_CTX;
 #endif
 
-static const char *IBMCA_LIBNAME = "ica";
+static const char *LIBICA_NAME = "ica";
 
 #if defined(NID_aes_128_cfb128) && ! defined (NID_aes_128_cfb)
 #define NID_aes_128_cfb NID_aes_128_cfb128
@@ -165,40 +169,60 @@ static const char *IBMCA_LIBNAME = "ica";
 #define NID_des_ede3_cfb NID_des_ede3_cfb64
 #endif
 
-static int ibmca_cipher_nids[] = {
-	NID_des_ecb,
-	NID_des_cbc,
-	NID_des_ofb,
-	NID_des_cfb,
-	NID_des_ede3_ecb,
-	NID_des_ede3_cbc,
-	NID_des_ede3_ofb,
-	NID_des_ede3_cfb,
-	NID_aes_128_ecb,
-	NID_aes_128_cbc,
-	NID_aes_128_cfb,
-	NID_aes_128_ofb,
-	NID_aes_192_ecb,
-	NID_aes_192_cbc,
-	NID_aes_192_cfb,
-	NID_aes_192_ofb,
-	NID_aes_256_ecb,
-	NID_aes_256_cbc,
-	NID_aes_256_cfb,
-	NID_aes_256_ofb
+/*
+ * ibmca_crypto_algos lists the supported crypto algos by ibmca.
+ * This list is matched against all algo support by libica. Only if
+ * the algo is in this list it is activated in ibmca.
+ * The defines can be found in the libica header file.
+ */
+static int ibmca_crypto_algos[] = {
+        SHA1,
+        SHA256,
+        SHA512,
+        P_RNG,
+        RSA_ME,
+        RSA_CRT,
+        DES_ECB,
+        DES_CBC,
+        DES_OFB,
+        DES_CFB,
+        DES3_ECB,
+        DES3_CBC,
+        DES3_OFB,
+        DES3_CFB,
+        DES3_CTR,
+        AES_ECB,
+        AES_CBC,
+        AES_OFB,
+        AES_CFB,
+        0
 };
 
-static int digest_nids[] = { 
-#ifndef OPENSSL_NO_SHA1
-	NID_sha1,
-#endif
-#ifndef OPENSSL_NO_SHA256
-	NID_sha256,
-#endif
-#ifndef OPENSSL_NO_SHA512
-	NID_sha512
-#endif
+
+#define MAX_CIPHER_NIDS sizeof(ibmca_crypto_algos)
+/*
+ * This struct maps one NID to one crypto algo.
+ * So we can tell OpenSSL thsi NID maps to this function.
+ */
+struct crypto_pair
+{
+        int nids[MAX_CIPHER_NIDS];
+        const void *crypto_meths[MAX_CIPHER_NIDS];
 };
+
+/* We can not say how much crypto algos are
+ * supported by libica. We can only say the
+ * size is not greater as the supported
+ * crypto algos by ibmca.
+ * The actual number of supported crypto algos
+ * is saved to the size_****_nid variabes
+ */
+static size_t size_cipher_list = 0;
+static size_t size_digest_list = 0;
+
+static struct crypto_pair ibmca_cipher_lists;
+static struct crypto_pair ibmca_digest_lists;
+
 
 static int ibmca_destroy(ENGINE * e);
 static int ibmca_init(ENGINE * e);
@@ -784,10 +808,10 @@ static const EVP_MD ibmca_sha512 = {
 static const char *engine_ibmca_id = "ibmca";
 static const char *engine_ibmca_name = "Ibmca hardware engine support";
 
-/* This internal function is used by ENGINE_ibmca() and possibly by the
- * "dynamic" ENGINE support too */
-static int bind_helper(ENGINE * e)
+
+inline static int set_RSA_prop(ENGINE *e)
 {
+	static int rsa_enabled = 0;
 #ifndef OPENSSL_NO_RSA
 	const RSA_METHOD *meth1;
 #endif
@@ -797,20 +821,301 @@ static int bind_helper(ENGINE * e)
 #ifndef OPENSSL_NO_DH
 	const DH_METHOD *meth3;
 #endif
-	if (!ENGINE_set_id(e, engine_ibmca_id) ||
-	    !ENGINE_set_name(e, engine_ibmca_name) ||
+
+	if(rsa_enabled){
+		return 1;
+	}
+        if(
 #ifndef OPENSSL_NO_RSA
-	    !ENGINE_set_RSA(e, &ibmca_rsa) ||
+	   !ENGINE_set_RSA(e, &ibmca_rsa) ||
 #endif
 #ifndef OPENSSL_NO_DSA
-	    !ENGINE_set_DSA(e, &ibmca_dsa) ||
+		!ENGINE_set_DSA(e, &ibmca_dsa) ||
 #endif
 #ifndef OPENSSL_NO_DH
-	    !ENGINE_set_DH(e, &ibmca_dh) ||
+		!ENGINE_set_DH(e, &ibmca_dh))
 #endif
-	    !ENGINE_set_RAND(e, &ibmca_rand) ||
-	    !ENGINE_set_ciphers(e, ibmca_engine_ciphers) ||
-	    !ENGINE_set_digests(e, ibmca_engine_digests) ||
+		return 0;
+#ifndef OPENSSL_NO_RSA
+        /* We know that the "PKCS1_SSLeay()" functions hook properly
+         * to the ibmca-specific mod_exp and mod_exp_crt so we use
+         * those functions. NB: We don't use ENGINE_openssl() or
+         * anything "more generic" because something like the RSAref
+         * code may not hook properly, and if you own one of these here
+         * cards then you have the right to do RSA operations on it
+         * anyway! */
+        meth1 = RSA_PKCS1_SSLeay();
+        ibmca_rsa.rsa_pub_enc = meth1->rsa_pub_enc;
+        ibmca_rsa.rsa_pub_dec = meth1->rsa_pub_dec;
+        ibmca_rsa.rsa_priv_enc = meth1->rsa_priv_enc;
+        ibmca_rsa.rsa_priv_dec = meth1->rsa_priv_dec;
+#endif
+#ifndef OPENSSL_NO_DSA
+        meth2 = DSA_OpenSSL();
+        ibmca_dsa.dsa_do_sign = meth2->dsa_do_sign;
+        ibmca_dsa.dsa_sign_setup = meth2->dsa_sign_setup;
+        ibmca_dsa.dsa_do_verify = meth2->dsa_do_verify;
+#endif
+#ifndef OPENSSL_NO_DH
+        /* Much the same for Diffie-Hellman */
+        meth3 = DH_OpenSSL();
+        ibmca_dh.generate_key = meth3->generate_key;
+        ibmca_dh.compute_key = meth3->compute_key;
+#endif
+	rsa_enabled = 1;
+	return 1;
+}
+
+
+/*
+ * dig_nid_cnt and ciph_nid_cnt count the number of enabled crypt mechanims.
+ * dig_nid_cnt and ciph_nid_cnt needs to be pointer, because only set_engine_prop
+ * knows about how much digest or cipher will be set per call. To count the number of
+ * cipher and digest outside of the function is not feasible
+ */
+inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int *ciph_nid_cnt)
+{
+        switch(algo_id) {
+                case P_RNG:
+                        if(!ENGINE_set_RAND(e, &ibmca_rand))
+                                return 0;
+                        break;
+		/*
+		 * RSA will be enabled if one of this is set. OpenSSL does not distinguish
+		 * between RSA_ME and RSA_CRT. It is not the task of ibmca to route one ME
+		 * call to CRT or vice versa.
+		 */
+                case RSA_ME:
+                case RSA_CRT:
+                        if(!set_RSA_prop(e))
+                                return 0;
+                        break;
+#ifndef OPENSSL_NO_SHA1
+                case SHA1:
+                        ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha1;
+                        ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++]=  &ibmca_sha1;
+			break;
+#endif
+#ifndef OPENSSL_NO_SHA256
+                case SHA256:
+                        ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha256;
+                        ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  &ibmca_sha256;
+			break;
+#endif
+#ifndef OPENSSL_NO_SHA512
+                case SHA512:
+                        ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha512;
+                        ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  &ibmca_sha512;
+			break;
+#endif
+                case DES_ECB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt]  = NID_des_ecb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_ecb;
+                        break;
+                case DES_CBC:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_cbc;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cbc;
+                        break;
+                case DES_OFB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ofb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_ofb;
+                        break;
+                case DES_CFB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_cfb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cfb;
+                        break;
+                case DES3_ECB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_ecb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_ecb;
+                        break;
+                case DES3_CBC:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_cbc;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_cbc;
+                        break;
+                case DES3_OFB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_ofb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_ofb;
+                        break;
+                case DES3_CFB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_cfb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cfb;
+                        break;
+                case AES_ECB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ecb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ecb;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ecb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_ecb;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ecb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_ecb;
+                        break;
+                case AES_CBC:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cbc;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_cbc;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cbc;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_cbc;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cbc;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_cbc;
+			break;
+                case AES_OFB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ofb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ofb;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ofb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_ofb;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ofb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_ofb;
+                        break;
+                case AES_CFB:
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cfb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_cfb;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cfb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_cfb;
+                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cfb;
+                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_cfb;
+                        break;
+        }
+
+	size_cipher_list = *ciph_nid_cnt;
+	size_digest_list = *dig_nid_cnt;
+	return 1;
+}
+
+int is_crypto_card_loaded()
+{
+	DIR* sysDir;
+	FILE *file;
+	char dev[PATH_MAX] = AP_PATH;
+	struct dirent *direntp;
+	char *type = NULL;
+	size_t size;
+	char c;
+
+	if ((sysDir = opendir(dev)) == NULL )
+		return 0;
+
+	while((direntp = readdir(sysDir)) != NULL){
+		if(strstr(direntp->d_name, "card") != 0){
+			snprintf(dev, PATH_MAX, "%s/%s/type", AP_PATH,
+				direntp->d_name);
+
+			if ((file = fopen(dev, "r")) == NULL){
+	                        closedir(sysDir);
+                                return 0;
+			}
+
+			if (getline(&type, &size, file) == -1){
+				fclose(file);
+				closedir(sysDir);
+				return 0;
+			}
+
+			/* ignore \n
+			 * looking for CEX??A and CEX??C
+			 * Skip type CEX??P cards
+			 */
+			if (type[strlen(type)-2] == 'P'){
+				free(type);
+				type = NULL;
+				fclose(file);
+				continue;
+			}
+			free(type);
+			type = NULL;
+			fclose(file);
+
+			snprintf(dev, PATH_MAX, "%s/%s/online", AP_PATH,
+				direntp->d_name);
+			if ((file = fopen(dev, "r")) == NULL){
+				closedir(sysDir);
+				return 0;
+			}
+			if((c = fgetc(file)) == '1'){
+				fclose(file);
+				return 1;
+			}
+			fclose(file);
+		}
+	}
+	closedir(sysDir);
+	return 0;
+}
+
+
+typedef unsigned int (*ica_get_functionlist_t)(libica_func_list_element *, unsigned int *);
+ica_get_functionlist_t          p_ica_get_functionlist;
+
+static int set_supported_meths(ENGINE *e)
+{
+        int i, j;
+        unsigned int mech_len;
+        libica_func_list_element *pmech_list = NULL;
+        int dig_nid_cnt = 0;
+        int ciph_nid_cnt = 0;
+	int card_loaded;
+
+        if (p_ica_get_functionlist(NULL, &mech_len) != 0){
+
+		return 0;
+	}
+	pmech_list = malloc(sizeof(libica_func_list_element)*mech_len);
+	if (p_ica_get_functionlist(pmech_list, &mech_len) != 0){
+		free(pmech_list);
+
+		return 0;
+	}
+
+	card_loaded = is_crypto_card_loaded();
+
+	for(i=0;i<mech_len;i++){
+	        for(j=0;ibmca_crypto_algos[j];j++){
+			/* Disable crypto algorithm if it
+			 * is not supported in hardware
+			 */
+			if(!(pmech_list[i].flags &
+                            (ICA_FLAG_SHW | ICA_FLAG_DHW)))
+				break;
+
+			/* If no crypto card is available,
+			 * disable crypto algos that can
+			 * only operate on HW on card
+			 */
+			if((pmech_list[i].flags &
+                            ICA_FLAG_DHW) && !card_loaded)
+				break;
+
+	                if(ibmca_crypto_algos[j] == pmech_list[i].mech_mode_id){
+	                        /* Set NID, ibmca struct and the
+				 * info for the ENGINE struct
+				 */
+	                        if(!set_engine_prop(e, ibmca_crypto_algos[j],
+	                                            &dig_nid_cnt,
+	                                            &ciph_nid_cnt)){
+
+	                                return 0;
+				}
+	               }
+	       }
+	}
+
+        if(dig_nid_cnt > 0)
+                if(!ENGINE_set_digests(e, ibmca_engine_digests))
+
+                        return 0;
+        if(ciph_nid_cnt > 0)
+                if(!ENGINE_set_ciphers(e, ibmca_engine_ciphers))
+
+                        return 0;
+
+        free(pmech_list);
+	return 1;
+}
+
+
+/* This internal function is used by ENGINE_ibmca() and possibly by the
+ * "dynamic" ENGINE support too */
+static int bind_helper(ENGINE * e)
+{
+	if (!ENGINE_set_id(e, engine_ibmca_id) ||
+	    !ENGINE_set_name(e, engine_ibmca_name) ||
 	    !ENGINE_set_destroy_function(e, ibmca_destroy) ||
 	    !ENGINE_set_init_function(e, ibmca_init) ||
 	    !ENGINE_set_finish_function(e, ibmca_finish) ||
@@ -818,39 +1123,10 @@ static int bind_helper(ENGINE * e)
 	    !ENGINE_set_cmd_defns(e, ibmca_cmd_defns))
 		return 0;
 
-#ifndef OPENSSL_NO_RSA
-	/* We know that the "PKCS1_SSLeay()" functions hook properly
-	 * to the ibmca-specific mod_exp and mod_exp_crt so we use
-	 * those functions. NB: We don't use ENGINE_openssl() or
-	 * anything "more generic" because something like the RSAref
-	 * code may not hook properly, and if you own one of these here
-	 * cards then you have the right to do RSA operations on it
-	 * anyway! */
-	meth1 = RSA_PKCS1_SSLeay();
-	ibmca_rsa.rsa_pub_enc = meth1->rsa_pub_enc;
-	ibmca_rsa.rsa_pub_dec = meth1->rsa_pub_dec;
-	ibmca_rsa.rsa_priv_enc = meth1->rsa_priv_enc;
-	ibmca_rsa.rsa_priv_dec = meth1->rsa_priv_dec;
-#endif
-
-#ifndef OPENSSL_NO_DSA
-	/* Use the DSA_OpenSSL() method and just hook the mod_exp-ish
-	 * bits. */
-	meth2 = DSA_OpenSSL();
-	ibmca_dsa.dsa_do_sign = meth2->dsa_do_sign;
-	ibmca_dsa.dsa_sign_setup = meth2->dsa_sign_setup;
-	ibmca_dsa.dsa_do_verify = meth2->dsa_do_verify;
-#endif
-
-#ifndef OPENSSL_NO_DH
-	/* Much the same for Diffie-Hellman */
-	meth3 = DH_OpenSSL();
-	ibmca_dh.generate_key = meth3->generate_key;
-	ibmca_dh.compute_key = meth3->compute_key;
-#endif
-
 	/* Ensure the ibmca error handling is set up */
 	ERR_load_IBMCA_strings();
+	/* initialize the engine implizit */
+	ibmca_init(e);
 	return 1;
 }
 
@@ -985,29 +1261,32 @@ static void release_context(ica_adapter_handle_t i_handle)
 	p_ica_close_adapter(i_handle);
 }
 
-/* (de)initialisation functions. */
+/* initialisation functions. */
 static int ibmca_init(ENGINE * e)
 {
-	if (ibmca_dso != NULL) {
+	static int init = 0;
+
+	if (ibmca_dso != NULL && init >= 2) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_ALREADY_LOADED);
 		goto err;
 	}
-	/* Attempt to load libatasi.so/atasi.dll/whatever. Needs to be
+	/* Attempt to load libica.so. Needs to be
 	 * changed unfortunately because the Ibmca drivers don't have
 	 * standard library names that can be platform-translated well. */
 	/* TODO: Work out how to actually map to the names the Ibmca
 	 * drivers really use - for now a symbollic link needs to be
-	 * created on the host system from libatasi.so to atasi.so on
+	 * created on the host system from libica.so to ica.so on
 	 * unix variants. */
 
 	/* WJH XXX check name translation */
 
-	ibmca_dso = DSO_load(NULL, IBMCA_LIBNAME, NULL,
+	ibmca_dso = DSO_load(NULL, LIBICA_NAME, NULL,
 			     /* DSO_FLAG_NAME_TRANSLATION */ 0);
 	if (ibmca_dso == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
+
 
 	if (!(p_ica_open_adapter = (ica_open_adapter_t)DSO_bind_func(ibmca_dso, "ica_open_adapter"))
 	    || !(p_ica_close_adapter = (ica_close_adapter_t)DSO_bind_func(ibmca_dso,
@@ -1034,16 +1313,24 @@ static int ibmca_init(ENGINE * e)
 	    || !(p_ica_3des_ofb = (ica_3des_ofb_t)DSO_bind_func(ibmca_dso, "ica_3des_ofb"))
 	    || !(p_ica_aes_cfb = (ica_aes_cfb_t)DSO_bind_func(ibmca_dso, "ica_aes_cfb"))
 	    || !(p_ica_des_cfb = (ica_des_cfb_t)DSO_bind_func(ibmca_dso, "ica_des_cfb"))
+	    || !(p_ica_get_functionlist = (ica_get_functionlist_t)DSO_bind_func(ibmca_dso,
+										"ica_get_functionlist"))
 	    || !(p_ica_3des_cfb = (ica_3des_cfb_t)DSO_bind_func(ibmca_dso, "ica_3des_cfb"))) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
+
+        if(!set_supported_meths(e)){
+                goto err;
+        }
+
 
 	if (!get_context(&ibmca_handle)) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_UNIT_FAILURE);
 		goto err;
 	}
 
+	init++;
 	return 1;
 err:
 	if (ibmca_dso) {
@@ -1106,7 +1393,7 @@ static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ())
 				 IBMCA_R_ALREADY_LOADED);
 			return 0;
 		}
-		IBMCA_LIBNAME = (const char *) p;
+		LIBICA_NAME = (const char *) p;
 		return 1;
 	default:
 		break;
@@ -1122,82 +1409,26 @@ static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ())
 static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
 				const int **nids, int nid)
 {
+        int i;
 	if (!cipher)
 		return (ibmca_usable_ciphers(nids));
 
-	switch (nid) {
-	case NID_des_ecb:
-		*cipher = &ibmca_des_ecb;
-		break;
-	case NID_des_cbc:
-		*cipher = &ibmca_des_cbc;
-		break;
-	case NID_des_ofb:
-		*cipher = &ibmca_des_ofb;
-		break;
-	case NID_des_cfb:
-		*cipher = &ibmca_des_cfb;
-		break;
-	case NID_des_ede3_ecb:
-		*cipher = &ibmca_tdes_ecb;
-		break;
-	case NID_des_ede3_cbc:
-		*cipher = &ibmca_tdes_cbc;
-		break;
-	case NID_des_ede3_ofb:
-		*cipher = &ibmca_tdes_ofb;
-		break;
-	case NID_des_ede3_cfb:
-		*cipher = &ibmca_tdes_cfb;
-		break;
-	case NID_aes_128_ecb:
-		*cipher = &ibmca_aes_128_ecb;
-		break;
-	case NID_aes_128_cbc:
-		*cipher = &ibmca_aes_128_cbc;
-		break;
-	case NID_aes_128_ofb:
-		*cipher = &ibmca_aes_128_ofb;
-		break;
-	case NID_aes_128_cfb:
-		*cipher = &ibmca_aes_128_cfb;
-		break;
-	case NID_aes_192_ecb:
-		*cipher = &ibmca_aes_192_ecb;
-		break;
-	case NID_aes_192_cbc:
-		*cipher = &ibmca_aes_192_cbc;
-		break;
-	case NID_aes_192_ofb:
-		*cipher = &ibmca_aes_192_ofb;
-		break;
-	case NID_aes_192_cfb:
-		*cipher = &ibmca_aes_192_cfb;
-		break;
-	case NID_aes_256_ecb:
-		*cipher = &ibmca_aes_256_ecb;
-		break;
-	case NID_aes_256_cbc:
-		*cipher = &ibmca_aes_256_cbc;
-		break;
-	case NID_aes_256_ofb:
-		*cipher = &ibmca_aes_256_ofb;
-		break;
-	case NID_aes_256_cfb:
-		*cipher = &ibmca_aes_256_cfb;
-		break;
-	default:
-		*cipher = NULL;
-		break;
-	}
+        *cipher = NULL;
+        for(i = 0; i < size_cipher_list;i++)
+                if(nid == ibmca_cipher_lists.nids[i]){
+                        *cipher = (EVP_CIPHER*) ibmca_cipher_lists.crypto_meths [i];
+                        break;
+		}
+        /* Check: how can *cipher be NULL? */
 	return (*cipher != NULL);
 }
 
 static int ibmca_usable_ciphers(const int **nids)
 {
-	if (nids)
-		*nids = ibmca_cipher_nids;
-	return (sizeof(ibmca_cipher_nids) / sizeof(int));
+
+        if(nids)
+	        *nids = ibmca_cipher_lists.nids;
+	return size_cipher_list;
 }
 
 static int ibmca_init_key(EVP_CIPHER_CTX * ctx, const unsigned char *key,
@@ -1467,6 +1698,7 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 {
 	int mode = 0;
 	int rv;
+
 	unsigned int len;
 	ICA_AES_192_CTX *pCtx = ctx->cipher_data;
 	ica_aes_vector_t pre_iv;
@@ -1640,36 +1872,26 @@ static int ibmca_cipher_cleanup(EVP_CIPHER_CTX * ctx)
 static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
 				const int **nids, int nid)
 {
+	int i;
 	if (!digest)
 		return (ibmca_usable_digests(nids));
 
-	switch (nid) {
-#ifndef OPENSSL_NO_SHA1
-	case NID_sha1:
-		*digest = &ibmca_sha1;
-		break;
-#endif
-#ifndef OPENSSL_NO_SHA256
-	case NID_sha256:
-		*digest = &ibmca_sha256;
-		break;
-#endif
-#ifndef OPENSSL_NO_SHA512
-	case NID_sha512:
-		*digest = &ibmca_sha512;
-		break;
-#endif
-	default:
-		*digest = NULL;
-		break;
-	}
+        *digest = NULL;
+        for(i = 0; i < size_digest_list;i++)
+                if(nid == ibmca_digest_lists.nids[i]){
+                        *digest = (EVP_MD*) ibmca_digest_lists.crypto_meths[i];
+                        break;
+		}
+
+
 	return (*digest != NULL);
 }
 
 static int ibmca_usable_digests(const int **nids)
 {
-	*nids = digest_nids;
-	return (sizeof(digest_nids) / sizeof(int));
+        if(nids)
+		*nids = ibmca_digest_lists.nids;
+	return size_digest_list;
 }
 
 #ifndef OPENSSL_NO_SHA1

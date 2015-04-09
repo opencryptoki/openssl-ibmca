@@ -1,0 +1,14 @@
+PTS = -O0 -g -Wall -fprofile-arcs -ftest-coverage -fPIC
+#OPTS = -O0 -g -Wall -m31 -D_LINUX_S390_
+OPTS = -O0 -g -Wall -D_LINUX_S390_ -std=gnu99
+
+TARGETS = ibmca_mechaList_test
+
+all: $(TARGETS)
+
+# Every target is created from a single .c file.
+%: %.c
+	gcc $(OPTS) -lica -lcrypto -o $@ $^
+
+clean:
+	rm -f $(TARGETS)

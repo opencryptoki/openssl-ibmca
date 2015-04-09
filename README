@@ -31,3 +31,28 @@ dynamic_path = /usr/lib64/engines/libibmca.so
 
 If the OpenSSL engines directory and libibmca.so is located elsewhere,
 then that location must be specified in the dynamic_path parameter.
+
+ADDING NEW CRYPTO MECHANISM TO IBMCA
+
+This short section describes the process to add a new crypto mechanism to ibmca.
+
+NB: Precondition is that the new crypto mechanism is supported by libica.
+
+1.  Add a context typedef for internal data. Name it ICA_*****_CTX for Cipher and
+    IBMCA_*****_CTX for digest. For ***** set the common name and optional a key len.
+
+2.  Add the define from ica_api.h of the new crypto algo to ibmca_crypto_algos
+
+3.  Add a ***_METHOD struct if the crypto mechanism is not a symmetric ciper or digest.
+    Otherwise use the defines EVP_CIPHER and EVP_MD for symmetric cipher and digest.
+    The struct must be filled with function pointer to ibmca functions that map the
+    crypto api to the ica api. The elements libica can not provide need to be set to NULL.
+
+4a. If the new mechanism uses RSA internally, also uses mod_expo and/or CRT,
+    the mechanism needs to be added to the set_RSA_prop()
+    function.
+
+4b. If the mechanism does not use RSA the define from ica_api.h needs to be added to the switch body in
+    set_engine_prop().
+
+5.  Implement the functions that you have defined in 3.
