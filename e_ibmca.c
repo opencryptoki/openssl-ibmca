@@ -426,7 +426,7 @@ const EVP_CIPHER ibmca_des_cbc = {
 /* DES OFB EVP */
 const EVP_CIPHER ibmca_des_ofb = {
 	NID_des_ofb,
-	sizeof(ica_des_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_des_key_single_t),
 	sizeof(ica_des_vector_t),
 	EVP_CIPH_OFB_MODE,
@@ -443,7 +443,7 @@ const EVP_CIPHER ibmca_des_ofb = {
 /* DES CFB EVP */
 const EVP_CIPHER ibmca_des_cfb = {
 	NID_des_cfb,
-	sizeof(ica_des_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_des_key_single_t),
 	sizeof(ica_des_vector_t),
 	EVP_CIPH_CFB_MODE,
@@ -494,7 +494,7 @@ const EVP_CIPHER ibmca_tdes_cbc = {
 /* 3DES OFB EVP */
 const EVP_CIPHER ibmca_tdes_ofb = {
 	NID_des_ede3_ofb,
-	sizeof(ica_des_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_des_key_triple_t),
 	sizeof(ica_des_vector_t),
 	EVP_CIPH_OFB_MODE,
@@ -511,7 +511,7 @@ const EVP_CIPHER ibmca_tdes_ofb = {
 /* 3DES CFB EVP */
 const EVP_CIPHER ibmca_tdes_cfb = {
 	NID_des_ede3_cfb,
-	sizeof(ica_des_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_des_key_triple_t),
 	sizeof(ica_des_vector_t),
 	EVP_CIPH_CFB_MODE,
@@ -562,7 +562,7 @@ const EVP_CIPHER ibmca_aes_128_cbc = {
 /* AES-128 OFB EVP */
 const EVP_CIPHER ibmca_aes_128_ofb = {
 	NID_aes_128_ofb,
-	sizeof(ica_aes_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_aes_key_len_128_t),
 	sizeof(ica_aes_vector_t),
 	EVP_CIPH_OFB_MODE,
@@ -579,7 +579,7 @@ const EVP_CIPHER ibmca_aes_128_ofb = {
 /* AES-128 CFB EVP */
 const EVP_CIPHER ibmca_aes_128_cfb = {
 	NID_aes_128_cfb,
-	sizeof(ica_aes_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_aes_key_len_128_t),
 	sizeof(ica_aes_vector_t),
 	EVP_CIPH_CFB_MODE,
@@ -630,7 +630,7 @@ const EVP_CIPHER ibmca_aes_192_cbc = {
 /* AES-192 OFB EVP */
 const EVP_CIPHER ibmca_aes_192_ofb = {
 	NID_aes_192_ofb,
-	sizeof(ica_aes_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_aes_key_len_192_t),
 	sizeof(ica_aes_vector_t),
 	EVP_CIPH_OFB_MODE,
@@ -647,7 +647,7 @@ const EVP_CIPHER ibmca_aes_192_ofb = {
 /* AES-192 CFB EVP */
 const EVP_CIPHER ibmca_aes_192_cfb = {
 	NID_aes_192_cfb,
-	sizeof(ica_aes_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_aes_key_len_192_t),
 	sizeof(ica_aes_vector_t),
 	EVP_CIPH_CFB_MODE,
@@ -698,7 +698,7 @@ const EVP_CIPHER ibmca_aes_256_cbc = {
 /* AES-256 OFB EVP */
 const EVP_CIPHER ibmca_aes_256_ofb = {
 	NID_aes_256_ofb,
-	sizeof(ica_aes_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_aes_key_len_256_t),
 	sizeof(ica_aes_vector_t),
 	EVP_CIPH_OFB_MODE,
@@ -715,7 +715,7 @@ const EVP_CIPHER ibmca_aes_256_ofb = {
 /* AES-256 CFB EVP */
 const EVP_CIPHER ibmca_aes_256_cfb = {
 	NID_aes_256_cfb,
-	sizeof(ica_aes_vector_t),
+	1, // stream cipher needs blocksize set to 1
 	sizeof(ica_aes_key_len_256_t),
 	sizeof(ica_aes_vector_t),
 	EVP_CIPH_CFB_MODE,
