@@ -10,7 +10,7 @@ Build requirements:
 * make
 * an ANSI C compiler
 * openssl >= 0.9.8
-* libica >= 2.4.0a
+* libica >= 2.4.0
 
 Runtime requirements:
 * openssl >= 0.9.8
@@ -67,3 +67,10 @@ openssl_conf = openssl_def
 should return the ibmca engine and all the supported cryptographic methods.
 
 $ openssl engine -c
+(dynamic) Dynamic engine loading support
+(ibmca) Ibmca hardware engine support
+ [RAND, DES-ECB, DES-CBC, DES-OFB, DES-CFB, DES-EDE3, DES-EDE3-CBC, DES-EDE3-OFB, 
+  DES-EDE3-CFB, AES-128-ECB, AES-192-ECB, AES-256-ECB, AES-128-CBC, AES-192-CBC, 
+  AES-256-CBC, AES-128-OFB, AES-192-OFB, AES-256-OFB, AES-128-CFB, AES-192-CFB, 
+  AES-256-CFB, SHA1, SHA256, SHA512]
+
