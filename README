@@ -1,58 +1,36 @@
+openssl-ibmca 1.2.0 May 2011
 
- README for the OpenSSL 0.9.8(or higher) IBMCA engine
+Description
+===========
 
- Author: Mike Halcrow <mhalcrow@us.ibm.com>
- Report bugs: opencryptoki-users@lists.sf.net
+openssl-ibmca is an OpenSSL engine that uses the libica library under s390x 
+to accelerate cryptographic operations.
+
+See the man page for more details:
+$ man ibmca
 
 
-ABOUT
+Installation
+============
 
-This package contains the dynamic IBMCA engine.
+To install this package in Linux, please refer to the INSTALL file.
 
-BUILDING
 
- Requirements: OpenSSL 0.9.8 (or higher), libICA
+Source code
+===========
 
- $ configure [--enable-debug]
- $ make
- # make install
+Git repository:
+git clone git://git.code.sf.net/p/opencryptoki/ibmca openssl-ibmca
 
-Included in this package is a sample openssl.cnf file (openssl.cnf.sample),
-which can be used to turn on use of the IBMCA engine in apps where OpenSSL
-config support is compiled in. In order to enable the IBMCA engine, the
-content from this file should be concatenated to the existing openssl.cnf file
-on the host.
 
-The dynamic_path parameter within the sample openssl.cnf file must be
-set to where the libibmca.so engine resides on the system. The engine
-will most likely reside in the openssl engine directory for the system.
-By default, it is set to,
-dynamic_path = /usr/lib64/engines/libibmca.so
+Support
+=======
 
-If the OpenSSL engines directory and libibmca.so is located elsewhere,
-then that location must be specified in the dynamic_path parameter.
+To report a bug please send an email to opencryptoki-users@lists.sf.net
+including the following information in the email:
 
-ADDING NEW CRYPTO MECHANISM TO IBMCA
+* distro release
+* openssl-ibmca release
+* bug description
+* steps to reproduce the bug
 
-This short section describes the process to add a new crypto mechanism to ibmca.
-
-NB: Precondition is that the new crypto mechanism is supported by libica.
-
-1.  Add a context typedef for internal data. Name it ICA_*****_CTX for Cipher and
-    IBMCA_*****_CTX for digest. For ***** set the common name and optional a key len.
-
-2.  Add the define from ica_api.h of the new crypto algo to ibmca_crypto_algos
-
-3.  Add a ***_METHOD struct if the crypto mechanism is not a symmetric ciper or digest.
-    Otherwise use the defines EVP_CIPHER and EVP_MD for symmetric cipher and digest.
-    The struct must be filled with function pointer to ibmca functions that map the
-    crypto api to the ica api. The elements libica can not provide need to be set to NULL.
-
-4a. If the new mechanism uses RSA internally, also uses mod_expo and/or CRT,
-    the mechanism needs to be added to the set_RSA_prop()
-    function.
-
-4b. If the mechanism does not use RSA the define from ica_api.h needs to be added to the switch body in
-    set_engine_prop().
-
-5.  Implement the functions that you have defined in 3.

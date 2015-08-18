@@ -13,18 +13,20 @@ openssl_conf = openssl_def
 [openssl_def]
 engines = engine_section
 
-[engine_section]
 
+[engine_section]
 ibmca = ibmca_section
 
+
 [ibmca_section]
+
 # The openssl engine path for libibmca.so.
 # Set the dynamic_path to where the libibmca.so engine
 # resides on the system.
-dynamic_path = /usr/lib64/engines/libibmca.so
-
+dynamic_path = /usr/local/lib/libibmca.so
 engine_id = ibmca
 init = 1
+
 #
 # The following ibmca algorithms will be enabled by these parameters
 # to the default_algorithms line. Any combination of these is valid,
