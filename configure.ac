@@ -51,7 +51,7 @@ AC_CHECK_DECLS([ICA_FLAG_DHW,ica_get_functionlist,ica_open_adapter,DES_ECB], [],
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile
-	doc/Makefile])
+	src/doc/Makefile])
 
 AC_OUTPUT
 
