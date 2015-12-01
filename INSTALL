@@ -1,21 +1,11 @@
-INSTALLATION ON LINUX
-=====================
+INSTALLING ON LINUX
+===================
 
 Requirements
 ============
 
-The requirements below are verified by the configure script.
-
-Build requirements:
-* make
-* an ANSI C compiler
-* openssl >= 0.9.8
-* libica >= 2.4.0
-
-Runtime requirements:
-* openssl >= 0.9.8
-* libica >= 2.4.0
-
+See the openssl-ibmca.spec file for the current build and runtime requirements.
+The same requirements are also verified by the configure script.
 
 Basic Installation
 ==================
@@ -28,9 +18,9 @@ This will configure, build and install the package in a default location,
 which is /usr/local/lib. It means that the libibmca.so will be installed
 in /usr/local/lib/libibmca.so by default. If you want to install it 
 anywhere else, run "configure" passing the new location via prefix
-argument, for example::
+argument, for example:
 
-$ ./configure --prefix=/usr/lib64/openssl/engines
+$ ./configure --prefix=/usr --libdir=/usr/lib64/openssl/engines
 
 
 Enabling IBMCA

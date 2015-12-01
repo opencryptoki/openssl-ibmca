@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 # See autoconf and autoscan online documentation for details.
 
-AC_INIT([openssl-ibmca], [1.2], [opencryptoki-users@lists.sf.net])
+AC_INIT([openssl-ibmca], [1.3.0], [opencryptoki-users@lists.sf.net])
 AC_CONFIG_SRCDIR([src/e_ibmca.c]) # sanity check
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
