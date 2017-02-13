@@ -914,6 +914,7 @@ DECLARE_AES_EVP(256, ofb, OFB)
 DECLARE_AES_EVP(256, cfb, CFB)
 #endif
 
+#ifdef OLDER_OPENSSL
 #ifndef OPENSSL_NO_SHA1
 static const EVP_MD ibmca_sha1 = {
 	NID_sha1,
@@ -963,6 +964,44 @@ static const EVP_MD ibmca_sha512 = {
 	SHA512_BLOCK_SIZE,
 	sizeof(EVP_MD *) + sizeof(struct ibmca_sha512_ctx)
 };
+#endif
+
+#else
+
+#define DECLARE_SHA_EVP(sha,len)								\
+static EVP_MD *sha##_md = NULL;									\
+static const EVP_MD *ibmca_##sha(void)								\
+{												\
+	if (sha##_md == NULL) {									\
+		EVP_MD *md;									\
+		if (( md = EVP_MD_meth_new(NID_##sha,						\
+					   NID_##sha##WithRSAEncryption)) == NULL	  	\
+		   || !EVP_MD_meth_set_result_size(md, len##_HASH_LENGTH)			\
+		   || !EVP_MD_meth_set_input_blocksize(md, len##_BLOCK_SIZE)			\
+		   || !EVP_MD_meth_set_app_datasize(md, sizeof(EVP_MD *) + 			\
+							   sizeof(struct ibmca_##sha##_ctx))	\
+		   || !EVP_MD_meth_set_flags(md, 0)						\
+		   || !EVP_MD_meth_set_init(md, ibmca_##sha##_init)				\
+		   || !EVP_MD_meth_set_update(md, ibmca_##sha##_update)				\
+		   || !EVP_MD_meth_set_final(md, ibmca_##sha##_final)			 	\
+		   || !EVP_MD_meth_set_cleanup(md, ibmca_##sha##_cleanup)) {			\
+			EVP_MD_meth_free(md);					        	\
+			md = NULL;                           					\
+		}										\
+		sha##_md = md;									\
+	}											\
+	return sha##_md;									\
+}												\
+												\
+static void ibmca_##sha##_destroy(void)								\
+{												\
+	EVP_MD_meth_free(sha##_md);								\
+	sha##_md = NULL;									\
+}
+
+DECLARE_SHA_EVP(sha1, SHA)
+DECLARE_SHA_EVP(sha256, SHA256)
+DECLARE_SHA_EVP(sha512, SHA512)
 #endif
 
 /* Constants used when creating the ENGINE */
@@ -1099,23 +1138,35 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int 
                 case RSA_CRT:
                         if(!set_RSA_prop(e))
                                 return 0;
-                        break;
+			break;
 #ifndef OPENSSL_NO_SHA1
-                case SHA1:
-                        ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha1;
-                        ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++]=  &ibmca_sha1;
+		case SHA1:
+			ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha1;
+#ifdef OLDER_OPENSSL
+			ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++]=  &ibmca_sha1;
+#else
+			ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++]=  ibmca_sha1();
+#endif
 			break;
 #endif
 #ifndef OPENSSL_NO_SHA256
                 case SHA256:
                         ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha256;
-                        ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  &ibmca_sha256;
+#ifdef OLDER_OPENSSL
+			ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  &ibmca_sha256;
+#else
+			ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  ibmca_sha256();
+#endif
 			break;
 #endif
 #ifndef OPENSSL_NO_SHA512
                 case SHA512:
                         ibmca_digest_lists.nids[*dig_nid_cnt] = NID_sha512;
-                        ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  &ibmca_sha512;
+#ifdef OLDER_OPENSSL
+			ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  &ibmca_sha512;
+#else
+			ibmca_digest_lists.crypto_meths[(*dig_nid_cnt)++] =  ibmca_sha512();
+#endif
 			break;
 #endif
                 case DES_ECB:
@@ -1459,6 +1510,10 @@ static int ibmca_destroy(ENGINE * e)
 	ibmca_aes_256_cbc_destroy();
 	ibmca_aes_256_ofb_destroy();
 	ibmca_aes_256_cfb_destroy();
+
+	ibmca_sha1_destroy();
+	ibmca_sha256_destroy();
+	ibmca_sha512_destroy();
 #endif
 	ERR_unload_IBMCA_strings();
 	return 1;
@@ -2198,7 +2253,11 @@ static int ibmca_usable_digests(const int **nids)
 #ifndef OPENSSL_NO_SHA1
 static int ibmca_sha1_init(EVP_MD_CTX * ctx)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA_CTX *ibmca_sha_ctx = ctx->md_data;
+#else
+	IBMCA_SHA_CTX *ibmca_sha_ctx = (IBMCA_SHA_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	memset((unsigned char *)ibmca_sha_ctx, 0, sizeof(*ibmca_sha_ctx));
 	return 1;
 }
@@ -2206,7 +2265,11 @@ static int ibmca_sha1_init(EVP_MD_CTX * ctx)
 static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 			     unsigned long inlen)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA_CTX *ibmca_sha_ctx = ctx->md_data;
+#else
+	IBMCA_SHA_CTX *ibmca_sha_ctx = (IBMCA_SHA_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	unsigned int message_part=SHA_MSG_PART_MIDDLE,
 		fill_size=0;
 	unsigned long in_data_len=inlen;
@@ -2338,7 +2401,11 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 
 static int ibmca_sha1_final(EVP_MD_CTX * ctx, unsigned char *md)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA_CTX *ibmca_sha_ctx = ctx->md_data;
+#else
+	IBMCA_SHA_CTX *ibmca_sha_ctx = (IBMCA_SHA_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	unsigned int message_part = 0;
 
 	if (ibmca_sha_ctx->c.runningLength)
@@ -2368,7 +2435,11 @@ static int ibmca_sha1_cleanup(EVP_MD_CTX * ctx)
 #ifndef OPENSSL_NO_SHA256
 static int ibmca_sha256_init(EVP_MD_CTX *ctx)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
+#else
+	IBMCA_SHA256_CTX *ibmca_sha256_ctx = (IBMCA_SHA256_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	memset((unsigned char *)ibmca_sha256_ctx, 0, sizeof(*ibmca_sha256_ctx));
 	return 1;
 }				// end ibmca_sha256_init                                                
@@ -2376,7 +2447,11 @@ static int ibmca_sha256_init(EVP_MD_CTX *ctx)
 static int
 ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
+#else
+	IBMCA_SHA256_CTX *ibmca_sha256_ctx = (IBMCA_SHA256_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	unsigned int message_part = SHA_MSG_PART_MIDDLE, fill_size = 0;
 	unsigned long in_data_len = inlen;
 	unsigned char tmp_hash[SHA256_HASH_LENGTH];
@@ -2508,7 +2583,11 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 
 static int ibmca_sha256_final(EVP_MD_CTX *ctx, unsigned char *md)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA256_CTX *ibmca_sha256_ctx = ctx->md_data;
+#else
+	IBMCA_SHA256_CTX *ibmca_sha256_ctx = (IBMCA_SHA256_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	unsigned int message_part = 0;
 
 	if (ibmca_sha256_ctx->c.runningLength)
@@ -2537,7 +2616,11 @@ static int ibmca_sha256_cleanup(EVP_MD_CTX *ctx)
 #ifndef OPENSSL_NO_SHA512
 static int ibmca_sha512_init(EVP_MD_CTX *ctx)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA512_CTX *ibmca_sha512_ctx = ctx->md_data;
+#else
+	IBMCA_SHA512_CTX *ibmca_sha512_ctx = (IBMCA_SHA512_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	memset((unsigned char *)ibmca_sha512_ctx, 0, sizeof(*ibmca_sha512_ctx));
 	return 1;
 }
@@ -2545,7 +2628,11 @@ static int ibmca_sha512_init(EVP_MD_CTX *ctx)
 static int
 ibmca_sha512_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA512_CTX *ibmca_sha512_ctx = ctx->md_data;
+#else
+	IBMCA_SHA512_CTX *ibmca_sha512_ctx = (IBMCA_SHA512_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	unsigned int message_part = SHA_MSG_PART_MIDDLE, fill_size = 0;
 	unsigned long in_data_len = inlen;
 	unsigned char tmp_hash[SHA512_HASH_LENGTH];
@@ -2678,7 +2765,11 @@ ibmca_sha512_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 
 static int ibmca_sha512_final(EVP_MD_CTX *ctx, unsigned char *md)
 {
+#ifdef OLDER_OPENSSL
 	IBMCA_SHA512_CTX *ibmca_sha512_ctx = ctx->md_data;
+#else
+	IBMCA_SHA512_CTX *ibmca_sha512_ctx = (IBMCA_SHA512_CTX *) EVP_MD_CTX_md_data(ctx);
+#endif
 	unsigned int message_part = 0;
 
 	if (ibmca_sha512_ctx->c.runningLengthLow)
