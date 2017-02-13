@@ -439,6 +439,7 @@ static RAND_METHOD ibmca_rand = {
 	ibmca_rand_status,     /* status */
 };
 
+#ifdef OLDER_OPENSSL
 /* DES ECB EVP */
 const EVP_CIPHER ibmca_des_ecb = {
 	NID_des_ecb,                  /* nid */
@@ -506,7 +507,51 @@ const EVP_CIPHER ibmca_des_cfb = {
 	NULL,
 	NULL
 };
+#else
+#define EVP_CIPHER_block_size_ECB       sizeof(ica_des_vector_t)
+#define EVP_CIPHER_block_size_CBC       sizeof(ica_des_vector_t)
+#define EVP_CIPHER_block_size_OFB       1
+#define EVP_CIPHER_block_size_CFB	1
 
+#define DECLARE_DES_EVP(lmode,umode)								\
+static EVP_CIPHER *des_##lmode = NULL;								\
+static const EVP_CIPHER *ibmca_des_##lmode(void)						\
+{												\
+	if (des_##lmode == NULL) {								\
+		EVP_CIPHER *cipher;								\
+		if (( cipher = EVP_CIPHER_meth_new(NID_des_##lmode,				\
+						EVP_CIPHER_block_size_##umode,      	   	\
+						sizeof(ica_des_key_single_t))) == NULL  	\
+		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_des_vector_t)		\
+		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
+		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
+		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_des_cipher)			\
+		   || !EVP_CIPHER_meth_set_cleanup(cipher, ibmca_cipher_cleanup)		\
+		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
+							sizeof(struct ibmca_des_context))	\
+		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
+		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv))) {  \
+			EVP_CIPHER_meth_free(cipher);					        \
+			cipher = NULL;                           				\
+		}										\
+		des_##lmode = cipher;								\
+	}											\
+	return des_##lmode;									\
+}												\
+												\
+static void ibmca_des_##lmode##_destroy(void)							\
+{												\
+	EVP_CIPHER_meth_free(des_##lmode);							\
+	des_##lmode = NULL;									\
+}
+
+DECLARE_DES_EVP(ecb, ECB)
+DECLARE_DES_EVP(cbc, CBC)
+DECLARE_DES_EVP(ofb, OFB)
+DECLARE_DES_EVP(cfb, CFB)
+#endif
+
+#ifdef OLDER_OPENSSL
 /* 3DES ECB EVP	*/
 const EVP_CIPHER ibmca_tdes_ecb = {
 	NID_des_ede3_ecb,
@@ -574,6 +619,44 @@ const EVP_CIPHER ibmca_tdes_cfb = {
 	NULL,
 	NULL
 };
+#else
+#define DECLARE_TDES_EVP(lmode,umode)								\
+static EVP_CIPHER *tdes_##lmode = NULL;								\
+static const EVP_CIPHER *ibmca_tdes_##lmode(void)						\
+{												\
+	if (tdes_##lmode == NULL) {								\
+		EVP_CIPHER *cipher;								\
+		if (( cipher = EVP_CIPHER_meth_new(NID_des_ede3_##lmode,			\
+						EVP_CIPHER_block_size_##umode,      	   	\
+						sizeof(ica_des_key_triple_t))) == NULL  	\
+		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_des_vector_t)		\
+		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
+		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
+		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_tdes_cipher)			\
+		   || !EVP_CIPHER_meth_set_cleanup(cipher, ibmca_cipher_cleanup)		\
+		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
+							   sizeof(struct ibmca_des_context))	\
+		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
+		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv))) {  \
+			EVP_CIPHER_meth_free(cipher);					        \
+			cipher = NULL;                           				\
+		}										\
+		tdes_##lmode = cipher;								\
+	}											\
+	return tdes_##lmode;									\
+}												\
+												\
+static void ibmca_tdes_##lmode##_destroy(void)							\
+{												\
+	EVP_CIPHER_meth_free(tdes_##lmode);							\
+	tdes_##lmode = NULL;									\
+}
+
+DECLARE_TDES_EVP(ecb, ECB)
+DECLARE_TDES_EVP(cbc, CBC)
+DECLARE_TDES_EVP(ofb, OFB)
+DECLARE_TDES_EVP(cfb, CFB)
+#endif
 
 /* AES-128 ECB EVP */
 const EVP_CIPHER ibmca_aes_128_ecb = {
@@ -984,37 +1067,69 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int 
 			break;
 #endif
                 case DES_ECB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt]  = NID_des_ecb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_ecb;
-                        break;
-                case DES_CBC:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_cbc;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cbc;
-                        break;
-                case DES_OFB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ofb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_ofb;
-                        break;
-                case DES_CFB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_cfb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cfb;
-                        break;
-                case DES3_ECB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_ecb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_ecb;
-                        break;
-                case DES3_CBC:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_cbc;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_cbc;
-                        break;
-                case DES3_OFB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_ofb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_ofb;
-                        break;
-                case DES3_CFB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_cfb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cfb;
-                        break;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt]  = NID_des_ecb;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_ecb;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_des_ecb();
+#endif
+			break;
+		case DES_CBC:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_cbc;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cbc;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_des_cbc();
+#endif
+			break;
+		case DES_OFB:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ofb;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_ofb;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_des_ofb();
+#endif
+			break;
+		case DES_CFB:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_cfb;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_des_cfb;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_des_cfb();
+#endif
+			break;
+		case DES3_ECB:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_ecb;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_ecb;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_tdes_ecb();
+#endif
+			break;
+		case DES3_CBC:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_cbc;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_cbc;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_tdes_cbc();
+#endif
+			break;
+		case DES3_OFB:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_ofb;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_ofb;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_tdes_ofb();
+#endif
+			break;
+		case DES3_CFB:
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_des_ede3_cfb;
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_tdes_cfb;
+#else
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_tdes_cfb();
+#endif
+			break;
                 case AES_ECB:
                         ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ecb;
                         ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ecb;
@@ -1234,6 +1349,16 @@ static int ibmca_destroy(ENGINE * e)
 	/* Unload the ibmca error strings so any error state including our
 	 * functs or reasons won't lead to a segfault (they simply get displayed
 	 * without corresponding string data because none will be found). */
+#ifndef OLDER_OPENSSL
+	ibmca_des_ecb_destroy();
+	ibmca_des_cbc_destroy();
+	ibmca_des_ofb_destroy();
+	ibmca_des_cfb_destroy();
+	ibmca_tdes_ecb_destroy();
+	ibmca_tdes_cbc_destroy();
+	ibmca_tdes_ofb_destroy();
+	ibmca_tdes_cfb_destroy();
+#endif
 	ERR_unload_IBMCA_strings();
 	return 1;
 }
