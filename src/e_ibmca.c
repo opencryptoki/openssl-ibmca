@@ -77,6 +77,10 @@
 #ifndef OPENSSL_NO_HW
 #ifndef OPENSSL_NO_HW_IBMCA
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define OLDER_OPENSSL
+#endif
+
 #include <ica_api.h>
 #include "e_ibmca_err.h"
 
@@ -356,6 +360,7 @@ static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
 
 #ifndef OPENSSL_NO_RSA
 /* Our internal RSA_METHOD that we provide pointers to */
+#ifdef OLDER_OPENSSL
 static RSA_METHOD ibmca_rsa = {
 	"Ibmca RSA method",      /* name */
 	NULL,                    /* rsa_pub_enc */
@@ -371,6 +376,9 @@ static RSA_METHOD ibmca_rsa = {
 	NULL,                    /* rsa_sign */
 	NULL                     /* rsa_verify */
 };
+#else
+static RSA_METHOD *ibmca_rsa = NULL;
+#endif
 #endif
 
 #ifndef OPENSSL_NO_DSA
@@ -814,6 +822,9 @@ inline static int set_RSA_prop(ENGINE *e)
 	static int rsa_enabled = 0;
 #ifndef OPENSSL_NO_RSA
 	const RSA_METHOD *meth1;
+#ifndef OLDER_OPENSSL
+	ibmca_rsa = RSA_meth_new("Ibmca RSA method", 0);
+#endif
 #endif
 #ifndef OPENSSL_NO_DSA
 	const DSA_METHOD *meth2;
@@ -827,7 +838,11 @@ inline static int set_RSA_prop(ENGINE *e)
 	}
         if(
 #ifndef OPENSSL_NO_RSA
+#ifdef OLDER_OPENSSL
 	   !ENGINE_set_RSA(e, &ibmca_rsa) ||
+#else
+	   !ENGINE_set_RSA(e, ibmca_rsa) ||
+#endif
 #endif
 #ifndef OPENSSL_NO_DSA
 		!ENGINE_set_DSA(e, &ibmca_dsa) ||
@@ -844,11 +859,23 @@ inline static int set_RSA_prop(ENGINE *e)
          * code may not hook properly, and if you own one of these here
          * cards then you have the right to do RSA operations on it
          * anyway! */
+#ifdef OLDER_OPENSSL
         meth1 = RSA_PKCS1_SSLeay();
         ibmca_rsa.rsa_pub_enc = meth1->rsa_pub_enc;
         ibmca_rsa.rsa_pub_dec = meth1->rsa_pub_dec;
         ibmca_rsa.rsa_priv_enc = meth1->rsa_priv_enc;
         ibmca_rsa.rsa_priv_dec = meth1->rsa_priv_dec;
+#else
+	meth1 = RSA_PKCS1_OpenSSL();
+	if (   !RSA_meth_set_pub_enc(ibmca_rsa, RSA_meth_get_pub_enc(meth1))
+	    || !RSA_meth_set_pub_dec(ibmca_rsa, RSA_meth_get_pub_dec(meth1))
+	    || !RSA_meth_set_priv_enc(ibmca_rsa, RSA_meth_get_priv_enc(meth1))
+	    || !RSA_meth_set_priv_dec(ibmca_rsa, RSA_meth_get_priv_dec(meth1))
+	    || !RSA_meth_set_mod_exp(ibmca_rsa, ibmca_rsa_mod_exp)
+	    || !RSA_meth_set_bn_mod_exp(ibmca_rsa, ibmca_mod_exp_mont)
+	    || !RSA_meth_set_init(ibmca_rsa, ibmca_rsa_init) )
+		return 0;
+#endif
 #endif
 #ifndef OPENSSL_NO_DSA
         meth2 = DSA_OpenSSL();
@@ -2511,6 +2538,7 @@ static int ibmca_rsa_init(RSA *rsa)
 	return 1;
 }
 
+#ifdef OLDER_OPENSSL
 static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
                              BN_CTX *ctx)
 {
@@ -2531,6 +2559,30 @@ static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
 err:
 	return to_return;
 }
+#else
+static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
+                             BN_CTX *ctx)
+{
+	int to_return = 0;
+	const BIGNUM *d, *n, *p, *q, *dmp1, *dmq1, *iqmp;
+
+	RSA_get0_key(rsa, &n, NULL, &d);
+	RSA_get0_factors(rsa, &p, &q);
+	RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
+	if (!p || !q || !dmp1 || !dmq1 || iqmp) {
+		if (!d || !n) {
+			IBMCAerr(IBMCA_F_IBMCA_RSA_MOD_EXP,
+				 IBMCA_R_MISSING_KEY_COMPONENTS);
+			goto err;
+		}
+		to_return = ibmca_mod_exp(r0, I, d, n, ctx);
+	} else {
+		to_return = ibmca_mod_exp_crt(r0, I, p, q, dmp1, dmq1, iqmp, ctx);
+	}
+err:
+	return to_return;
+}
+#endif
 #endif
 
 /* Ein kleines chinesisches "Restessen"  */
@@ -2707,7 +2759,6 @@ end:
 	BN_free(&t);
 	return to_return;
 }
-
 
 static int ibmca_mod_exp_dsa(DSA * dsa, BIGNUM * r, BIGNUM * a,
 			     const BIGNUM * p, const BIGNUM * m,
