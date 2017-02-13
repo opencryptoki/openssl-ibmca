@@ -658,6 +658,7 @@ DECLARE_TDES_EVP(ofb, OFB)
 DECLARE_TDES_EVP(cfb, CFB)
 #endif
 
+#ifdef OLDER_OPENSSL
 /* AES-128 ECB EVP */
 const EVP_CIPHER ibmca_aes_128_ecb = {
 	NID_aes_128_ecb,
@@ -861,6 +862,57 @@ const EVP_CIPHER ibmca_aes_256_cfb = {
 	NULL,
 	NULL
 };
+#else
+#define EVP_CIPHER_block_size_AES_ECB       sizeof(ica_aes_vector_t)
+#define EVP_CIPHER_block_size_AES_CBC       sizeof(ica_aes_vector_t)
+#define EVP_CIPHER_block_size_AES_OFB       1
+#define EVP_CIPHER_block_size_AES_CFB       1
+
+#define DECLARE_AES_EVP(ksize,lmode,umode)							\
+static EVP_CIPHER *aes_##ksize##_##lmode = NULL;						\
+static const EVP_CIPHER *ibmca_aes_##ksize##_##lmode(void)					\
+{												\
+	if (aes_##ksize##_##lmode == NULL) {							\
+		EVP_CIPHER *cipher;								\
+		if (( cipher = EVP_CIPHER_meth_new(NID_aes_##ksize##_##lmode,			\
+						EVP_CIPHER_block_size_AES_##umode,		\
+						sizeof(ica_aes_key_len_##ksize##_t))) == NULL	\
+		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_aes_vector_t)		\
+		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
+		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
+		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_aes_##ksize##_cipher)	\
+		   || !EVP_CIPHER_meth_set_cleanup(cipher, ibmca_cipher_cleanup)		\
+		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
+						   sizeof(struct ibmca_aes_##ksize##_context))	\
+		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
+		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv))) { 	\
+			EVP_CIPHER_meth_free(cipher);					        \
+			cipher = NULL;                           				\
+		}										\
+		aes_##ksize##_##lmode = cipher;							\
+	}											\
+	return aes_##ksize##_##lmode;								\
+}												\
+												\
+static void ibmca_aes_##ksize##_##lmode##_destroy(void)						\
+{												\
+	EVP_CIPHER_meth_free(aes_##ksize##_##lmode);						\
+	aes_##ksize##_##lmode = NULL;								\
+}
+
+DECLARE_AES_EVP(128, ecb, ECB)
+DECLARE_AES_EVP(128, cbc, CBC)
+DECLARE_AES_EVP(128, ofb, OFB)
+DECLARE_AES_EVP(128, cfb, CFB)
+DECLARE_AES_EVP(192, ecb, ECB)
+DECLARE_AES_EVP(192, cbc, CBC)
+DECLARE_AES_EVP(192, ofb, OFB)
+DECLARE_AES_EVP(192, cfb, CFB)
+DECLARE_AES_EVP(256, ecb, ECB)
+DECLARE_AES_EVP(256, cbc, CBC)
+DECLARE_AES_EVP(256, ofb, OFB)
+DECLARE_AES_EVP(256, cfb, CFB)
+#endif
 
 #ifndef OPENSSL_NO_SHA1
 static const EVP_MD ibmca_sha1 = {
@@ -1130,39 +1182,75 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int 
 			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_tdes_cfb();
 #endif
 			break;
-                case AES_ECB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ecb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ecb;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ecb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_ecb;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ecb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_ecb;
-                        break;
-                case AES_CBC:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cbc;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_cbc;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cbc;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_cbc;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cbc;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_cbc;
+		case AES_ECB:
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ecb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ecb;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ecb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_ecb;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ecb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_ecb;
+#else
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ecb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_128_ecb();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ecb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_192_ecb();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ecb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_256_ecb();
+#endif
 			break;
-                case AES_OFB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ofb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ofb;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ofb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_ofb;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ofb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_ofb;
-                        break;
-                case AES_CFB:
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cfb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_cfb;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cfb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_cfb;
-                        ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cfb;
-                        ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_cfb;
-                        break;
-        }
+		case AES_CBC:
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cbc;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_cbc;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cbc;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_cbc;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cbc;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_cbc;
+#else
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cbc;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_128_cbc();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cbc;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_192_cbc();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cbc;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_256_cbc();
+#endif
+			break;
+		case AES_OFB:
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ofb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_ofb;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ofb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_ofb;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ofb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_ofb;
+#else
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_ofb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_128_ofb();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_ofb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_192_ofb();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_ofb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_256_ofb();
+#endif
+			break;
+		case AES_CFB:
+#ifdef OLDER_OPENSSL
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cfb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_128_cfb;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cfb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_192_cfb;
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cfb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = &ibmca_aes_256_cfb;
+#else
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_cfb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_128_cfb();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_192_cfb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_192_cfb();
+			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cfb;
+			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_256_cfb();
+#endif
+			break;
+	}
 
 	size_cipher_list = *ciph_nid_cnt;
 	size_digest_list = *dig_nid_cnt;
@@ -1358,6 +1446,19 @@ static int ibmca_destroy(ENGINE * e)
 	ibmca_tdes_cbc_destroy();
 	ibmca_tdes_ofb_destroy();
 	ibmca_tdes_cfb_destroy();
+
+	ibmca_aes_128_ecb_destroy();
+	ibmca_aes_128_cbc_destroy();
+	ibmca_aes_128_ofb_destroy();
+	ibmca_aes_128_cfb_destroy();
+	ibmca_aes_192_ecb_destroy();
+	ibmca_aes_192_cbc_destroy();
+	ibmca_aes_192_ofb_destroy();
+	ibmca_aes_192_cfb_destroy();
+	ibmca_aes_256_ecb_destroy();
+	ibmca_aes_256_cbc_destroy();
+	ibmca_aes_256_ofb_destroy();
+	ibmca_aes_256_cfb_destroy();
 #endif
 	ERR_unload_IBMCA_strings();
 	return 1;
