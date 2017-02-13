@@ -413,6 +413,7 @@ static DSA_METHOD *ibmca_dsa = NULL;
 
 #ifndef OPENSSL_NO_DH
 /* Our internal DH_METHOD that we provide pointers to */
+#ifdef OLDER_OPENSSL
 static DH_METHOD ibmca_dh = {
 	"Ibmca DH method",     /* name */
 	NULL,                  /* generate_key */
@@ -423,6 +424,9 @@ static DH_METHOD ibmca_dh = {
 	0,                     /* flags */
 	NULL                   /* app_data */
 };
+#else
+static DH_METHOD *ibmca_dh = NULL;
+#endif
 #endif
 
 static RAND_METHOD ibmca_rand = {
@@ -848,6 +852,9 @@ inline static int set_RSA_prop(ENGINE *e)
 #endif
 #ifndef OPENSSL_NO_DH
 	const DH_METHOD *meth3;
+#ifndef OLDER_OPENSSL
+	ibmca_dh = DH_meth_new("Ibmca DH method", 0);
+#endif
 #endif
 
 	if(rsa_enabled){
@@ -869,7 +876,12 @@ inline static int set_RSA_prop(ENGINE *e)
 #endif
 #endif
 #ifndef OPENSSL_NO_DH
-		!ENGINE_set_DH(e, &ibmca_dh))
+#ifdef OLDER_OPENSSL
+	   !ENGINE_set_DH(e, &ibmca_dh)
+#else
+	   !ENGINE_set_DH(e, ibmca_dh)
+#endif
+	  )
 #endif
 		return 0;
 #ifndef OPENSSL_NO_RSA
@@ -915,8 +927,15 @@ inline static int set_RSA_prop(ENGINE *e)
 #ifndef OPENSSL_NO_DH
         /* Much the same for Diffie-Hellman */
         meth3 = DH_OpenSSL();
+#ifdef OLDER_OPENSSL
         ibmca_dh.generate_key = meth3->generate_key;
         ibmca_dh.compute_key = meth3->compute_key;
+#else
+	if (   !DH_meth_set_generate_key(ibmca_dh, DH_meth_get_generate_key(meth3))
+	    || !DH_meth_set_compute_key(ibmca_dh, DH_meth_get_compute_key(meth3))
+	    || !DH_meth_set_bn_mod_exp(ibmca_dh, ibmca_mod_exp_dh) )
+		return 0;
+#endif
 #endif
 	rsa_enabled = 1;
 	return 1;
