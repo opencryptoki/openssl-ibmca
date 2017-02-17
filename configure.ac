@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 # See autoconf and autoscan online documentation for details.
 
-AC_INIT([openssl-ibmca], [1.3.0], [opencryptoki-users@lists.sf.net])
+AC_INIT([openssl-ibmca], [1.3.1], [opencryptoki-users@lists.sf.net])
 AC_CONFIG_SRCDIR([src/e_ibmca.c]) # sanity check
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -25,7 +25,7 @@ AC_DISABLE_STATIC
 AC_PROG_CC
 AC_PROG_LIBTOOL
 
-# Checks for libraries. 
+# Checks for libraries.
 AC_CHECK_LIB([crypto], [RAND_add], [], AC_MSG_ERROR([*** openssl >= 0.9.8 is required ***]))
 AC_CHECK_LIB([ica], [ica_get_functionlist], [], AC_MSG_ERROR([*** libica >= 2.4.0 is required ***]))
 

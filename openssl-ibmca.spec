@@ -1,5 +1,5 @@
 Name:           openssl-ibmca
-Version:        1.3.0
+Version:        1.3.1
 Release:        0
 Summary:        An IBMCA OpenSSL dynamic engine
 
@@ -41,11 +41,14 @@ mv $RPM_BUILD_ROOT%{_libdir}/lib* $RPM_BUILD_ROOT%{_libdir}/openssl/engines
 %{_libdir}/openssl/engines/*
 
 %changelog
-* Tue Dec 1 2015 - cclaudio@br.ibm.com
+* Fri Feb 17 2017 Paulo Vital <pvital@linux.vnet.ibm.com> 1.3.1
+- Support OpenSSL-1.1 and older versions
+
+* Tue Dec 1 2015 Claudio Carvalho <cclaudio@br.ibm.com> 1.3.0
 - openssl-ibmca-1.3.0 release
 
-* Mon May 2 2011 - yoder1@us.ibm.com
+* Mon May 2 2011 Kent Yoder <yoder1@us.ibm.com> 1.2.0
 - updates for s390 MSA4 features, engine version 1.2
 
-* Fri Mar 17 2006 - mhalcrow@us.ibm.com
+* Fri Mar 17 2006 Michael A. Halcrow <mhalcrow@us.ibm.com> 1.0.0
 - initial version
