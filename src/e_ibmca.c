@@ -66,7 +66,6 @@
 #include <dirent.h>
 #include <openssl/crypto.h>
 #include "cryptlib.h"
-#include <openssl/dso.h>
 #include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/objects.h>
@@ -83,6 +82,12 @@
 
 #include <ica_api.h>
 #include "e_ibmca_err.h"
+
+#ifdef OLDER_OPENSSL
+#include <openssl/dso.h>
+#else
+typedef struct dso_st DSO;
+#endif
 
 #define IBMCA_LIB_NAME "ibmca engine"
 
@@ -1760,7 +1765,7 @@ static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ())
 
 /*
  * ENGINE calls this to find out how to deal with
- * a particular NID in the ENGINE. 
+ * a particular NID in the ENGINE.
  */
 static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
 				const int **nids, int nid)
@@ -1829,7 +1834,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		mode = MODE_CBC;
 	} else if ((EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_CFB_MODE) &&
 		   (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE)) {
-		IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, 
+		IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER,
 				IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
 		return 0;
 	}
@@ -1866,7 +1871,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -1914,7 +1919,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -1955,7 +1960,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		mode = MODE_CBC;
 	} else if ((EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_CFB_MODE) &&
 		   (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE)) {
-		IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, 
+		IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER,
 				IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
 		return 0;
 	}
@@ -1992,7 +1997,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2040,7 +2045,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2082,7 +2087,7 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		mode = MODE_CBC;
 	} else if ((EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_CFB_MODE) &&
 		   (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE)) {
-		IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, 
+		IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER,
 			 IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
 		return 0;
 	}
@@ -2123,7 +2128,7 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2175,7 +2180,7 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2217,7 +2222,7 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		mode = MODE_CBC;
 	} else if ((EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_CFB_MODE) &&
 		   (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE)) {
-		IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, 
+		IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER,
 			 IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
 		return 0;
 	}
@@ -2257,7 +2262,7 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2306,7 +2311,7 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2347,7 +2352,7 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		mode = MODE_CBC;
 	} else if ((EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_CFB_MODE) &&
 		   (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE)) {
-		IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, 
+		IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER,
 			 IBMCA_R_CIPHER_MODE_NOT_SUPPORTED);
 		return 0;
 	}
@@ -2387,7 +2392,7 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2436,7 +2441,7 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		}
 
 		if (rv) {
-			IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, 
+			IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
@@ -2538,7 +2543,7 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 					&ibmca_sha_ctx->c,
 					tmp_hash)) {
 
-				IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE, 
+				IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE,
 						IBMCA_R_REQUEST_FAILED);
 				return 0;
 			}
@@ -2577,7 +2582,7 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 						&ibmca_sha_ctx->c,
 						tmp_hash)) {
 
-					IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE, 
+					IBMCAerr(IBMCA_F_IBMCA_SHA1_UPDATE,
 							IBMCA_R_REQUEST_FAILED);
 					return 0;
 				}
@@ -2589,8 +2594,8 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 				return 1;
 			}
 
-			/* 
-			 * We had to use some of the data from in_data to 
+			/*
+			 * We had to use some of the data from in_data to
 			 * fill out the empty part of save data, so adjust
 			 * in_data_len
 			 */
@@ -2599,7 +2604,7 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 			ibmca_sha_ctx->tail_len = in_data_len & 0x3f;
 			if(ibmca_sha_ctx->tail_len) {
 				in_data_len &= ~0x3f;
-				memcpy(ibmca_sha_ctx->tail, 
+				memcpy(ibmca_sha_ctx->tail,
 					in_data + fill_size +in_data_len,
 					ibmca_sha_ctx->tail_len);
 			}
@@ -2618,7 +2623,7 @@ static int ibmca_sha1_update(EVP_MD_CTX * ctx, const void *in_data,
 	}
 
 	/* If the data passed in was <64 bytes, in_data_len will be 0 */
-        if( in_data_len && 
+        if( in_data_len &&
 		p_ica_sha1(message_part,
 			(unsigned int)in_data_len, (unsigned char *)(in_data + fill_size),
 			&ibmca_sha_ctx->c,
@@ -2674,7 +2679,7 @@ static int ibmca_sha256_init(EVP_MD_CTX *ctx)
 #endif
 	memset((unsigned char *)ibmca_sha256_ctx, 0, sizeof(*ibmca_sha256_ctx));
 	return 1;
-}				// end ibmca_sha256_init                                                
+}				// end ibmca_sha256_init
 
 static int
 ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
@@ -2691,7 +2696,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 	if (in_data_len == 0)
 		return 1;
 
-	if (ibmca_sha256_ctx->c.runningLength == 0 
+	if (ibmca_sha256_ctx->c.runningLength == 0
 	    && ibmca_sha256_ctx->tail_len == 0) {
 		message_part = SHA_MSG_PART_FIRST;
 
@@ -2711,7 +2716,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 
 		fill_size = SHA256_BLOCK_SIZE - ibmca_sha256_ctx->tail_len;
 		if (fill_size < in_data_len) {
-			memcpy(ibmca_sha256_ctx->tail 
+			memcpy(ibmca_sha256_ctx->tail
 			       + ibmca_sha256_ctx->tail_len, in_data,
 			       fill_size);
 
@@ -2721,7 +2726,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 					ibmca_sha256_ctx->tail,
 					&ibmca_sha256_ctx->c,
 					tmp_hash)) {
-				IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, 
+				IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE,
 					 IBMCA_R_REQUEST_FAILED);
 				return 0;
 			}
@@ -2749,7 +2754,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 		if (ibmca_sha256_ctx->tail_len) {
 			fill_size = SHA256_BLOCK_SIZE - ibmca_sha256_ctx->tail_len;
 			if (fill_size < in_data_len) {
-				memcpy(ibmca_sha256_ctx->tail 
+				memcpy(ibmca_sha256_ctx->tail
 				       + ibmca_sha256_ctx->tail_len, in_data,
 				       fill_size);
 
@@ -2759,7 +2764,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 						ibmca_sha256_ctx->tail,
 						&ibmca_sha256_ctx->c,
 						tmp_hash)) {
-					IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE, 
+					IBMCAerr(IBMCA_F_IBMCA_SHA256_UPDATE,
 						 IBMCA_R_REQUEST_FAILED);
 					return 0;
 				}
@@ -2771,8 +2776,8 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 				return 1;
 			}
 
-			/* 
-			 * We had to use some of the data from in_data to 
+			/*
+			 * We had to use some of the data from in_data to
 			 * fill out the empty part of save data, so adjust
 			 * in_data_len
 			 */
@@ -2781,7 +2786,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 			ibmca_sha256_ctx->tail_len = in_data_len & 0x3f;
 			if (ibmca_sha256_ctx->tail_len) {
 				in_data_len &= ~0x3f;
-				memcpy(ibmca_sha256_ctx->tail, 
+				memcpy(ibmca_sha256_ctx->tail,
 				       in_data + fill_size + in_data_len,
 					ibmca_sha256_ctx->tail_len);
 			}
@@ -2801,7 +2806,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 	}
 
 	/* If the data passed in was <64 bytes, in_data_len will be 0 */
-        if (in_data_len && 
+        if (in_data_len &&
 	    p_ica_sha256(message_part,
 			(unsigned int)in_data_len, (unsigned char *)(in_data + fill_size),
 			&ibmca_sha256_ctx->c,
@@ -2811,7 +2816,7 @@ ibmca_sha256_update(EVP_MD_CTX *ctx, const void *in_data, unsigned long inlen)
 	}
 
 	return 1;
-}				// end ibmca_sha256_update                                                 
+}				// end ibmca_sha256_update
 
 static int ibmca_sha256_final(EVP_MD_CTX *ctx, unsigned char *md)
 {
