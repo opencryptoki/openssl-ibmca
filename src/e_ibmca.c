@@ -64,6 +64,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <dlfcn.h>
 #include <openssl/crypto.h>
 #include "cryptlib.h"
 #include <openssl/engine.h>
@@ -83,13 +84,8 @@
 #include <ica_api.h>
 #include "e_ibmca_err.h"
 
-#ifdef OLDER_OPENSSL
-#include <openssl/dso.h>
-#else
-typedef struct dso_st DSO;
-#endif
-
 #define IBMCA_LIB_NAME "ibmca engine"
+#define LIBICA_SHARED_LIB "libica.so"
 
 #define AP_PATH "/sys/devices/ap"
 
@@ -1530,7 +1526,7 @@ static int ibmca_destroy(ENGINE * e)
  * operating with global locks, so this should be thread-safe
  * implicitly. */
 
-static DSO *ibmca_dso = NULL;
+void *ibmca_dso = NULL;
 
 /* These are the function pointers that are (un)set when the library has
  * successfully (un)loaded. */
@@ -1641,42 +1637,41 @@ static int ibmca_init(ENGINE * e)
 
 	/* WJH XXX check name translation */
 
-	ibmca_dso = DSO_load(NULL, LIBICA_NAME, NULL,
-			     /* DSO_FLAG_NAME_TRANSLATION */ 0);
+	ibmca_dso = dlopen(LIBICA_SHARED_LIB, RTLD_NOW);
 	if (ibmca_dso == NULL) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
 
 
-	if (!(p_ica_open_adapter = (ica_open_adapter_t)DSO_bind_func(ibmca_dso, "ica_open_adapter"))
-	    || !(p_ica_close_adapter = (ica_close_adapter_t)DSO_bind_func(ibmca_dso,
+	if (!(p_ica_open_adapter = (ica_open_adapter_t)dlsym(ibmca_dso, "ica_open_adapter"))
+	    || !(p_ica_close_adapter = (ica_close_adapter_t)dlsym(ibmca_dso,
 									  "ica_close_adapter"))
-	    || !(p_ica_rsa_mod_expo = (ica_rsa_mod_expo_t)DSO_bind_func(ibmca_dso,
+	    || !(p_ica_rsa_mod_expo = (ica_rsa_mod_expo_t)dlsym(ibmca_dso,
 									"ica_rsa_mod_expo"))
 	    || !(p_ica_random_number_generate =
-		    (ica_random_number_generate_t)DSO_bind_func(ibmca_dso,
+		    (ica_random_number_generate_t)dlsym(ibmca_dso,
 								"ica_random_number_generate"))
-	    || !(p_ica_rsa_crt = (ica_rsa_crt_t)DSO_bind_func(ibmca_dso, "ica_rsa_crt"))
-	    || !(p_ica_sha1 = (ica_sha1_t)DSO_bind_func(ibmca_dso, "ica_sha1"))
-	    || !(p_ica_des_encrypt = (ica_des_encrypt_t)DSO_bind_func(ibmca_dso, "ica_des_encrypt"))
-	    || !(p_ica_des_decrypt = (ica_des_decrypt_t)DSO_bind_func(ibmca_dso, "ica_des_decrypt"))
-	    || !(p_ica_3des_encrypt = (ica_3des_encrypt_t)DSO_bind_func(ibmca_dso,
+	    || !(p_ica_rsa_crt = (ica_rsa_crt_t)dlsym(ibmca_dso, "ica_rsa_crt"))
+	    || !(p_ica_sha1 = (ica_sha1_t)dlsym(ibmca_dso, "ica_sha1"))
+	    || !(p_ica_des_encrypt = (ica_des_encrypt_t)dlsym(ibmca_dso, "ica_des_encrypt"))
+	    || !(p_ica_des_decrypt = (ica_des_decrypt_t)dlsym(ibmca_dso, "ica_des_decrypt"))
+	    || !(p_ica_3des_encrypt = (ica_3des_encrypt_t)dlsym(ibmca_dso,
 									"ica_3des_encrypt"))
-	    || !(p_ica_3des_decrypt = (ica_3des_decrypt_t)DSO_bind_func(ibmca_dso,
+	    || !(p_ica_3des_decrypt = (ica_3des_decrypt_t)dlsym(ibmca_dso,
 									"ica_3des_decrypt"))
-	    || !(p_ica_aes_encrypt = (ica_aes_encrypt_t)DSO_bind_func(ibmca_dso, "ica_aes_encrypt"))
-	    || !(p_ica_aes_decrypt = (ica_aes_decrypt_t)DSO_bind_func(ibmca_dso, "ica_aes_decrypt"))
-	    || !(p_ica_sha256 = (ica_sha256_t)DSO_bind_func(ibmca_dso, "ica_sha256"))
-	    || !(p_ica_sha512 = (ica_sha512_t)DSO_bind_func(ibmca_dso, "ica_sha512"))
-	    || !(p_ica_aes_ofb = (ica_aes_ofb_t)DSO_bind_func(ibmca_dso, "ica_aes_ofb"))
-	    || !(p_ica_des_ofb = (ica_des_ofb_t)DSO_bind_func(ibmca_dso, "ica_des_ofb"))
-	    || !(p_ica_3des_ofb = (ica_3des_ofb_t)DSO_bind_func(ibmca_dso, "ica_3des_ofb"))
-	    || !(p_ica_aes_cfb = (ica_aes_cfb_t)DSO_bind_func(ibmca_dso, "ica_aes_cfb"))
-	    || !(p_ica_des_cfb = (ica_des_cfb_t)DSO_bind_func(ibmca_dso, "ica_des_cfb"))
-	    || !(p_ica_get_functionlist = (ica_get_functionlist_t)DSO_bind_func(ibmca_dso,
+	    || !(p_ica_aes_encrypt = (ica_aes_encrypt_t)dlsym(ibmca_dso, "ica_aes_encrypt"))
+	    || !(p_ica_aes_decrypt = (ica_aes_decrypt_t)dlsym(ibmca_dso, "ica_aes_decrypt"))
+	    || !(p_ica_sha256 = (ica_sha256_t)dlsym(ibmca_dso, "ica_sha256"))
+	    || !(p_ica_sha512 = (ica_sha512_t)dlsym(ibmca_dso, "ica_sha512"))
+	    || !(p_ica_aes_ofb = (ica_aes_ofb_t)dlsym(ibmca_dso, "ica_aes_ofb"))
+	    || !(p_ica_des_ofb = (ica_des_ofb_t)dlsym(ibmca_dso, "ica_des_ofb"))
+	    || !(p_ica_3des_ofb = (ica_3des_ofb_t)dlsym(ibmca_dso, "ica_3des_ofb"))
+	    || !(p_ica_aes_cfb = (ica_aes_cfb_t)dlsym(ibmca_dso, "ica_aes_cfb"))
+	    || !(p_ica_des_cfb = (ica_des_cfb_t)dlsym(ibmca_dso, "ica_des_cfb"))
+	    || !(p_ica_get_functionlist = (ica_get_functionlist_t)dlsym(ibmca_dso,
 										"ica_get_functionlist"))
-	    || !(p_ica_3des_cfb = (ica_3des_cfb_t)DSO_bind_func(ibmca_dso, "ica_3des_cfb"))) {
+	    || !(p_ica_3des_cfb = (ica_3des_cfb_t)dlsym(ibmca_dso, "ica_3des_cfb"))) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
@@ -1695,7 +1690,7 @@ static int ibmca_init(ENGINE * e)
 	return 1;
 err:
 	if (ibmca_dso) {
-		DSO_free(ibmca_dso);
+		dlclose(ibmca_dso);
 		ibmca_dso = NULL;
 	}
 
@@ -1730,7 +1725,7 @@ static int ibmca_finish(ENGINE * e)
 		return 0;
 	}
 	release_context(ibmca_handle);
-	if (!DSO_free(ibmca_dso)) {
+	if (!dlclose(ibmca_dso)) {
 		IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
 		return 0;
 	}
