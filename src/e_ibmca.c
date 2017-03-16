@@ -523,7 +523,7 @@ static const EVP_CIPHER *ibmca_des_##lmode(void)						\
 		if (( cipher = EVP_CIPHER_meth_new(NID_des_##lmode,				\
 						EVP_CIPHER_block_size_##umode,      	   	\
 						sizeof(ica_des_key_single_t))) == NULL  	\
-		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_des_vector_t)		\
+		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_des_vector_t))		\
 		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
 		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
 		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_des_cipher)			\
@@ -531,7 +531,7 @@ static const EVP_CIPHER *ibmca_des_##lmode(void)						\
 		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
 							sizeof(struct ibmca_des_context))	\
 		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
-		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv))) {  \
+		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv)) {	\
 			EVP_CIPHER_meth_free(cipher);					        \
 			cipher = NULL;                           				\
 		}										\
@@ -630,7 +630,7 @@ static const EVP_CIPHER *ibmca_tdes_##lmode(void)						\
 		if (( cipher = EVP_CIPHER_meth_new(NID_des_ede3_##lmode,			\
 						EVP_CIPHER_block_size_##umode,      	   	\
 						sizeof(ica_des_key_triple_t))) == NULL  	\
-		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_des_vector_t)		\
+		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_des_vector_t))		\
 		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
 		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
 		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_tdes_cipher)			\
@@ -638,7 +638,7 @@ static const EVP_CIPHER *ibmca_tdes_##lmode(void)						\
 		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
 							   sizeof(struct ibmca_des_context))	\
 		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
-		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv))) {  \
+		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv)) {	\
 			EVP_CIPHER_meth_free(cipher);					        \
 			cipher = NULL;                           				\
 		}										\
@@ -878,7 +878,7 @@ static const EVP_CIPHER *ibmca_aes_##ksize##_##lmode(void)					\
 		if (( cipher = EVP_CIPHER_meth_new(NID_aes_##ksize##_##lmode,			\
 						EVP_CIPHER_block_size_AES_##umode,		\
 						sizeof(ica_aes_key_len_##ksize##_t))) == NULL	\
-		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_aes_vector_t)		\
+		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_aes_vector_t))		\
 		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
 		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
 		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_aes_##ksize##_cipher)	\
@@ -886,7 +886,7 @@ static const EVP_CIPHER *ibmca_aes_##ksize##_##lmode(void)					\
 		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
 						   sizeof(struct ibmca_aes_##ksize##_context))	\
 		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
-		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv))) { 	\
+		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv)) { 	\
 			EVP_CIPHER_meth_free(cipher);					        \
 			cipher = NULL;                           				\
 		}										\
