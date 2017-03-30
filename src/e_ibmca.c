@@ -955,7 +955,7 @@ static const EVP_MD ibmca_sha512 = {
 	NID_sha512,
 	NID_sha512WithRSAEncryption,
 	SHA512_HASH_LENGTH,
-	0,
+	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE,
 	ibmca_sha512_init,
 	ibmca_sha512_update,
 	ibmca_sha512_final,
