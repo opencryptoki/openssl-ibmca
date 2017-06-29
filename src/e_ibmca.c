@@ -922,7 +922,7 @@ static const EVP_MD ibmca_sha1 = {
 	NID_sha1,
 	NID_sha1WithRSAEncryption,
 	SHA_HASH_LENGTH,
-	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE,
+	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE|EVP_MD_FLAG_FIPS,
 	ibmca_sha1_init,
 	ibmca_sha1_update,
 	ibmca_sha1_final,
@@ -939,7 +939,7 @@ static const EVP_MD ibmca_sha256 = {
 	NID_sha256,
 	NID_sha256WithRSAEncryption,
 	SHA256_HASH_LENGTH,
-	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE,
+	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE|EVP_MD_FLAG_FIPS,
 	ibmca_sha256_init,
 	ibmca_sha256_update,
 	ibmca_sha256_final,
@@ -956,7 +956,7 @@ static const EVP_MD ibmca_sha512 = {
 	NID_sha512,
 	NID_sha512WithRSAEncryption,
 	SHA512_HASH_LENGTH,
-	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE,
+	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE|EVP_MD_FLAG_FIPS,
 	ibmca_sha512_init,
 	ibmca_sha512_update,
 	ibmca_sha512_final,
@@ -982,7 +982,7 @@ static const EVP_MD *ibmca_##sha(void)								\
 		   || !EVP_MD_meth_set_input_blocksize(md, len##_BLOCK_SIZE)			\
 		   || !EVP_MD_meth_set_app_datasize(md, sizeof(EVP_MD *) + 			\
 							   sizeof(struct ibmca_##sha##_ctx))	\
-		   || !EVP_MD_meth_set_flags(md, 0)						\
+		   || !EVP_MD_meth_set_flags(md, EVP_MD_FLAG_FIPS)					\
 		   || !EVP_MD_meth_set_init(md, ibmca_##sha##_init)				\
 		   || !EVP_MD_meth_set_update(md, ibmca_##sha##_update)				\
 		   || !EVP_MD_meth_set_final(md, ibmca_##sha##_final)			 	\
