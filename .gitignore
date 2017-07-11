@@ -13,3 +13,4 @@ config.status
 config.log
 configure
 libtool
+cscope.*
