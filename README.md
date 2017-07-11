@@ -1,12 +1,87 @@
 # OpenSSL-ibmca
 
 OpenSSL engine that uses the libica library under s390x to accelerate
- cryptographic operations.
+cryptographic operations.
+
+
+## Requirements
+
+The build requirements are:
+ * openssl-devel >= 0.9.8
+ * libica-devel >= 2.4.0
+ * autoconf
+ * automake
+ * libtool
+
+The runtime requirements are:
+ * openssl >= 0.9.8
+ * libica >= 2.4.0
 
 
 ## Installing
 
-See [INSTALL](INSTALL).
+```
+$ ./configure [--enable-debug]
+$ make
+$ sudo make install
+```
+
+This will configure, build and install the package in a default location,
+which is `/usr/local/lib`. It means that the libibmca.so will be installed in
+`/usr/local/lib/libibmca.so` by default. If you want to install it anywhere
+else, run "configure" passing the new location via prefix argument, for
+example:
+
+```
+$ ./configure --prefix=/usr --libdir=/usr/lib64/openssl/engines
+```
+
+## Enabling IBMCA
+
+Included in this package there is a sample `openssl.cnf` file
+(`openssl.cnf.sample`), which can be used to turn on use of the IBMCA engine in
+apps where OpenSSL config support is compiled in.
+
+In order to enable IBMCA, use the following instructions to apply the
+configurations from `openssl.cnf.sample` to the `openssl.cnf` file installed
+in the host by the OpenSSL package. **WARNING:** you may want to save the
+original `openssl.cnf` file before changing it.
+
+In `openssl.cnf.sample`, the *dynamic_path* variable is set to the default
+location, which is `/usr/local/lib/libibmca.so` by default. However, if the
+libibmca.so library has been installed anywhere else, then update the
+*dynamic_path* variable.
+
+Locate where the `openssl.cnf` file has been installed in the host and append
+the content of the `openssl.cnf.sample` file to it.
+
+```
+$ rpm -ql openssl | grep openssl.cnf
+$ cat openssl.cnf.sample >> /path/to/openssl.cnf
+```
+
+In `openssl.cnf` file, move the *openssl_conf* variable from the bottom to the
+top of the file, such as in the example below:
+
+```
+HOME = .
+RANDFILE = $ENV::HOME/.rnd
+openssl_conf = openssl_def
+```
+
+Finally, check if the IBMCA is now enabled. The command below should return the
+IBMCA engine and all the supported cryptographic methods.
+
+```
+$ openssl engine -c
+(dynamic) Dynamic engine loading support
+(ibmca) Ibmca hardware engine support
+[RAND, DES-ECB, DES-CBC, DES-OFB, DES-CFB, DES-EDE3, DES-EDE3-CBC, DES-EDE3-OFB,
+ DES-EDE3-CFB, AES-128-ECB, AES-192-ECB, AES-256-ECB, AES-128-CBC, AES-192-CBC,
+ AES-256-CBC, AES-128-OFB, AES-192-OFB, AES-256-OFB, AES-128-CFB, AES-192-CFB,
+ AES-256-CFB, SHA1, SHA256, SHA512]
+$
+```
 
 
 ## Support
