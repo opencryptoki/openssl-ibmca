@@ -1,33 +1,34 @@
-OpenSSL-ibmca
-=============
+# OpenSSL-ibmca
 
-OpenSSL engine that uses the libica library under s390x to accelerate cryptographic operations.
-
-Man page:
-$ man ibmca
-
-Source:
-$ git clone git://git.code.sf.net/p/opencryptoki/ibmca openssl-ibmca
-
-Mailing lists:
-https://sourceforge.net/p/opencryptoki/mailman/
+OpenSSL engine that uses the libica library under s390x to accelerate
+ cryptographic operations.
 
 
-Installing
-==========
+## Installing
 
-See INSTALL
+See [INSTALL](INSTALL).
 
 
-Support
-=======
+## Support
 
-To report a bug please send an email to opencryptoki-users@lists.sf.net
-including the following information in the email:
+To report a bug please submit a
+ [ticket](https://github.com/opencryptoki/openssl-ibmca/issues) including the
+ following information in the issue description:
 
+* bug description
 * distro release
 * openssl-ibmca package version
 * libica package version
-* bug description
 * steps to reproduce the bug
 
+Regarding technical or usage questions, send email to
+ [opencryptoki-tech](
+    https://sourceforge.net/p/opencryptoki/mailman/opencryptoki-tech) or
+ [opencryptoki-users](
+    https://sourceforge.net/p/opencryptoki/mailman/opencryptoki-users)
+ mailing list respectively.
+
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
