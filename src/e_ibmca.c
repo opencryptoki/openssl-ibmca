@@ -1624,10 +1624,11 @@ static int ibmca_init(ENGINE * e)
 {
 	static int init = 0;
 
-	if (ibmca_dso != NULL && init >= 2) {
-		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_ALREADY_LOADED);
-		goto err;
+	if (init > 0) {
+		/* Engine already loaded, so exiting if called more than once.*/
+		return 1;
 	}
+
 	/* Attempt to load libica.so. Needs to be
 	 * changed unfortunately because the Ibmca drivers don't have
 	 * standard library names that can be platform-translated well. */
