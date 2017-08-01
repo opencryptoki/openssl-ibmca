@@ -65,8 +65,8 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <string.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
 #include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/objects.h>
