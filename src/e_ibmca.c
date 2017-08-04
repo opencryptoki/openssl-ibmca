@@ -61,6 +61,7 @@
 
 /* (C) COPYRIGHT International Business Machines Corp. 2001, 2010, 2011 */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -661,260 +662,126 @@ DECLARE_TDES_EVP(cfb, CFB)
 #endif
 
 #ifdef OLDER_OPENSSL
-/* AES-128 ECB EVP */
-const EVP_CIPHER ibmca_aes_128_ecb = {
-	NID_aes_128_ecb,
-	sizeof(ica_aes_vector_t),
-	sizeof(ica_aes_key_len_128_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_ECB_MODE,
-	ibmca_init_key,
-	ibmca_aes_128_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_128_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-128 CBC EVP */
-const EVP_CIPHER ibmca_aes_128_cbc = {
-	NID_aes_128_cbc,
-	sizeof(ica_aes_vector_t),
-	sizeof(ica_aes_key_len_128_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_CBC_MODE,
-	ibmca_init_key,
-	ibmca_aes_128_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_128_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-128 OFB EVP */
-const EVP_CIPHER ibmca_aes_128_ofb = {
-	NID_aes_128_ofb,
-	1, // stream cipher needs blocksize set to 1
-	sizeof(ica_aes_key_len_128_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_OFB_MODE,
-	ibmca_init_key,
-	ibmca_aes_128_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_128_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-128 CFB EVP */
-const EVP_CIPHER ibmca_aes_128_cfb = {
-	NID_aes_128_cfb,
-	1, // stream cipher needs blocksize set to 1
-	sizeof(ica_aes_key_len_128_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_CFB_MODE,
-	ibmca_init_key,
-	ibmca_aes_128_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_128_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-192 ECB EVP */
-const EVP_CIPHER ibmca_aes_192_ecb = {
-	NID_aes_192_ecb,
-	sizeof(ica_aes_vector_t),
-	sizeof(ica_aes_key_len_192_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_ECB_MODE,
-	ibmca_init_key,
-	ibmca_aes_192_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_192_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-192 CBC EVP */
-const EVP_CIPHER ibmca_aes_192_cbc = {
-	NID_aes_192_cbc,
-	sizeof(ica_aes_vector_t),
-	sizeof(ica_aes_key_len_192_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_CBC_MODE,
-	ibmca_init_key,
-	ibmca_aes_192_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_192_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-192 OFB EVP */
-const EVP_CIPHER ibmca_aes_192_ofb = {
-	NID_aes_192_ofb,
-	1, // stream cipher needs blocksize set to 1
-	sizeof(ica_aes_key_len_192_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_OFB_MODE,
-	ibmca_init_key,
-	ibmca_aes_192_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_192_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-192 CFB EVP */
-const EVP_CIPHER ibmca_aes_192_cfb = {
-	NID_aes_192_cfb,
-	1, // stream cipher needs blocksize set to 1
-	sizeof(ica_aes_key_len_192_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_CFB_MODE,
-	ibmca_init_key,
-	ibmca_aes_192_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_192_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-256 ECB EVP */
-const EVP_CIPHER ibmca_aes_256_ecb = {
-	NID_aes_256_ecb,
-	sizeof(ica_aes_vector_t),
-	sizeof(ica_aes_key_len_256_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_ECB_MODE,
-	ibmca_init_key,
-	ibmca_aes_256_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_256_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-256 CBC EVP */
-const EVP_CIPHER ibmca_aes_256_cbc = {
-	NID_aes_256_cbc,
-	sizeof(ica_aes_vector_t),
-	sizeof(ica_aes_key_len_256_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_CBC_MODE,
-	ibmca_init_key,
-	ibmca_aes_256_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_256_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-256 OFB EVP */
-const EVP_CIPHER ibmca_aes_256_ofb = {
-	NID_aes_256_ofb,
-	1, // stream cipher needs blocksize set to 1
-	sizeof(ica_aes_key_len_256_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_OFB_MODE,
-	ibmca_init_key,
-	ibmca_aes_256_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_256_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
-};
-
-/* AES-256 CFB EVP */
-const EVP_CIPHER ibmca_aes_256_cfb = {
-	NID_aes_256_cfb,
-	1, // stream cipher needs blocksize set to 1
-	sizeof(ica_aes_key_len_256_t),
-	sizeof(ica_aes_vector_t),
-	EVP_CIPH_CFB_MODE,
-	ibmca_init_key,
-	ibmca_aes_256_cipher,
-	ibmca_cipher_cleanup,
-	sizeof(struct ibmca_aes_256_context),
-	EVP_CIPHER_set_asn1_iv,
-	EVP_CIPHER_get_asn1_iv,
-	NULL,
-	NULL
+# define DECLARE_AES_EVP(kbits, mode, block_size, key_len, iv_len,	\
+			flags, ctx_size, init, do_cipher, cleanup,	\
+			set_asn1_parameters, get_asn1_parameters, ctrl)	\
+const EVP_CIPHER ibmca_aes_##kbits##_##mode = {				\
+	NID_aes_##kbits##_##mode,					\
+	block_size,							\
+	key_len,							\
+	iv_len,								\
+	flags,								\
+	init,								\
+	do_cipher,							\
+	cleanup,							\
+	ctx_size,							\
+	set_asn1_parameters,						\
+	get_asn1_parameters,						\
+	ctrl,								\
+	NULL								\
 };
 #else
-#define EVP_CIPHER_block_size_AES_ECB       sizeof(ica_aes_vector_t)
-#define EVP_CIPHER_block_size_AES_CBC       sizeof(ica_aes_vector_t)
-#define EVP_CIPHER_block_size_AES_OFB       1
-#define EVP_CIPHER_block_size_AES_CFB       1
-
-#define DECLARE_AES_EVP(ksize,lmode,umode)							\
-static EVP_CIPHER *aes_##ksize##_##lmode = NULL;						\
-static const EVP_CIPHER *ibmca_aes_##ksize##_##lmode(void)					\
-{												\
-	if (aes_##ksize##_##lmode == NULL) {							\
-		EVP_CIPHER *cipher;								\
-		if (( cipher = EVP_CIPHER_meth_new(NID_aes_##ksize##_##lmode,			\
-						EVP_CIPHER_block_size_AES_##umode,		\
-						sizeof(ica_aes_key_len_##ksize##_t))) == NULL	\
-		   || !EVP_CIPHER_meth_set_iv_length(cipher, sizeof(ica_aes_vector_t))		\
-		   || !EVP_CIPHER_meth_set_flags(cipher,EVP_CIPH_##umode##_MODE)		\
-		   || !EVP_CIPHER_meth_set_init(cipher, ibmca_init_key)				\
-		   || !EVP_CIPHER_meth_set_do_cipher(cipher, ibmca_aes_##ksize##_cipher)	\
-		   || !EVP_CIPHER_meth_set_cleanup(cipher, ibmca_cipher_cleanup)		\
-		   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher,				\
-						   sizeof(struct ibmca_aes_##ksize##_context))	\
-		   || !EVP_CIPHER_meth_set_set_asn1_params(cipher, EVP_CIPHER_set_asn1_iv) 	\
-		   || !EVP_CIPHER_meth_set_get_asn1_params(cipher, EVP_CIPHER_get_asn1_iv)) { 	\
-			EVP_CIPHER_meth_free(cipher);					        \
-			cipher = NULL;                           				\
-		}										\
-		aes_##ksize##_##lmode = cipher;							\
-	}											\
-	return aes_##ksize##_##lmode;								\
-}												\
-												\
-static void ibmca_aes_##ksize##_##lmode##_destroy(void)						\
-{												\
-	EVP_CIPHER_meth_free(aes_##ksize##_##lmode);						\
-	aes_##ksize##_##lmode = NULL;								\
+# define DECLARE_AES_EVP(kbits, mode, block_size, key_len, iv_len,	\
+			 flags,	ctx_size, init, do_cipher, cleanup,	\
+			 set_asn1_parameters, get_asn1_parameters, ctrl)\
+static EVP_CIPHER *aes_##kbits##_##mode = NULL;				\
+static const EVP_CIPHER *ibmca_aes_##kbits##_##mode(void)		\
+{									\
+	EVP_CIPHER *cipher;						\
+									\
+	if (aes_##kbits##_##mode != NULL)				\
+		goto done;						\
+									\
+	if ((cipher = EVP_CIPHER_meth_new(NID_aes_##kbits##_##mode,	\
+					  block_size, key_len)) == NULL	\
+	   || !EVP_CIPHER_meth_set_iv_length(cipher, iv_len)		\
+	   || !EVP_CIPHER_meth_set_flags(cipher, flags)			\
+	   || !EVP_CIPHER_meth_set_init(cipher, init)			\
+	   || !EVP_CIPHER_meth_set_do_cipher(cipher, do_cipher)		\
+	   || !EVP_CIPHER_meth_set_cleanup(cipher, cleanup)		\
+	   || !EVP_CIPHER_meth_set_impl_ctx_size(cipher, ctx_size)	\
+	   || !EVP_CIPHER_meth_set_set_asn1_params(cipher,		\
+						   set_asn1_parameters)	\
+	   || !EVP_CIPHER_meth_set_get_asn1_params(cipher,		\
+						   get_asn1_parameters)	\
+	   || !EVP_CIPHER_meth_set_ctrl(cipher, ctrl)) {		\
+		EVP_CIPHER_meth_free(cipher);				\
+		cipher = NULL;                           		\
+	}								\
+	aes_##kbits##_##mode = cipher;					\
+done:									\
+	return aes_##kbits##_##mode;					\
+}									\
+									\
+static void ibmca_aes_##kbits##_##mode##_destroy(void)			\
+{									\
+	EVP_CIPHER_meth_free(aes_##kbits##_##mode);			\
+	aes_##kbits##_##mode = NULL;					\
 }
-
-DECLARE_AES_EVP(128, ecb, ECB)
-DECLARE_AES_EVP(128, cbc, CBC)
-DECLARE_AES_EVP(128, ofb, OFB)
-DECLARE_AES_EVP(128, cfb, CFB)
-DECLARE_AES_EVP(192, ecb, ECB)
-DECLARE_AES_EVP(192, cbc, CBC)
-DECLARE_AES_EVP(192, ofb, OFB)
-DECLARE_AES_EVP(192, cfb, CFB)
-DECLARE_AES_EVP(256, ecb, ECB)
-DECLARE_AES_EVP(256, cbc, CBC)
-DECLARE_AES_EVP(256, ofb, OFB)
-DECLARE_AES_EVP(256, cfb, CFB)
 #endif
+
+DECLARE_AES_EVP(128, ecb, sizeof(ica_aes_vector_t),
+		sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
+		EVP_CIPH_ECB_MODE, sizeof(struct ibmca_aes_128_context),
+		ibmca_init_key, ibmca_aes_128_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(128, cbc, sizeof(ica_aes_vector_t),
+		sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
+		EVP_CIPH_CBC_MODE, sizeof(struct ibmca_aes_128_context),
+		ibmca_init_key, ibmca_aes_128_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(128, ofb, 1, sizeof(ica_aes_key_len_128_t),
+		sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
+		sizeof(struct ibmca_aes_128_context), ibmca_init_key,
+		ibmca_aes_128_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(128, cfb, 1, sizeof(ica_aes_key_len_128_t),
+		sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
+		sizeof(struct ibmca_aes_128_context), ibmca_init_key,
+		ibmca_aes_128_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+
+DECLARE_AES_EVP(192, ecb, sizeof(ica_aes_vector_t),
+		sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
+		EVP_CIPH_ECB_MODE, sizeof(struct ibmca_aes_192_context),
+		ibmca_init_key, ibmca_aes_192_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(192, cbc, sizeof(ica_aes_vector_t),
+		sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
+		EVP_CIPH_CBC_MODE, sizeof(struct ibmca_aes_192_context),
+		ibmca_init_key, ibmca_aes_192_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(192, ofb, 1, sizeof(ica_aes_key_len_128_t),
+		sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
+		sizeof(struct ibmca_aes_192_context), ibmca_init_key,
+		ibmca_aes_192_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(192, cfb, 1, sizeof(ica_aes_key_len_128_t),
+		sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
+		sizeof(struct ibmca_aes_192_context), ibmca_init_key,
+		ibmca_aes_192_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+
+DECLARE_AES_EVP(256, ecb, sizeof(ica_aes_vector_t),
+		sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
+		EVP_CIPH_ECB_MODE, sizeof(struct ibmca_aes_256_context),
+		ibmca_init_key, ibmca_aes_256_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(256, cbc, sizeof(ica_aes_vector_t),
+		sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
+		EVP_CIPH_CBC_MODE, sizeof(struct ibmca_aes_256_context),
+		ibmca_init_key, ibmca_aes_256_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(256, ofb, 1, sizeof(ica_aes_key_len_128_t),
+		sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
+		sizeof(struct ibmca_aes_256_context), ibmca_init_key,
+		ibmca_aes_256_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+DECLARE_AES_EVP(256, cfb, 1, sizeof(ica_aes_key_len_128_t),
+		sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
+		sizeof(struct ibmca_aes_256_context), ibmca_init_key,
+		ibmca_aes_256_cipher, ibmca_cipher_cleanup,
+		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 
 #ifdef OLDER_OPENSSL
 #ifndef OPENSSL_NO_SHA1
