@@ -1,16 +1,20 @@
-Name:           openssl-ibmca
-Version:        1.3.1
-Release:        0
-Summary:        An IBMCA OpenSSL dynamic engine
+Name:       openssl-ibmca
+Version:    1.3.1
+Release:    0
+Summary:    An IBMCA OpenSSL dynamic engine
 
-Group:          Hardware/Other
-License:        Other License(s), see package, IBM Public License
-Source:         %{name}-%{version}.tar.bz2
-URL:            http://sourceforge.net/projects/opencryptoki
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
+Group:      Hardware/Other
+License:    ASL 2.0
+Source:     https://github.com/opencryptoki/%{name}/archive/v%{version}.tar.gz
+URL:        http://sourceforge.net/projects/opencryptoki
 
-BuildRequires: openssl-devel >= 0.9.8, libica-devel >= 2.4.0, autoconf, automake, libtool
-Requires: openssl >= 0.9.8, libica >= 2.4.0
+BuildRequires:  openssl-devel >= 0.9.8,
+                libica-devel >= 2.4.0,
+                autoconf,
+                automake,
+                libtool
+Requires:       openssl >= 0.9.8,
+                libica >= 2.4.0
 
 ExclusiveArch: s390 s390x
 
@@ -41,6 +45,10 @@ mv $RPM_BUILD_ROOT%{_libdir}/lib* $RPM_BUILD_ROOT%{_libdir}/openssl/engines
 %{_libdir}/openssl/engines/*
 
 %changelog
+* Tue Aug 15 2017 Paulo Vital <pvital@linux.vnet.ibm.com> 1.3.1
+- Update new License
+- Update Source and URL pointing to GitHub
+
 * Fri Feb 17 2017 Paulo Vital <pvital@linux.vnet.ibm.com> 1.3.1
 - Support OpenSSL-1.1 and older versions
 
