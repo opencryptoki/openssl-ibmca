@@ -6,7 +6,7 @@ AC_INIT([openssl-ibmca], [1.3.1], [opencryptoki-users@lists.sf.net])
 AC_CONFIG_SRCDIR([src/e_ibmca.c]) # sanity check
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign])
 
 # Cmdline arguments.
 AC_ARG_ENABLE([debug],
