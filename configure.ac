@@ -42,8 +42,7 @@ AC_TYPE_SIZE_T
 AC_TYPE_SSIZE_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
-AC_CHECK_FUNCS([gethostbyaddr gethostbyname memset strcasecmp strncasecmp strstr])
+AC_CHECK_FUNCS([gethostbyaddr gethostbyname memset strcasecmp strncasecmp strstr malloc])
 AC_CHECK_DECLS([ICA_FLAG_DHW,ica_get_functionlist,ica_open_adapter,DES_ECB], [],
 		AC_MSG_ERROR([*** libica >= 2.4.0 and libica-devel >= 2.4.0 are required ***]),
 		[#include <ica_api.h>])
