@@ -102,6 +102,10 @@
  #define EVP_CTRL_GCM_GET_TAG			EVP_CTRL_AEAD_GET_TAG
 #endif
 
+#ifndef EVP_AEAD_TLS1_AAD_LEN
+ #define EVP_AEAD_TLS1_AAD_LEN			13
+#endif
+
 typedef struct ibmca_des_context {
 	unsigned char key[sizeof(ica_des_key_triple_t)];
 } ICA_DES_CTX;
