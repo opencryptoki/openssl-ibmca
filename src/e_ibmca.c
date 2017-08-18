@@ -102,8 +102,18 @@
  #define EVP_CTRL_GCM_GET_TAG			EVP_CTRL_AEAD_GET_TAG
 #endif
 
+#if !defined(NID_aes_128_gcm) || \
+    !defined(NID_aes_192_gcm) || \
+    !defined(NID_aes_256_gcm)
+ #ifndef OPENSSL_NO_AES_GCM
+  #define OPENSSL_NO_AES_GCM
+ #endif
+#endif
 #ifndef EVP_AEAD_TLS1_AAD_LEN
  #define EVP_AEAD_TLS1_AAD_LEN			13
+#endif
+#ifndef EVP_MD_FLAG_PKEY_METHOD_SIGNATURE
+ #define EVP_MD_FLAG_PKEY_METHOD_SIGNATURE	0
 #endif
 
 typedef struct ibmca_des_context {
@@ -351,6 +361,7 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 
 static int ibmca_cipher_cleanup(EVP_CIPHER_CTX * ctx);
 
+#ifndef OPENSSL_NO_AES_GCM
 static int ibmca_aes_gcm_init_key(EVP_CIPHER_CTX *ctx,
                                   const unsigned char *key,
                                   const unsigned char *iv, int enc);
@@ -366,6 +377,7 @@ static int ibmca_aes_gcm_ctrl(EVP_CIPHER_CTX *ctx, int type, int arg,
 			      void *ptr);
 static void ibmca_gcm_tag(EVP_CIPHER_CTX *ctx, unsigned char *tag,
 			  size_t len);
+#endif
 
 /* Sha1 stuff */
 static int ibmca_usable_digests(const int **nids);
@@ -792,6 +804,7 @@ DECLARE_AES_EVP(128, cfb, 1, sizeof(ica_aes_key_len_128_t),
 		sizeof(ICA_AES_128_CTX), ibmca_init_key,
 		ibmca_aes_128_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+#ifndef OPENSSL_NO_AES_GCM
 DECLARE_AES_EVP(128, gcm, 1, sizeof(ica_aes_key_len_128_t),
 		sizeof(ica_aes_vector_t) - sizeof(uint32_t),
 		EVP_CIPH_GCM_MODE | EVP_CIPH_FLAG_DEFAULT_ASN1
@@ -801,6 +814,7 @@ DECLARE_AES_EVP(128, gcm, 1, sizeof(ica_aes_key_len_128_t),
 		sizeof(ICA_AES_GCM_CTX),
 		ibmca_aes_gcm_init_key, ibmca_aes_gcm_cipher, NULL, NULL,
 		NULL, ibmca_aes_gcm_ctrl)
+#endif
 
 DECLARE_AES_EVP(192, ecb, sizeof(ica_aes_vector_t),
 		sizeof(ica_aes_key_len_192_t), sizeof(ica_aes_vector_t),
@@ -822,6 +836,7 @@ DECLARE_AES_EVP(192, cfb, 1, sizeof(ica_aes_key_len_192_t),
 		sizeof(ICA_AES_192_CTX), ibmca_init_key,
 		ibmca_aes_192_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+#ifndef OPENSSL_NO_AES_GCM
 DECLARE_AES_EVP(192, gcm, 1, sizeof(ica_aes_key_len_192_t),
 		sizeof(ica_aes_vector_t) - sizeof(uint32_t),
 		EVP_CIPH_GCM_MODE | EVP_CIPH_FLAG_DEFAULT_ASN1
@@ -831,6 +846,7 @@ DECLARE_AES_EVP(192, gcm, 1, sizeof(ica_aes_key_len_192_t),
 		sizeof(ICA_AES_GCM_CTX),
 		ibmca_aes_gcm_init_key, ibmca_aes_gcm_cipher, NULL, NULL,
 		NULL, ibmca_aes_gcm_ctrl)
+#endif
 
 DECLARE_AES_EVP(256, ecb, sizeof(ica_aes_vector_t),
 		sizeof(ica_aes_key_len_256_t), sizeof(ica_aes_vector_t),
@@ -852,6 +868,7 @@ DECLARE_AES_EVP(256, cfb, 1, sizeof(ica_aes_key_len_256_t),
 		sizeof(ICA_AES_GCM_CTX), ibmca_init_key,
 		ibmca_aes_256_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
+#ifndef OPENSSL_NO_AES_GCM
 DECLARE_AES_EVP(256, gcm, 1, sizeof(ica_aes_key_len_256_t),
 		sizeof(ica_aes_vector_t) - sizeof(uint32_t),
 		EVP_CIPH_GCM_MODE | EVP_CIPH_FLAG_DEFAULT_ASN1
@@ -861,6 +878,7 @@ DECLARE_AES_EVP(256, gcm, 1, sizeof(ica_aes_key_len_256_t),
 		sizeof(ICA_AES_GCM_CTX),
 		ibmca_aes_gcm_init_key, ibmca_aes_gcm_cipher, NULL, NULL,
 		NULL, ibmca_aes_gcm_ctrl)
+#endif
 
 #ifdef OLDER_OPENSSL
 #ifndef OPENSSL_NO_SHA1
@@ -1213,6 +1231,7 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int 
 			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_cfb;
 			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_256_cfb();
 			break;
+#ifndef OPENSSL_NO_AES_GCM
 		case AES_GCM:
 			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_128_gcm;
 			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_128_gcm();
@@ -1221,6 +1240,7 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int 
 			ibmca_cipher_lists.nids[*ciph_nid_cnt] = NID_aes_256_gcm;
 			ibmca_cipher_lists.crypto_meths[(*ciph_nid_cnt)++] = ibmca_aes_256_gcm();
 			break;
+#endif
 		default:
 			break;	/* do nothing */
 	}
@@ -1425,17 +1445,20 @@ static int ibmca_destroy(ENGINE * e)
 	ibmca_aes_128_cbc_destroy();
 	ibmca_aes_128_ofb_destroy();
 	ibmca_aes_128_cfb_destroy();
-	ibmca_aes_128_gcm_destroy();
 	ibmca_aes_192_ecb_destroy();
 	ibmca_aes_192_cbc_destroy();
 	ibmca_aes_192_ofb_destroy();
 	ibmca_aes_192_cfb_destroy();
-	ibmca_aes_192_gcm_destroy();
 	ibmca_aes_256_ecb_destroy();
 	ibmca_aes_256_cbc_destroy();
 	ibmca_aes_256_ofb_destroy();
 	ibmca_aes_256_cfb_destroy();
+
+# ifndef OPENSSL_NO_AES_GCM
+	ibmca_aes_128_gcm_destroy();
+	ibmca_aes_192_gcm_destroy();
 	ibmca_aes_256_gcm_destroy();
+# endif
 
 	ibmca_sha1_destroy();
 	ibmca_sha256_destroy();
@@ -1557,9 +1580,11 @@ ica_3des_cfb_t			p_ica_3des_cfb;
 ica_3des_ofb_t			p_ica_3des_ofb;
 ica_aes_ofb_t			p_ica_aes_ofb;
 ica_aes_cfb_t			p_ica_aes_cfb;
+#ifndef OPENSSL_NO_AES_GCM
 ica_aes_gcm_initialize_t	p_ica_aes_gcm_initialize;
 ica_aes_gcm_intermediate_t	p_ica_aes_gcm_intermediate;
 ica_aes_gcm_last_t		p_ica_aes_gcm_last;
+#endif
 
 /* utility function to obtain a context */
 static int get_context(ica_adapter_handle_t * p_handle)
@@ -1624,9 +1649,12 @@ static int ibmca_init(ENGINE * e)
 	    || !BIND(ibmca_dso, ica_des_cfb)
 	    || !BIND(ibmca_dso, ica_get_functionlist)
 	    || !BIND(ibmca_dso, ica_3des_cfb)
+#ifndef OPENSSL_NO_AES_GCM
 	    || !BIND(ibmca_dso, ica_aes_gcm_initialize)
 	    || !BIND(ibmca_dso, ica_aes_gcm_intermediate)
-	    || !BIND(ibmca_dso, ica_aes_gcm_last)){
+	    || !BIND(ibmca_dso, ica_aes_gcm_last)
+#endif
+	   ) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
@@ -1666,9 +1694,11 @@ err:
 	p_ica_aes_cfb = NULL;
 	p_ica_des_cfb = NULL;
 	p_ica_3des_cfb = NULL;
+#ifndef OPENSSL_NO_AES_GCM
 	p_ica_aes_gcm_initialize = NULL;
 	p_ica_aes_gcm_intermediate = NULL;
 	p_ica_aes_gcm_last = NULL;
+#endif
 	return 0;
 }
 
@@ -2411,6 +2441,7 @@ static int ibmca_cipher_cleanup(EVP_CIPHER_CTX * ctx)
 	return 1;
 }
 
+#ifndef OPENSSL_NO_AES_GCM
 static int ibmca_gcm_aad(ICA_AES_GCM_CTX *ctx, const unsigned char *aad,
 			 size_t len)
 {
@@ -2724,7 +2755,7 @@ static int ibmca_aes_gcm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 		return 0;
 	}
 }
-
+#endif
 
 static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
 				const int **nids, int nid)
