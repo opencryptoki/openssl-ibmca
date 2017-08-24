@@ -1,37 +1,33 @@
 .\" Process this file with
 .\" groff -man -Tascii ibmca.5
-.TH IBMCA 5 2015-02-10 IBM "IBMCA user manual"
+.TH IBMCA 5 2017-08-24 IBM "IBMCA user manual"
 .SH NAME
-IBMCA \- IBMCA is an openSSL engine that uses the libica library under s390x to accelerate
-cryptographic operations.
+IBMCA \- IBMCA is an OpenSSL engine that uses the libica library under s390x to
+accelerate cryptographic operations.
 
 .SH DESCRIPTION
-IBMCA  accelerates cryptographic operations of applications that use OpenSSL.
+IBMCA accelerates cryptographic operations of applications that use OpenSSL.
 The engine can be configured by the IBMCA configuration file. The OpenSSL
-configuration file is only neede to attach the engine.
+configuration file is only needed to attach the engine.
 
 .SS openssl.cnf
-The OpenSSL configuration file can have an IBMCA section. This section includes only
-OpenSSL configuration options for the IBMCA engine.
-
-.SS ibmca.cnf
-The ibmca.cnf is used to blacklist algorithms.
-Algorithms can be independently disabled.
+The OpenSSL configuration file can have an IBMCA section. This section includes
+only OpenSSL configuration options for the IBMCA engine.
 
 .SS Control Commands
-Applications that load an OpenSSL engine can optionally send control commands to the
-engine. Control Commands are key value pairs. The value can be a string, a numeric
-integer or be null. See the engine(3) manpage for a mechanism to discover control
-commands.
+Applications that load an OpenSSL engine can optionally send control commands
+to the engine. Control Commands are key value pairs. The value can be a string,
+a numeric integer or be null. See the engine(3) manpage for a mechanism to
+discover control commands.
 
 .SH OPTIONS
 .SS openssl.cnf
 Options for the IBMCA section in openssl.cnf:
 .PP
 dynamic_path =
-.I /path/to/ibmca.so
+.I /path/to/libibmca.so
 .RS
-Set the path to the IBMCA shared object file allowing openSSL to find the file.
+Set the path to the IBMCA shared object file allowing OpenSSL to find the file.
 .RE
 .PP
 engine_id =
@@ -41,50 +37,21 @@ Set the name of the engine. The default name is "ibmca".
 .RE
 .IP "init = 0 | 1"
 OpenSSL will try to initialize the engine if this option is set to 1.
-If set to 0 OpenSSL will not try to initialize the engine.
+If set to 0, OpenSSL will not try to initialize the engine.
 .PP
 default_algorithms = ALL |
 .I mechanisms
 .RS
 Redirect all cryptographic operations through the engine or disable types of
 mechanisms that the engine supports.
-If ALL is not used the default_algorithms consists of a comma seperated list of
+If ALL is not used, the default_algorithms consists of a comma separated list
+of
 .I mechanisms
 :
 .B CIPHERS | DIGESTS | RSA | DH | DSA.
 .PP
 Only all CIPHERS and/or DIGESTS can be
 de/activated. Algorithms like AES can not be de/activated independently.
-.SS ibmca.cnf
-The ibmca.cnf contains the following option:
-.PP
-blacklisted_algorithms =
-.I algorithms
-.RS
-Sets the blacklisted algorithms for IBMCA. Blacklisted
-algorithms will not be redirected to the libica library, but proccessed in
-OpenSSL themselves.
-.I Algorithms
-are a comma separated list of the following mechanisms:
-.RS
-.IP \[bu]
-AES_ECB, AES_CBC, AES_CFB, AES_OFB
-.IP \[bu]
-DES_ECB, DES_CBC, DES_CFB, AES_OFB
-.IP \[bu]
-DES3_ECB, DES3_CBC, DES3_CFB, DES3_OFB
-.IP \[bu]
-RSA, DSA, DH
-.IP \[bu]
-SHA1, SHA256, SHA512
-.IP \[bu]
-P_RNG
-.RE
-.P
-By default the blacklist contains:
-.B AES_CBC, SHA1, SHA256, SHA512.
-For these algorithms exist assembler implementations in libcrypto.
-.RE
 .SS Control Command
 IBMCA does support one optional control command:
 .PP
@@ -93,13 +60,6 @@ SO_PATH:
 .RS
 Replaces the current libica library by an libica library located at SO_PATH.
 .RE
-.SH FILES
-.IP /usr/share/doc/openssl-ibmca/README
-README for IBMCA
-.IP /usr/share/doc/openssl-ibmca/openssl.cnf.sample.s390x
-sample file for the IBMCA section in openssl
-.IP /etc/ibmca/ibmca.cnf
-Config file of IBMCA
 
 .SH SEE ALSO
 .B engine(3)
