@@ -8,14 +8,14 @@ cryptographic operations.
 
 The build requirements are:
  * openssl-devel >= 0.9.8
- * libica-devel >= 2.4.0
+ * libica-devel >= 3.1.1
  * autoconf
  * automake
  * libtool
 
 The runtime requirements are:
  * openssl >= 0.9.8
- * libica >= 2.4.0
+ * libica >= 3.1.1
 
 
 ## Installing
@@ -79,7 +79,7 @@ $ openssl engine -c
 [RAND, DES-ECB, DES-CBC, DES-OFB, DES-CFB, DES-EDE3, DES-EDE3-CBC, DES-EDE3-OFB,
  DES-EDE3-CFB, AES-128-ECB, AES-192-ECB, AES-256-ECB, AES-128-CBC, AES-192-CBC,
  AES-256-CBC, AES-128-OFB, AES-192-OFB, AES-256-OFB, AES-128-CFB, AES-192-CFB,
- AES-256-CFB, SHA1, SHA256, SHA512]
+ AES-256-CFB, id-aes128-GCM, id-aes192-GCM, id-aes256-GCM, SHA1, SHA256, SHA512]
 $
 ```
 
