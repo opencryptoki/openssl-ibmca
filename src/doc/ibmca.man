@@ -7,8 +7,7 @@ accelerate cryptographic operations.
 
 .SH DESCRIPTION
 IBMCA accelerates cryptographic operations of applications that use OpenSSL.
-The engine can be configured by the IBMCA configuration file. The OpenSSL
-configuration file is only needed to attach the engine.
+The engine can be configured by the OpenSSL configuration file.
 
 .SS openssl.cnf
 The OpenSSL configuration file can have an IBMCA section. This section includes
