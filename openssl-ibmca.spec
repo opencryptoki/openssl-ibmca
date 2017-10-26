@@ -7,13 +7,9 @@ Group:      Hardware/Other
 License:    ASL 2.0
 Source:     https://github.com/opencryptoki/%{name}/archive/v%{version}.tar.gz
 
-BuildRequires:  openssl-devel >= 0.9.8,
-                libica-devel >= 3.1.1,
-                autoconf,
-                automake,
-                libtool
-Requires:       openssl >= 0.9.8,
-                libica >= 3.1.1
+BuildRequires:  openssl-devel >= 0.9.8 libica-devel >= 3.1.1
+BuildRequires:  autoconf automake libtool
+Requires:       openssl >= 0.9.8 libica >= 3.1.1
 
 ExclusiveArch: s390 s390x
 
