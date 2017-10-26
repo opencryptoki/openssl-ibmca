@@ -39,7 +39,7 @@ mv $RPM_BUILD_ROOT%{_libdir}/lib* $RPM_BUILD_ROOT%{_libdir}/openssl/engines
 %postun -p /sbin/ldconfig
 
 %files
-%doc README INSTALL src/openssl.cnf.sample
+%doc README.md src/openssl.cnf.sample
 %{_mandir}/man5/*
 %{_libdir}/openssl/engines/*
 
