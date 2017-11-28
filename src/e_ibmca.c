@@ -817,22 +817,22 @@ DECLARE_AES_EVP(192, gcm, 1, sizeof(ica_aes_key_len_192_t),
 
 DECLARE_AES_EVP(256, ecb, sizeof(ica_aes_vector_t),
 		sizeof(ica_aes_key_len_256_t), sizeof(ica_aes_vector_t),
-		EVP_CIPH_ECB_MODE, sizeof(ICA_AES_GCM_CTX),
+		EVP_CIPH_ECB_MODE, sizeof(ICA_AES_256_CTX),
 		ibmca_init_key, ibmca_aes_256_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(256, cbc, sizeof(ica_aes_vector_t),
 		sizeof(ica_aes_key_len_256_t), sizeof(ica_aes_vector_t),
-		EVP_CIPH_CBC_MODE, sizeof(ICA_AES_GCM_CTX),
+		EVP_CIPH_CBC_MODE, sizeof(ICA_AES_256_CTX),
 		ibmca_init_key, ibmca_aes_256_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(256, ofb, 1, sizeof(ica_aes_key_len_256_t),
 		sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
-		sizeof(ICA_AES_GCM_CTX), ibmca_init_key,
+		sizeof(ICA_AES_256_CTX), ibmca_init_key,
 		ibmca_aes_256_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(256, cfb, 1, sizeof(ica_aes_key_len_256_t),
 		sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
-		sizeof(ICA_AES_GCM_CTX), ibmca_init_key,
+		sizeof(ICA_AES_256_CTX), ibmca_init_key,
 		ibmca_aes_256_cipher, ibmca_cipher_cleanup,
 		EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 #ifndef OPENSSL_NO_AES_GCM
