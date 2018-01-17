@@ -1,10 +1,10 @@
-lib_LTLIBRARIES=libibmca.la
+lib_LTLIBRARIES=ibmca.la
 
-libibmca_la_SOURCES=e_ibmca.c e_ibmca_err.c
-libibmca_la_LIBADD=-ldl
-libibmca_la_LDFLAGS=-module -version-info 0:2:0 -shared -no-undefined -avoid-version
+ibmca_la_SOURCES=e_ibmca.c e_ibmca_err.c
+ibmca_la_LIBADD=-ldl
+ibmca_la_LDFLAGS=-module -version-info 0:2:0 -shared -no-undefined -avoid-version
 
-dist_libibmca_la_SOURCES=e_ibmca_err.h e_os.h cryptlib.h
+dist_ibmca_la_SOURCES=e_ibmca_err.h e_os.h cryptlib.h
 EXTRA_DIST = openssl.cnf.sample
 
 ACLOCAL_AMFLAGS = -I m4
