@@ -23,7 +23,7 @@ fi
 # Checks for programs.
 AC_DISABLE_STATIC
 AC_PROG_CC
-AC_PROG_LIBTOOL
+LT_INIT
 
 # Checks for libraries.
 AC_CHECK_LIB([crypto], [RAND_add], [], AC_MSG_ERROR([*** openssl >= 0.9.8 is required ***]))
