@@ -38,7 +38,7 @@ typedef struct{
 } id_map;
 
 #define AP_PATH  "/sys/devices/ap"
-#define IBMCA_PATH "/usr/lib64/openssl/engines/libibmca.so"
+#define IBMCA_PATH "/usr/lib64/openssl/engines/ibmca.so"
 
 
 id_map ica_to_ssl_map[] = {
