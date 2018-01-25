@@ -24,7 +24,7 @@ discover control commands.
 Options for the IBMCA section in openssl.cnf:
 .PP
 dynamic_path =
-.I /path/to/libibmca.so
+.I /path/to/ibmca.so
 .RS
 Set the path to the IBMCA shared object file allowing OpenSSL to find the file.
 .RE

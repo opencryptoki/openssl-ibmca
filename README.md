@@ -27,8 +27,8 @@ $ sudo make install
 ```
 
 This will configure, build and install the package in a default location,
-which is `/usr/local/lib`. It means that the libibmca.so will be installed in
-`/usr/local/lib/libibmca.so` by default. If you want to install it anywhere
+which is `/usr/local/lib`. It means that the ibmca.so will be installed in
+`/usr/local/lib/ibmca.so` by default. If you want to install it anywhere
 else, run "configure" passing the new location via prefix argument, for
 example:
 
@@ -48,8 +48,8 @@ in the host by the OpenSSL package. **WARNING:** you may want to save the
 original `openssl.cnf` file before changing it.
 
 In `openssl.cnf.sample`, the *dynamic_path* variable is set to the default
-location, which is `/usr/local/lib/libibmca.so` by default. However, if the
-libibmca.so library has been installed anywhere else, then update the
+location, which is `/usr/local/lib/ibmca.so` by default. However, if the
+ibmca.so library has been installed anywhere else, then update the
 *dynamic_path* variable.
 
 Locate where the `openssl.cnf` file has been installed in the host and append
