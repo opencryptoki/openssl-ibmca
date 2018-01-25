@@ -1,15 +1,17 @@
+%global enginesdir %(pkg-config --variable=enginesdir libcrypto)
+
 Name:       openssl-ibmca
 Version:    1.4.0
-Release:    0
+Release:    1%{?dist}
 Summary:    An IBMCA OpenSSL dynamic engine
 
-Group:      Hardware/Other
 License:    ASL 2.0
-Source:     https://github.com/opencryptoki/%{name}/archive/v%{version}.tar.gz
+URL:        https://github.com/opencryptoki/openssl-ibmca
+Source0:    https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 
+Requires:       openssl >= 0.9.8 libica >= 3.1.1
 BuildRequires:  openssl-devel >= 0.9.8 libica-devel >= 3.1.1
 BuildRequires:  autoconf automake libtool
-Requires:       openssl >= 0.9.8 libica >= 3.1.1
 
 ExclusiveArch: s390 s390x
 
@@ -18,26 +20,28 @@ This package contains a shared object OpenSSL dynamic engine which interfaces
 to libica, a library enabling the IBM s390/x CPACF crypto instructions.
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{version}
+
+./bootstrap.sh
 
 %build
-%configure
-make
+%configure --libdir=%{enginesdir}
+%make_build
 
 %install
-%makeinstall
-rm -f $RPM_BUILD_ROOT%{_libdir}/libibmca.la
-mkdir -p $RPM_BUILD_ROOT%{_libdir}/openssl/engines
-mv $RPM_BUILD_ROOT%{_libdir}/lib* $RPM_BUILD_ROOT%{_libdir}/openssl/engines
+%make_install
+rm -f $RPM_BUILD_ROOT%{enginesdir}/ibmca.la
 
-%post -p /sbin/ldconfig
+pushd src
+sed -e 's|/usr/local/lib|%{_libdir}/openssl/engines|' openssl.cnf.sample > openssl.cnf.sample.%{_arch}
+popd
 
-%postun -p /sbin/ldconfig
 
 %files
-%doc README.md src/openssl.cnf.sample
-%{_mandir}/man5/*
-%{_libdir}/openssl/engines/*
+%license LICENSE
+%doc ChangeLog README.md src/openssl.cnf.sample.%{_arch}
+%{enginesdir}/ibmca.so
+%{_mandir}/man5/ibmca.5*
 
 %changelog
 * Fri Sep 8 2017 Paulo Vital <pvital@linux.vnet.ibm.com> 1.4.0
