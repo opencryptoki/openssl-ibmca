@@ -20,8 +20,8 @@ ibmca = ibmca_section
 
 [ibmca_section]
 
-# The openssl engine path for libibmca.so.
-# Set the dynamic_path to where the libibmca.so engine
+# The openssl engine path for ibmca.so.
+# Set the dynamic_path to where the ibmca.so engine
 # resides on the system.
 dynamic_path = /usr/local/lib/ibmca.so
 engine_id = ibmca
