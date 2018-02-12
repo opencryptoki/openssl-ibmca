@@ -1446,6 +1446,7 @@ void *ibmca_dso = NULL;
 /* These are the function pointers that are (un)set when the library has
  * successfully (un)loaded. */
 
+typedef void	     (*ica_set_fallback_mode_t)(int);
 typedef unsigned int (*ica_open_adapter_t)(ica_adapter_handle_t *);
 typedef unsigned int (*ica_close_adapter_t)(ica_adapter_handle_t);
 typedef unsigned int (*ica_rsa_mod_expo_t)(ica_adapter_handle_t, unsigned char *,
@@ -1527,6 +1528,7 @@ typedef unsigned int (*ica_aes_gcm_last_t)(unsigned char *icb,
 					   unsigned int direction);
 
 /* entry points into libica, filled out at DSO load time */
+ica_set_fallback_mode_t		p_ica_set_fallback_mode;
 ica_open_adapter_t		p_ica_open_adapter;
 ica_close_adapter_t		p_ica_close_adapter;
 ica_rsa_mod_expo_t		p_ica_rsa_mod_expo;
@@ -1625,6 +1627,10 @@ static int ibmca_init(ENGINE * e)
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
+
+	// disable fallbacks on Libica
+	if (BIND(ibmca_dso, ica_set_fallback_mode))
+		p_ica_set_fallback_mode(0);
 
         if(!set_supported_meths(e))
                 goto err;
