@@ -42,6 +42,18 @@
  #define OLDER_OPENSSL
 #endif
 
+/*
+ * Here is a DEBUG_PRINTF makro which expands to nothing
+ * at production level and is active only when the
+ * ibmca build is configured with --enable-debug
+ */
+#ifdef DEBUG
+ #define DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#else
+ #define DEBUG_PRINTF(...) do{} while(0)
+#endif
+
+
 #include <ica_api.h>
 #include "e_ibmca_err.h"
 
@@ -1582,6 +1594,8 @@ static int ibmca_init(ENGINE * e)
 		return 1;
 	init++;
 
+	DEBUG_PRINTF(">%s\n", __func__);
+
 	/* Attempt to load libica.so. Needs to be
 	 * changed unfortunately because the Ibmca drivers don't have
 	 * standard library names that can be platform-translated well. */
@@ -1594,6 +1608,7 @@ static int ibmca_init(ENGINE * e)
 
 	ibmca_dso = dlopen(LIBICA_SHARED_LIB, RTLD_NOW);
 	if (ibmca_dso == NULL) {
+		DEBUG_PRINTF("%s: dlopen(%s) failed\n", __func__, LIBICA_SHARED_LIB);
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
 		goto err;
 	}
@@ -1626,6 +1641,7 @@ static int ibmca_init(ENGINE * e)
 #endif
 	   ) {
 		IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
+		DEBUG_PRINTF("%s: function bind failed\n", __func__);
 		goto err;
 	}
 
@@ -1641,6 +1657,7 @@ static int ibmca_init(ENGINE * e)
 		goto err;
 	}
 
+	DEBUG_PRINTF("<%s success\n", __func__);
 	return 1;
 err:
 	if (ibmca_dso) {
