@@ -1580,6 +1580,7 @@ static int ibmca_init(ENGINE * e)
 
 	if (init)	/* Engine already loaded. */
 		return 1;
+	init++;
 
 	/* Attempt to load libica.so. Needs to be
 	 * changed unfortunately because the Ibmca drivers don't have
@@ -1640,7 +1641,6 @@ static int ibmca_init(ENGINE * e)
 		goto err;
 	}
 
-	init = 1;
 	return 1;
 err:
 	if (ibmca_dso) {
