@@ -1295,19 +1295,19 @@ ica_get_functionlist_t          p_ica_get_functionlist;
 
 static int set_supported_meths(ENGINE *e)
 {
-        int i, j;
-        unsigned int mech_len;
-        libica_func_list_element *pmech_list = NULL;
+	int i, j;
+	unsigned int mech_len;
+	libica_func_list_element *pmech_list;
 	int rc = 0;
-        int dig_nid_cnt = 0;
-        int ciph_nid_cnt = 0;
+	int dig_nid_cnt = 0;
+	int ciph_nid_cnt = 0;
 	int card_loaded;
 
-        if (p_ica_get_functionlist(NULL, &mech_len))
+	if (p_ica_get_functionlist(NULL, &mech_len))
 		return 0;
 
 	pmech_list = malloc(sizeof(libica_func_list_element)*mech_len);
-	if (pmech_list == NULL)
+	if (!pmech_list)
 		return 0;
 
 	if (p_ica_get_functionlist(pmech_list, &mech_len))
@@ -1316,47 +1316,42 @@ static int set_supported_meths(ENGINE *e)
 	card_loaded = is_crypto_card_loaded();
 
 	for (i = 0; i < mech_len; i++) {
-	        for (j = 0; ibmca_crypto_algos[j]; j++){
-			/* Disable crypto algorithm if it
-			 * is not supported in hardware
-			 */
-			if (!(pmech_list[i].flags &
-			      (ICA_FLAG_SHW | ICA_FLAG_DHW)))
+		libica_func_list_element *f = &pmech_list[i];
+		/* Disable crypto algorithm if not supported in hardware */
+		if (!(f->flags & (ICA_FLAG_SHW | ICA_FLAG_DHW)))
+			continue;
+		/*
+		 * If no crypto card is available, disable crypto algos that can
+		 * only operate on HW on card
+		 */
+		if ((f->flags & ICA_FLAG_DHW) && !card_loaded)
+			continue;
+		/* Check if this crypto algorithm is supported by ibmca */
+		for (j = 0; ibmca_crypto_algos[j]; j++)
+			if (ibmca_crypto_algos[j] == f->mech_mode_id)
 				break;
-
-			/* If no crypto card is available,
-			 * disable crypto algos that can
-			 * only operate on HW on card
-			 */
-			if ((pmech_list[i].flags & ICA_FLAG_DHW)
-			    && !card_loaded)
-				break;
-
-	                if(ibmca_crypto_algos[j]
-			   == pmech_list[i].mech_mode_id){
-	                        /* Set NID, ibmca struct and the
-				 * info for the ENGINE struct
-				 */
-	                        if(!set_engine_prop(e, ibmca_crypto_algos[j],
-	                                            &dig_nid_cnt,
-	                                            &ciph_nid_cnt)){
-					goto out;
-				}
-	               }
-	       }
-	}
-
-        if(dig_nid_cnt > 0) {
-                if(!ENGINE_set_digests(e, ibmca_engine_digests))
+		if (!ibmca_crypto_algos[j])
+			continue;
+		/*
+		 * This algorith is supported by ibmca and libica
+		 * Set NID, ibmca struct and the info for the ENGINE struct
+		 */
+		if (!set_engine_prop(e, ibmca_crypto_algos[j],
+							 &dig_nid_cnt, &ciph_nid_cnt))
 			goto out;
 	}
-        if(ciph_nid_cnt > 0) {
-                if(!ENGINE_set_ciphers(e, ibmca_engine_ciphers))
+
+	if(dig_nid_cnt > 0)
+		if(!ENGINE_set_digests(e, ibmca_engine_digests))
 			goto out;
-	}
+
+	if(ciph_nid_cnt > 0)
+		if(!ENGINE_set_ciphers(e, ibmca_engine_ciphers))
+			goto out;
+
 	rc = 1;
 out:
-        free(pmech_list);
+	free(pmech_list);
 	return rc;
 }
 
