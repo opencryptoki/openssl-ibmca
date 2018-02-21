@@ -1,7 +1,7 @@
 %global enginesdir %(pkg-config --variable=enginesdir libcrypto)
 
 Name:       openssl-ibmca
-Version:    1.4.0
+Version:    1.4.1
 Release:    1%{?dist}
 Summary:    An IBMCA OpenSSL dynamic engine
 
@@ -44,6 +44,18 @@ popd
 %{_mandir}/man5/ibmca.5*
 
 %changelog
+* Wed Feb 21 2018 Eduardo Barretto <ebarretto@linux.vnet.ibm.com> 1.4.1
+- Updated to 1.4.1
+
+* Thu Jan 25 2018 Eduardo Barretto <ebarretto@linux.vnet.ibm.com>
+- Update engine filename
+- Spec cleanup
+
+* Thu Oct 26 2017 Patrick Steuer <patrick.steuer@de.ibm.com>
+- Fix build warning about comma and newlines
+- Remove INSTALL file from doc
+- Fix README name on doc
+
 * Fri Sep 8 2017 Paulo Vital <pvital@linux.vnet.ibm.com> 1.4.0
 - Update new License
 - Update Source and URL pointing to GitHub

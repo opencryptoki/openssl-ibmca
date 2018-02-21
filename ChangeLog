@@ -1,3 +1,12 @@
+* openssl-ibmca 1.4.1
+- Fix structure size for aes-256-ecb/cbc/cfb/ofb
+- Update man page
+- Switch to ibmca.so filename to allow standalone use
+- Switch off Libica fallback mode if available
+- Make sure ibmca_init only runs once
+- Provide simple macro for DEBUG_PRINTF possibility
+- Cleanup and slight rework of function set_supported_meths
+
 * openssl-ibmca 1.4.0
 - Re-license to Apache License v2.0
 - Fix aes_gcm initialization.
