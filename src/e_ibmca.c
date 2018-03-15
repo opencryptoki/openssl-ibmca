@@ -1778,13 +1778,9 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	int mode = 0;
 	int rv;
 	unsigned int len;
-#ifdef OLDER_OPENSSL
-	ICA_DES_CTX *pCtx = ctx->cipher_data;
-#else
-	ICA_DES_CTX *pCtx = (ICA_DES_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
-#endif
-
 	ica_des_vector_t pre_iv;
+
+	ICA_DES_CTX *pCtx = (ICA_DES_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
 
 	if (inlen > UINT32_MAX) {
 		IBMCAerr(IBMCA_F_IBMCA_DES_CIPHER, IBMCA_R_OUTLEN_TO_LARGE);
@@ -1803,34 +1799,18 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		return 0;
 	}
 
-#ifdef OLDER_OPENSSL
-	if (ctx->encrypt) {
-#else
 	if (EVP_CIPHER_CTX_encrypting(ctx)) {
-#endif
 		if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CFB_MODE) {
 			rv = p_ica_des_cfb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					   ctx->iv,
-#else
 					   EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					   8, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_des_ofb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					   ctx->iv,
-#else
 					   EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					   ICA_ENCRYPT);
 		} else {
 			rv = p_ica_des_encrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_des_vector_t *) ctx->iv,
-#else
 				(ica_des_vector_t *) EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				(ica_des_key_single_t *) pCtx->key, out);
 		}
 
@@ -1839,11 +1819,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 			       out + len - EVP_CIPHER_CTX_iv_length(ctx),
 			       EVP_CIPHER_CTX_iv_length(ctx));
 		}
@@ -1854,19 +1830,11 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_des_cfb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					   ctx->iv,
-#else
 					   EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					   8, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_des_ofb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					   ctx->iv,
-#else
 					   EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					   ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
@@ -1874,11 +1842,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_des_decrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_des_vector_t *) ctx->iv,
-#else
 				(ica_des_vector_t *) EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				(ica_des_key_single_t *) pCtx->key, out);
 		}
 
@@ -1887,11 +1851,7 @@ static int ibmca_des_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
 		}
 	}
@@ -1905,12 +1865,9 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	int mode = 0;
 	int rv;
 	unsigned int len;
-#ifdef OLDER_OPENSSL
-	ICA_DES_CTX *pCtx = ctx->cipher_data;
-#else
-	ICA_DES_CTX *pCtx = (ICA_DES_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
-#endif
 	ica_des_vector_t pre_iv;
+
+	ICA_DES_CTX *pCtx = (ICA_DES_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
 
 	if (inlen > UINT32_MAX) {
 		IBMCAerr(IBMCA_F_IBMCA_TDES_CIPHER, IBMCA_R_OUTLEN_TO_LARGE);
@@ -1929,34 +1886,18 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		return 0;
 	}
 
-#ifdef OLDER_OPENSSL
-	if (ctx->encrypt) {
-#else
 	if (EVP_CIPHER_CTX_encrypting(ctx)) {
-#endif
 		if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CFB_MODE) {
 			rv = p_ica_3des_cfb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					8, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_3des_ofb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_ENCRYPT);
 		} else {
 			rv = p_ica_3des_encrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_des_vector_t *) ctx->iv,
-#else
 				(ica_des_vector_t *) EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				(ica_des_key_triple_t *) pCtx->key, out);
 		}
 
@@ -1965,11 +1906,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 			       out + len - EVP_CIPHER_CTX_iv_length(ctx),
 			       EVP_CIPHER_CTX_iv_length(ctx));
 		}
@@ -1980,19 +1917,11 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_3des_cfb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					8, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_3des_ofb(in, out, len, pCtx->key,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
@@ -2000,11 +1929,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_3des_decrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_des_vector_t *) ctx->iv,
-#else
 				(ica_des_vector_t *) EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				(ica_des_key_triple_t *) pCtx->key, out);
 		}
 
@@ -2013,11 +1938,7 @@ static int ibmca_tdes_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 					IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
 		}
 	}
@@ -2032,12 +1953,9 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	int mode = 0;
 	int rv;
 	unsigned int len;
-#ifdef OLDER_OPENSSL
-	ICA_AES_128_CTX *pCtx = ctx->cipher_data;
-#else
-	ICA_AES_128_CTX *pCtx = (ICA_AES_128_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
-#endif
 	ica_aes_vector_t pre_iv;
+
+	ICA_AES_128_CTX *pCtx = (ICA_AES_128_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
 
 	if (inlen > UINT32_MAX) {
 		IBMCAerr(IBMCA_F_IBMCA_AES_128_CIPHER, IBMCA_R_OUTLEN_TO_LARGE);
@@ -2056,36 +1974,20 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		return 0;
 	}
 
-#ifdef OLDER_OPENSSL
-	if (ctx->encrypt) {
-#else
 	if (EVP_CIPHER_CTX_encrypting(ctx)) {
-#endif
 		if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CFB_MODE) {
 			rv = p_ica_aes_cfb(in, out, len, pCtx->key,
 					AES_KEY_LEN128,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					AES_BLOCK_SIZE, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_aes_ofb(in, out, len, pCtx->key,
 					AES_KEY_LEN128,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_ENCRYPT);
 		} else {
 			rv = p_ica_aes_encrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_aes_vector_t *)ctx->iv,
-#else
 				(ica_aes_vector_t *)EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				AES_KEY_LEN128,
 				(unsigned char *)pCtx->key,
 				out);
@@ -2096,11 +1998,7 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 			       out + len - EVP_CIPHER_CTX_iv_length(ctx),
 			       EVP_CIPHER_CTX_iv_length(ctx));
 		}
@@ -2112,20 +2010,12 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 
 			rv = p_ica_aes_cfb(in, out, len, pCtx->key,
 					AES_KEY_LEN128,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					AES_BLOCK_SIZE, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_aes_ofb(in, out, len, pCtx->key,
 					AES_KEY_LEN128,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
@@ -2133,11 +2023,7 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_aes_decrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_aes_vector_t *)ctx->iv,
-#else
 				(ica_aes_vector_t *)EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				AES_KEY_LEN128,
 				(unsigned char *)pCtx->key,
 				out);
@@ -2148,11 +2034,7 @@ static int ibmca_aes_128_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
 		}
 	}
@@ -2165,14 +2047,10 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 {
 	int mode = 0;
 	int rv;
-
 	unsigned int len;
-#ifdef OLDER_OPENSSL
-	ICA_AES_192_CTX *pCtx = ctx->cipher_data;
-#else
-	ICA_AES_192_CTX *pCtx = (ICA_AES_192_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
-#endif
 	ica_aes_vector_t pre_iv;
+
+	ICA_AES_192_CTX *pCtx = (ICA_AES_192_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
 
 	if (inlen > UINT32_MAX) {
 		IBMCAerr(IBMCA_F_IBMCA_AES_192_CIPHER, IBMCA_R_OUTLEN_TO_LARGE);
@@ -2191,36 +2069,20 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		return 0;
 	}
 
-#ifdef OLDER_OPENSSL
-	if (ctx->encrypt) {
-#else
 	if (EVP_CIPHER_CTX_encrypting(ctx)) {
-#endif
 		if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CFB_MODE) {
 			rv = p_ica_aes_cfb(in, out, len, pCtx->key,
 					AES_KEY_LEN192,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					AES_BLOCK_SIZE, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_aes_ofb(in, out, len, pCtx->key,
 					AES_KEY_LEN192,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_ENCRYPT);
 		} else {
 			rv = p_ica_aes_encrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_aes_vector_t *)ctx->iv,
-#else
 				(ica_aes_vector_t *)EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				AES_KEY_LEN192,
 				(unsigned char *)pCtx->key, out);
 		}
@@ -2230,11 +2092,7 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 			       out + len - EVP_CIPHER_CTX_iv_length(ctx),
 			       EVP_CIPHER_CTX_iv_length(ctx));
 		}
@@ -2245,31 +2103,19 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 
 			rv = p_ica_aes_cfb(in, out, len, pCtx->key,
 					AES_KEY_LEN192,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					AES_BLOCK_SIZE, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_aes_ofb(in, out, len, pCtx->key,
 					AES_KEY_LEN192,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_aes_decrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_aes_vector_t *)ctx->iv,
-#else
 				(ica_aes_vector_t *)EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				AES_KEY_LEN192,
 				(unsigned char *)pCtx->key, out);
 		}
@@ -2279,11 +2125,7 @@ static int ibmca_aes_192_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 			pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
 		}
 	}
@@ -2297,12 +2139,9 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 	int mode = 0;
 	int rv;
 	unsigned int len;
-#ifdef OLDER_OPENSSL
-	ICA_AES_256_CTX *pCtx = ctx->cipher_data;
-#else
-	ICA_AES_256_CTX *pCtx = (ICA_AES_256_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
-#endif
 	ica_aes_vector_t pre_iv;
+
+	ICA_AES_256_CTX *pCtx = (ICA_AES_256_CTX *) EVP_CIPHER_CTX_get_cipher_data(ctx);
 
 	if (inlen > UINT32_MAX) {
 		IBMCAerr(IBMCA_F_IBMCA_AES_256_CIPHER, IBMCA_R_OUTLEN_TO_LARGE);
@@ -2321,36 +2160,20 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 		return 0;
 	}
 
-#ifdef OLDER_OPENSSL
-	if (ctx->encrypt) {
-#else
 	if (EVP_CIPHER_CTX_encrypting(ctx)) {
-#endif
 		if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_CFB_MODE) {
 			rv = p_ica_aes_cfb(in, out, len, pCtx->key,
 					AES_KEY_LEN256,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					AES_BLOCK_SIZE, ICA_ENCRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_aes_ofb(in, out, len, pCtx->key,
 					AES_KEY_LEN256,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_ENCRYPT);
 		} else {
 			rv = p_ica_aes_encrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_aes_vector_t *)ctx->iv,
-#else
 				(ica_aes_vector_t *)EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				AES_KEY_LEN256,
 				(unsigned char *)pCtx->key, out);
 		}
@@ -2360,11 +2183,7 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 			       out + len - EVP_CIPHER_CTX_iv_length(ctx),
 			       EVP_CIPHER_CTX_iv_length(ctx));
 		}
@@ -2375,31 +2194,19 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 
 			rv = p_ica_aes_cfb(in, out, len, pCtx->key,
 					AES_KEY_LEN256,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					AES_BLOCK_SIZE, ICA_DECRYPT);
 		} else if (EVP_CIPHER_CTX_mode(ctx) == EVP_CIPH_OFB_MODE) {
 			rv = p_ica_aes_ofb(in, out, len, pCtx->key,
 					AES_KEY_LEN256,
-#ifdef OLDER_OPENSSL
-					ctx->iv,
-#else
 					EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 					ICA_DECRYPT);
 		} else {
 			/* Protect against decrypt in place */
 			memcpy(pre_iv, in + len - sizeof(pre_iv), sizeof(pre_iv));
 
 			rv = p_ica_aes_decrypt(mode, len, (unsigned char *)in,
-#ifdef OLDER_OPENSSL
-				(ica_aes_vector_t *)ctx->iv,
-#else
 				(ica_aes_vector_t *)EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				AES_KEY_LEN256,
 				(unsigned char *)pCtx->key, out);
 		}
@@ -2409,11 +2216,7 @@ static int ibmca_aes_256_cipher(EVP_CIPHER_CTX * ctx, unsigned char *out,
 				 IBMCA_R_REQUEST_FAILED);
 			return 0;
 		} else if (EVP_CIPHER_CTX_mode(ctx) != EVP_CIPH_OFB_MODE) {
-#ifdef OLDER_OPENSSL
-			memcpy(ctx->iv,
-#else
 			memcpy(EVP_CIPHER_CTX_iv_noconst(ctx),
-#endif
 				pre_iv, EVP_CIPHER_CTX_iv_length(ctx));
 		}
 	}
