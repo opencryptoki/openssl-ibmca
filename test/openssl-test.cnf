@@ -1,0 +1,13 @@
+openssl_conf = openssl_def
+
+[openssl_def]
+engines = engine_section
+
+[engine_section]
+ibmca = ibmca_section
+
+[ibmca_section]
+dynamic_path = $ENV::IBMCA_TEST_PATH
+engine_id = ibmca
+init = 1
+default_algorithms = ALL
