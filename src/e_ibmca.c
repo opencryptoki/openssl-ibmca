@@ -1745,7 +1745,7 @@ static int ibmca_finish(ENGINE * e)
 		return 0;
 	}
 	release_context(ibmca_handle);
-	if (!dlclose(ibmca_dso)) {
+	if (dlclose(ibmca_dso)) {
 		IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
 		return 0;
 	}
