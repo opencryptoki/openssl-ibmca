@@ -40,6 +40,7 @@
  #define EVP_CIPHER_CTX_encrypting(ctx)         ((ctx)->encrypt)
  #define EVP_CIPHER_CTX_buf_noconst(ctx)        ((ctx)->buf)
  #define EVP_CIPHER_CTX_key_length(ctx)         ((ctx)->cipher->key_len)
+ #define EVP_MD_CTX_md_data(ctx)                ((ctx)->md_data)
 #else
  #define EVP_CTRL_GCM_SET_IVLEN                 EVP_CTRL_AEAD_SET_IVLEN
  #define EVP_CTRL_GCM_SET_TAG                   EVP_CTRL_AEAD_SET_TAG
@@ -195,7 +196,52 @@ void ibmca_aes_192_gcm_destroy();
 void ibmca_aes_256_gcm_destroy();
 #endif
 
-/******************************* Libica stuff *********************************/
+/******************************* Digest stuff *********************************/
+#ifndef OPENSSL_NO_SHA1
+#define SHA_BLOCK_SIZE 64
+typedef struct ibmca_sha1_ctx {
+    sha_context_t c;
+    unsigned char tail[SHA_BLOCK_SIZE];
+    unsigned int tail_len;
+} IBMCA_SHA_CTX;
+
+const EVP_MD *ibmca_sha1();
+
+#ifndef OLDER_OPENSSL
+void ibmca_sha1_destroy();
+#endif
+#endif
+
+#ifndef OPENSSL_NO_SHA256
+#define SHA256_BLOCK_SIZE 64
+typedef struct ibmca_sha256_ctx {
+    sha256_context_t c;
+    unsigned char tail[SHA256_BLOCK_SIZE];
+    unsigned int tail_len;
+} IBMCA_SHA256_CTX;
+
+const EVP_MD *ibmca_sha256();
+
+#ifndef OLDER_OPENSSL
+void ibmca_sha256_destroy();
+#endif
+#endif
+
+#ifndef OPENSSL_NO_SHA512
+#define SHA512_BLOCK_SIZE 128
+typedef struct ibmca_sha512_ctx {
+    sha512_context_t c;
+    unsigned char tail[SHA512_BLOCK_SIZE];
+    unsigned int tail_len;
+} IBMCA_SHA512_CTX;
+
+const EVP_MD *ibmca_sha512();
+
+#ifndef OLDER_OPENSSL
+void ibmca_sha512_destroy();
+#endif
+#endif
+
 /*
  * These are the function pointers that are (un)set when the library has
  * successfully (un)loaded.
