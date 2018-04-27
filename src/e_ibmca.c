@@ -111,27 +111,6 @@ static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ());
 
 ica_adapter_handle_t ibmca_handle = 0;
 
-#ifndef OPENSSL_NO_DSA
-/* DSA stuff */
-#ifdef OLDER_OPENSSL
-static int ibmca_dsa_mod_exp(DSA * dsa, BIGNUM * rr, BIGNUM * a1,
-			     BIGNUM * p1, BIGNUM * a2, BIGNUM * p2,
-			     BIGNUM * m, BN_CTX * ctx,
-			     BN_MONT_CTX * in_mont);
-static int ibmca_mod_exp_dsa(DSA * dsa, BIGNUM * r, BIGNUM * a,
-			     const BIGNUM * p, const BIGNUM * m,
-			     BN_CTX * ctx, BN_MONT_CTX * m_ctx);
-#else
-static int ibmca_dsa_mod_exp(DSA * dsa, BIGNUM * rr, const BIGNUM * a1,
-			     const BIGNUM * p1, const BIGNUM * a2,
-			     const BIGNUM * p2, const BIGNUM * m,
-			     BN_CTX * ctx, BN_MONT_CTX * in_mont);
-static int ibmca_mod_exp_dsa(DSA * dsa, BIGNUM * r, const BIGNUM * a,
-			     const BIGNUM * p, const BIGNUM * m,
-			     BN_CTX * ctx, BN_MONT_CTX * m_ctx);
-#endif
-#endif
-
 #ifndef OPENSSL_NO_DH
 /* DH stuff */
 /* This function is alised to mod_exp (with the DH and mont dropped). */
@@ -166,26 +145,6 @@ static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
 	 ENGINE_CMD_FLAG_STRING},
 	{0, NULL, NULL, 0}
 };
-
-#ifndef OPENSSL_NO_DSA
-/* Our internal DSA_METHOD that we provide pointers to */
-#ifdef OLDER_OPENSSL
-static DSA_METHOD ibmca_dsa = {
-	"Ibmca DSA method",     /* name */
-	NULL,			/* dsa_do_sign */
-	NULL,			/* dsa_sign_setup */
-	NULL,			/* dsa_do_verify */
-	ibmca_dsa_mod_exp,	/* dsa_mod_exp */
-	ibmca_mod_exp_dsa,	/* bn_mod_exp */
-	NULL,			/* init */
-	NULL,			/* finish */
-	0,			/* flags */
-	NULL			/* app_data */
-};
-#else
-static DSA_METHOD *ibmca_dsa = NULL;
-#endif
-#endif
 
 #ifndef OPENSSL_NO_DH
 /* Our internal DH_METHOD that we provide pointers to */
@@ -223,12 +182,6 @@ static const char *engine_ibmca_name = "Ibmca hardware engine support";
 inline static int set_RSA_prop(ENGINE *e)
 {
 	static int rsa_enabled = 0;
-#ifndef OPENSSL_NO_DSA
-	const DSA_METHOD *meth2;
-#ifndef OLDER_OPENSSL
-	ibmca_dsa = DSA_meth_new("Ibmca DSA method", 0);
-#endif
-#endif
 #ifndef OPENSSL_NO_DH
 	const DH_METHOD *meth3;
 #ifndef OLDER_OPENSSL
@@ -244,11 +197,7 @@ inline static int set_RSA_prop(ENGINE *e)
 	   !ENGINE_set_RSA(e, ibmca_rsa()) ||
 #endif
 #ifndef OPENSSL_NO_DSA
-#ifdef OLDER_OPENSSL
-	   !ENGINE_set_DSA(e, &ibmca_dsa) ||
-#else
-	   !ENGINE_set_DSA(e, ibmca_dsa) ||
-#endif
+	   !ENGINE_set_DSA(e, ibmca_dsa()) ||
 #endif
 #ifndef OPENSSL_NO_DH
 #ifdef OLDER_OPENSSL
@@ -259,20 +208,6 @@ inline static int set_RSA_prop(ENGINE *e)
 	  )
 #endif
 		return 0;
-#ifndef OPENSSL_NO_DSA
-	meth2 = DSA_OpenSSL();
-#ifdef OLDER_OPENSSL
-        ibmca_dsa.dsa_do_sign = meth2->dsa_do_sign;
-        ibmca_dsa.dsa_sign_setup = meth2->dsa_sign_setup;
-        ibmca_dsa.dsa_do_verify = meth2->dsa_do_verify;
-#else
-	if (   !DSA_meth_set_sign(ibmca_dsa, DSA_meth_get_sign(meth2))
-	    || !DSA_meth_set_verify(ibmca_dsa, DSA_meth_get_verify(meth2))
-	    || !DSA_meth_set_mod_exp(ibmca_dsa, ibmca_dsa_mod_exp)
-	    || !DSA_meth_set_bn_mod_exp(ibmca_dsa, ibmca_mod_exp_dsa) )
-		return 0;
-#endif
-#endif
 #ifndef OPENSSL_NO_DH
         /* Much the same for Diffie-Hellman */
         meth3 = DH_OpenSSL();
@@ -886,59 +821,6 @@ static int ibmca_usable_digests(const int **nids)
 		*nids = ibmca_digest_lists.nids;
 	return size_digest_list;
 }
-
-#ifndef OPENSSL_NO_DSA
-/* This code was liberated and adapted from the commented-out code in
- * dsa_ossl.c. Because of the unoptimised form of the Ibmca acceleration
- * (it doesn't have a CRT form for RSA), this function means that an
- * Ibmca system running with a DSA server certificate can handshake
- * around 5 or 6 times faster/more than an equivalent system running with
- * RSA. Just check out the "signs" statistics from the RSA and DSA parts
- * of "openssl speed -engine ibmca dsa1024 rsa1024". */
-#ifdef OLDER_OPENSSL
-static int ibmca_dsa_mod_exp(DSA * dsa, BIGNUM * rr, BIGNUM * a1,
-			     BIGNUM * p1, BIGNUM * a2, BIGNUM * p2,
-			     BIGNUM * m, BN_CTX * ctx,
-			     BN_MONT_CTX * in_mont)
-#else
-static int ibmca_dsa_mod_exp(DSA * dsa, BIGNUM * rr, const BIGNUM * a1,
-			     const BIGNUM * p1, const BIGNUM * a2,
-			     const BIGNUM * p2, const BIGNUM * m,
-			     BN_CTX * ctx, BN_MONT_CTX * in_mont)
-#endif
-{
-	BIGNUM *t;
-	int to_return = 0;
-
-	t = BN_new();
-	/* let rr = a1 ^ p1 mod m */
-	if (!ibmca_mod_exp(rr, a1, p1, m, ctx))
-		goto end;
-	/* let t = a2 ^ p2 mod m */
-	if (!ibmca_mod_exp(t, a2, p2, m, ctx))
-		goto end;
-	/* let rr = rr * t mod m */
-	if (!BN_mod_mul(rr, rr, t, m, ctx))
-		goto end;
-	to_return = 1;
-end:
-	BN_free(t);
-	return to_return;
-}
-
-#ifdef OLDER_OPENSSL
-static int ibmca_mod_exp_dsa(DSA * dsa, BIGNUM * r, BIGNUM * a,
-			     const BIGNUM * p, const BIGNUM * m,
-			     BN_CTX * ctx, BN_MONT_CTX * m_ctx)
-#else
-static int ibmca_mod_exp_dsa(DSA * dsa, BIGNUM * r, const BIGNUM * a,
-			     const BIGNUM * p, const BIGNUM * m,
-			     BN_CTX * ctx, BN_MONT_CTX * m_ctx)
-#endif
-{
-	return ibmca_mod_exp(r, a, p, m, ctx);
-}
-#endif
 
 #ifndef OPENSSL_NO_DH
 /* This function is aliased to mod_exp (with the dh and mont dropped). */
