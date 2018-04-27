@@ -109,29 +109,7 @@ static int ibmca_init(ENGINE * e);
 static int ibmca_finish(ENGINE * e);
 static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ());
 
-static ica_adapter_handle_t ibmca_handle = 0;
-
-/* BIGNUM stuff */
-static int ibmca_mod_exp(BIGNUM * r, const BIGNUM * a, const BIGNUM * p,
-			 const BIGNUM * m, BN_CTX * ctx);
-
-static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
-			     const BIGNUM * p, const BIGNUM * q,
-			     const BIGNUM * dmp1, const BIGNUM * dmq1,
-			     const BIGNUM * iqmp, BN_CTX * ctx);
-
-#ifndef OPENSSL_NO_RSA
-/* RSA stuff */
-static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
-                             BN_CTX *ctx);
-
-static int ibmca_rsa_init(RSA *rsa);
-#endif
-
-/* This function is aliased to mod_exp (with the mont stuff dropped). */
-static int ibmca_mod_exp_mont(BIGNUM * r, const BIGNUM * a,
-			      const BIGNUM * p, const BIGNUM * m,
-			      BN_CTX * ctx, BN_MONT_CTX * m_ctx);
+ica_adapter_handle_t ibmca_handle = 0;
 
 #ifndef OPENSSL_NO_DSA
 /* DSA stuff */
@@ -189,30 +167,6 @@ static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
 	{0, NULL, NULL, 0}
 };
 
-#ifndef OPENSSL_NO_RSA
-/* Our internal RSA_METHOD that we provide pointers to */
-#ifdef OLDER_OPENSSL
-static RSA_METHOD ibmca_rsa = {
-	"Ibmca RSA method",      /* name */
-	NULL,                    /* rsa_pub_enc */
-	NULL,                    /* rsa_pub_dec */
-	NULL,                    /* rsa_priv_enc */
-	NULL,                    /* rsa_priv_dec */
-	ibmca_rsa_mod_exp,       /* rsa_mod_exp */
-	ibmca_mod_exp_mont,      /* bn_mod_exp */
-	ibmca_rsa_init,          /* init */
-	NULL,                    /* finish */
-	0,                       /* flags */
-	NULL,                    /* app_data */
-	NULL,                    /* rsa_sign */
-	NULL,                    /* rsa_verify */
-	NULL                     /* rsa_keygen */
-};
-#else
-static RSA_METHOD *ibmca_rsa = NULL;
-#endif
-#endif
-
 #ifndef OPENSSL_NO_DSA
 /* Our internal DSA_METHOD that we provide pointers to */
 #ifdef OLDER_OPENSSL
@@ -269,12 +223,6 @@ static const char *engine_ibmca_name = "Ibmca hardware engine support";
 inline static int set_RSA_prop(ENGINE *e)
 {
 	static int rsa_enabled = 0;
-#ifndef OPENSSL_NO_RSA
-	const RSA_METHOD *meth1;
-#ifndef OLDER_OPENSSL
-	ibmca_rsa = RSA_meth_new("Ibmca RSA method", 0);
-#endif
-#endif
 #ifndef OPENSSL_NO_DSA
 	const DSA_METHOD *meth2;
 #ifndef OLDER_OPENSSL
@@ -293,11 +241,7 @@ inline static int set_RSA_prop(ENGINE *e)
 	}
         if(
 #ifndef OPENSSL_NO_RSA
-#ifdef OLDER_OPENSSL
-	   !ENGINE_set_RSA(e, &ibmca_rsa) ||
-#else
-	   !ENGINE_set_RSA(e, ibmca_rsa) ||
-#endif
+	   !ENGINE_set_RSA(e, ibmca_rsa()) ||
 #endif
 #ifndef OPENSSL_NO_DSA
 #ifdef OLDER_OPENSSL
@@ -315,32 +259,6 @@ inline static int set_RSA_prop(ENGINE *e)
 	  )
 #endif
 		return 0;
-#ifndef OPENSSL_NO_RSA
-        /* We know that the "PKCS1_SSLeay()" functions hook properly
-         * to the ibmca-specific mod_exp and mod_exp_crt so we use
-         * those functions. NB: We don't use ENGINE_openssl() or
-         * anything "more generic" because something like the RSAref
-         * code may not hook properly, and if you own one of these here
-         * cards then you have the right to do RSA operations on it
-         * anyway! */
-#ifdef OLDER_OPENSSL
-        meth1 = RSA_PKCS1_SSLeay();
-        ibmca_rsa.rsa_pub_enc = meth1->rsa_pub_enc;
-        ibmca_rsa.rsa_pub_dec = meth1->rsa_pub_dec;
-        ibmca_rsa.rsa_priv_enc = meth1->rsa_priv_enc;
-        ibmca_rsa.rsa_priv_dec = meth1->rsa_priv_dec;
-#else
-	meth1 = RSA_PKCS1_OpenSSL();
-	if (   !RSA_meth_set_pub_enc(ibmca_rsa, RSA_meth_get_pub_enc(meth1))
-	    || !RSA_meth_set_pub_dec(ibmca_rsa, RSA_meth_get_pub_dec(meth1))
-	    || !RSA_meth_set_priv_enc(ibmca_rsa, RSA_meth_get_priv_enc(meth1))
-	    || !RSA_meth_set_priv_dec(ibmca_rsa, RSA_meth_get_priv_dec(meth1))
-	    || !RSA_meth_set_mod_exp(ibmca_rsa, ibmca_rsa_mod_exp)
-	    || !RSA_meth_set_bn_mod_exp(ibmca_rsa, ibmca_mod_exp_mont)
-	    || !RSA_meth_set_init(ibmca_rsa, ibmca_rsa_init) )
-		return 0;
-#endif
-#endif
 #ifndef OPENSSL_NO_DSA
 	meth2 = DSA_OpenSSL();
 #ifdef OLDER_OPENSSL
@@ -969,306 +887,6 @@ static int ibmca_usable_digests(const int **nids)
 	return size_digest_list;
 }
 
-static int ibmca_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
-			 const BIGNUM *m, BN_CTX *ctx)
-{
-	/* r = (a^p) mod m
-	                        r = output
-	                        a = input
-	                        p = exponent
-	                        m = modulus
-	*/
-
-	unsigned char *input = NULL, *output =  NULL;
-	ica_rsa_key_mod_expo_t *key = NULL;
-	unsigned int rc;
-	int plen, mlen, inputlen;
-
-	if (!ibmca_dso) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_NOT_LOADED);
-		goto err;
-	}
-
-	/*
-	 make necessary memory allocations
-	 FIXME: Would it be possible to minimize memory allocation overhead by either
-                allocating it all at once or having a static storage?
-	*/
-	key = (ica_rsa_key_mod_expo_t *) calloc(1, sizeof(ica_rsa_key_mod_expo_t));
-	if (key == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	key->key_length = mlen = BN_num_bytes(m);
-
-	key->modulus = (unsigned char *) calloc(1, key->key_length);
-	if (key->modulus == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	plen = BN_num_bytes(p);
-
-	/* despite plen, key->exponent must be key->key_length in size */
-	key->exponent = (unsigned char *) calloc(1, key->key_length);
-	if (key->exponent == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	inputlen = BN_num_bytes(a);
-
-	/* despite inputlen, input and output must be key->key_length in size */
-	input = (unsigned char *) calloc(1, key->key_length);
-	if (input == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	output = (unsigned char *) calloc(1, key->key_length);
-	if (output == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	/* Now convert from BIGNUM representation.
-	 * Everything must be right-justified
-	 */
-	BN_bn2bin(m, key->modulus);
-
-	BN_bn2bin(p, key->exponent + key->key_length - plen);
-
-	BN_bn2bin(a, input + key->key_length - inputlen);
-
-	/* execute the ica mod_exp call */
-	rc = p_ica_rsa_mod_expo(ibmca_handle, input, key, output);
-	if (rc != 0) {
-		goto err;
-	}
-	else {
-		rc = 1;
-	}
-
-        /* Convert output to BIGNUM representation.
-	 * right-justified output applies
-	 */
-	/* BN_bin2bn((unsigned char *) (output + key->key_length - inputlen), inputlen, r); */
-	BN_bin2bn((unsigned char *) output, key->key_length, r);
-
-	goto end;
-
-err:
-	rc = 0;    /* error condition */
-
-end:
-	free(key->exponent);
-	free(key->modulus);
-	free(key);
-	free(input);
-	free(output);
-
-	return rc;
-}
-
-#ifndef OPENSSL_NO_RSA
-static int ibmca_rsa_init(RSA *rsa)
-{
-	RSA_blinding_off(rsa);
-
-	return 1;
-}
-
-#ifdef OLDER_OPENSSL
-static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
-                             BN_CTX *ctx)
-{
-	int to_return = 0;
-
-	if (!rsa->p || !rsa->q || !rsa->dmp1 || !rsa->dmq1 || !rsa->iqmp) {
-		if (!rsa->d || !rsa->n) {
-			IBMCAerr(IBMCA_F_IBMCA_RSA_MOD_EXP,
-				 IBMCA_R_MISSING_KEY_COMPONENTS);
-			goto err;
-		}
-		to_return = ibmca_mod_exp(r0, I, rsa->d, rsa->n, ctx);
-	} else {
-		to_return =
-		    ibmca_mod_exp_crt(r0, I, rsa->p, rsa->q, rsa->dmp1,
-				      rsa->dmq1, rsa->iqmp, ctx);
-	}
-err:
-	return to_return;
-}
-#else
-static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
-                             BN_CTX *ctx)
-{
-	int to_return = 0;
-	const BIGNUM *d, *n, *p, *q, *dmp1, *dmq1, *iqmp;
-
-	RSA_get0_key(rsa, &n, NULL, &d);
-	RSA_get0_factors(rsa, &p, &q);
-	RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
-	if (!p || !q || !dmp1 || !dmq1 || iqmp) {
-		if (!d || !n) {
-			IBMCAerr(IBMCA_F_IBMCA_RSA_MOD_EXP,
-				 IBMCA_R_MISSING_KEY_COMPONENTS);
-			goto err;
-		}
-		to_return = ibmca_mod_exp(r0, I, d, n, ctx);
-	} else {
-		to_return = ibmca_mod_exp_crt(r0, I, p, q, dmp1, dmq1, iqmp, ctx);
-	}
-err:
-	return to_return;
-}
-#endif
-#endif
-
-/* Ein kleines chinesisches "Restessen"  */
-static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
-			     const BIGNUM * p, const BIGNUM * q,
-			     const BIGNUM * dmp1, const BIGNUM * dmq1,
-			     const BIGNUM * iqmp, BN_CTX * ctx)
-{
-	/*
-	r = output
-	a = input
-	p and q are themselves
-	dmp1, dmq1 are dp and dq respectively
-	iqmp is qInverse
-	*/
-
-	ica_rsa_key_crt_t *key = NULL;
-	unsigned char *output = NULL, *input = NULL;
-	int rc;
-	int plen, qlen, dplen, dqlen, qInvlen;
-	int inputlen;
-
-	/*
-	 make necessary memory allocations
-	 FIXME: Would it be possible to minimize memory allocation overhead by either
-                allocating it all at once or having a static storage?
-	*/
-	key = (ica_rsa_key_crt_t *) calloc(1, sizeof(ica_rsa_key_crt_t));
-	if (key == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	/* buffers pointed by p, q, dp, dq and qInverse in struct
-	 * ica_rsa_key_crt_t must be of size key_legth/2 or larger.
-	 * p, dp and qInverse have an additional 8-byte padding. */
-
-	plen = BN_num_bytes(p);
-	qlen = BN_num_bytes(q);
-	key->key_length = 2 * (plen > qlen ? plen : qlen);
-
-	key->p = (unsigned char *) calloc(1, (key->key_length/2) + 8);
-	if (key->p == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	dplen = BN_num_bytes(dmp1);
-	key->dp = (unsigned char *) calloc(1, (key->key_length/2) + 8);
-	if (key->dp == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	key->q = (unsigned char *) calloc(1, key->key_length/2);
-	if (key->q == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	dqlen = BN_num_bytes(dmq1);
-	key->dq = (unsigned char *) calloc(1, key->key_length/2);
-	if (key->dq == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	qInvlen = BN_num_bytes(iqmp);
-	key->qInverse = (unsigned char *) calloc(1, (key->key_length/2) + 8);
-	if (key->qInverse == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	inputlen = BN_num_bytes(a);
-	if (inputlen > key->key_length) {     /* input can't be larger than key */
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	/* allocate input to the size of key_length in bytes, and
-	 * pad front with zero if inputlen < key->key_length */
-	input = (unsigned char *) calloc(1, key->key_length);
-	if (input == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-	/* output must also be key_length in size */
-	output = (unsigned char *) calloc(1, key->key_length);
-	if (output == NULL) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-
-
-	/* Now convert from BIGNUM representation.
-	 * p, dp and qInverse have an additional 8-byte padding,
-	 * and everything must be right-justified */
-	BN_bn2bin(p, key->p + 8 + (key->key_length/2) - plen);
-
-	BN_bn2bin(dmp1, key->dp + 8 + (key->key_length/2) - dplen);
-
-	BN_bn2bin(q, key->q + (key->key_length/2) - qlen);
-
-	BN_bn2bin(dmq1, key->dq + (key->key_length/2) - dqlen);
-
-	BN_bn2bin(iqmp, key->qInverse + 8 + (key->key_length/2) - qInvlen);
-
-	BN_bn2bin(a, input + key->key_length - inputlen);
-
-	/* execute the ica crt call */
-
-	rc = p_ica_rsa_crt(ibmca_handle, input, key, output);
-	if (rc != 0) {
-		IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
-		goto err;
-	}
-	else {
-		rc = 1;
-	}
-
-	/* Convert output to BIGNUM representation */
-	/* BN_bin2bn((unsigned char *) (output + key->key_length - inputlen), inputlen, r); */
-	BN_bin2bn((unsigned char *) output, key->key_length, r);
-
-
-	goto end;
-
-err:
-	rc = 0;    /* error condition */
-
-end:
-	free(key->p);
-	free(key->q);
-	free(key->dp);
-	free(key->dq);
-	free(key->qInverse);
-	free(key);
-	free(input);
-	free(output);
-
-	return rc;
-}
-
 #ifndef OPENSSL_NO_DSA
 /* This code was liberated and adapted from the commented-out code in
  * dsa_ossl.c. Because of the unoptimised form of the Ibmca acceleration
@@ -1321,14 +939,6 @@ static int ibmca_mod_exp_dsa(DSA * dsa, BIGNUM * r, const BIGNUM * a,
 	return ibmca_mod_exp(r, a, p, m, ctx);
 }
 #endif
-
-/* This function is aliased to mod_exp (with the mont stuff dropped). */
-static int ibmca_mod_exp_mont(BIGNUM * r, const BIGNUM * a,
-			      const BIGNUM * p, const BIGNUM * m,
-			      BN_CTX * ctx, BN_MONT_CTX * m_ctx)
-{
-	return ibmca_mod_exp(r, a, p, m, ctx);
-}
 
 #ifndef OPENSSL_NO_DH
 /* This function is aliased to mod_exp (with the dh and mont dropped). */
