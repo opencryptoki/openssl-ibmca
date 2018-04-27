@@ -263,6 +263,13 @@ DSA_METHOD *ibmca_dsa();
 
 
 
+/********************************** DH stuff **********************************/
+#ifndef OPENSSL_NO_DH
+DH_METHOD *ibmca_dh();
+#endif
+
+
+
 /*
  * These are the function pointers that are (un)set when the library has
  * successfully (un)loaded.
