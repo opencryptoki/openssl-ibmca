@@ -242,6 +242,21 @@ void ibmca_sha512_destroy();
 #endif
 #endif
 
+/******************************** BIGNUM stuff ********************************/
+int ibmca_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
+                  const BIGNUM *m, BN_CTX *ctx);
+
+
+/********************************* RSA stuff **********************************/
+#ifndef OPENSSL_NO_RSA
+RSA_METHOD *ibmca_rsa();
+#endif
+
+extern ica_adapter_handle_t ibmca_handle;
+
+
+
+
 /*
  * These are the function pointers that are (un)set when the library has
  * successfully (un)loaded.
