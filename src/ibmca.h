@@ -256,6 +256,12 @@ extern ica_adapter_handle_t ibmca_handle;
 
 
 
+/********************************* DSA stuff **********************************/
+#ifndef OPENSSL_NO_DSA
+DSA_METHOD *ibmca_dsa();
+#endif
+
+
 
 /*
  * These are the function pointers that are (un)set when the library has
