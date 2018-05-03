@@ -91,7 +91,7 @@ static int ibmca_sha1_update(EVP_MD_CTX *ctx,
             in_data_len &= ~0x3f;
             memcpy(ibmca_sha_ctx->tail,
                    in_data + fill_size + in_data_len, ibmca_sha_ctx->tail_len);
-            // fill_size is added to in_data down below
+            /* fill_size is added to in_data down below */
 
         }
     } else if (ibmca_sha_ctx->c.runningLength > 0) {
@@ -186,7 +186,7 @@ static int ibmca_sha1_cleanup(EVP_MD_CTX *ctx)
 {
     return 1;
 }
-#endif                          // OPENSSL_NO_SHA1
+#endif                          /* OPENSSL_NO_SHA1 */
 
 
 #ifndef OPENSSL_NO_SHA256
@@ -352,7 +352,7 @@ static int ibmca_sha256_cleanup(EVP_MD_CTX *ctx)
 {
     return 1;
 }
-#endif                          // OPENSSL_NO_SHA256
+#endif                          /* OPENSSL_NO_SHA256 */
 
 
 #ifndef OPENSSL_NO_SHA512
@@ -519,7 +519,7 @@ static int ibmca_sha512_cleanup(EVP_MD_CTX *ctx)
 {
     return 1;
 }
-#endif                          // OPENSSL_NO_SHA512
+#endif                          /* OPENSSL_NO_SHA512 */
 
 
 #ifdef OLDER_OPENSSL

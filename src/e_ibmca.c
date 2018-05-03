@@ -597,7 +597,8 @@ static int ibmca_init(ENGINE *e)
         DEBUG_PRINTF("%s: function bind failed\n", __func__);
         goto err;
     }
-    // disable fallbacks on Libica
+
+    /* disable fallbacks on Libica */
     if (BIND(ibmca_dso, ica_set_fallback_mode))
         p_ica_set_fallback_mode(0);
 

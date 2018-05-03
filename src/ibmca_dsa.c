@@ -127,4 +127,4 @@ done:
     return dsa_m;
 }
 #endif
-#endif                          //endif OPENSSL_NO_DSA
+#endif                          /* endif OPENSSL_NO_DSA */

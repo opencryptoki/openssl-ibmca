@@ -78,4 +78,4 @@ done:
 }
 #endif
 
-#endif                          //end OPENSSL_NO_DH
+#endif                          /* end OPENSSL_NO_DH */
