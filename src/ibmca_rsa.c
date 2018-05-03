@@ -399,4 +399,4 @@ done:
 }
 #endif
 
-#endif                          //endif OPENSSL_NO_RSA
+#endif                          /* endif OPENSSL_NO_RSA */
