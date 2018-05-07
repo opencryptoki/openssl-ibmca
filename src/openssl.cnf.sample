@@ -45,6 +45,15 @@ init = 1
 # RAND
 # - Hardware random number generation
 #
+# ECDSA (OpenSSL < 1.1.0)
+# - Elliptic Curve DSA sign and verify
+#
+# ECDH (OpenSSL < 1.1.0)
+# - Elliptic Curve DH key exchange
+#
+# EC (OpenSSL >= 1.1.0)
+# - Elliptic Curve DSA sign and verify, Elliptic Curve DH key exchange
+#
 # CIPHERS
 # - DES-ECB, DES-CBC, DES-CFB, DES-OFB,
 #   DES-EDE3, DES-EDE3-CBC, DES-EDE3-CFB, DES-EDE3-OFB,
