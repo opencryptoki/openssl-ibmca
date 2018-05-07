@@ -32,6 +32,170 @@
  #define DEBUG_PRINTF(...) do{} while(0)
 #endif
 
+/* COMPAT MACROS */
+#ifdef OLDER_OPENSSL
+ #define EVP_CIPHER_CTX_get_cipher_data(ctx)    ((ctx)->cipher_data)
+ #define EVP_CIPHER_CTX_original_iv(ctx)        ((ctx)->oiv)
+ #define EVP_CIPHER_CTX_iv_noconst(ctx)         ((ctx)->iv)
+ #define EVP_CIPHER_CTX_encrypting(ctx)         ((ctx)->encrypt)
+ #define EVP_CIPHER_CTX_buf_noconst(ctx)        ((ctx)->buf)
+ #define EVP_CIPHER_CTX_key_length(ctx)         ((ctx)->cipher->key_len)
+#else
+ #define EVP_CTRL_GCM_SET_IVLEN                 EVP_CTRL_AEAD_SET_IVLEN
+ #define EVP_CTRL_GCM_SET_TAG                   EVP_CTRL_AEAD_SET_TAG
+ #define EVP_CTRL_GCM_GET_TAG                   EVP_CTRL_AEAD_GET_TAG
+#endif
+
+
+#if !defined(NID_aes_128_gcm) || \
+    !defined(NID_aes_192_gcm) || \
+    !defined(NID_aes_256_gcm)
+ #ifndef OPENSSL_NO_AES_GCM
+  #define OPENSSL_NO_AES_GCM
+ #endif
+#endif
+#ifndef EVP_AEAD_TLS1_AAD_LEN
+ #define EVP_AEAD_TLS1_AAD_LEN              13
+#endif
+#ifndef EVP_MD_FLAG_PKEY_METHOD_SIGNATURE
+ #define EVP_MD_FLAG_PKEY_METHOD_SIGNATURE  0
+#endif
+
+
+/******************************* Cipher stuff *********************************/
+typedef struct ibmca_des_context {
+    unsigned char key[sizeof(ica_des_key_triple_t)];
+} ICA_DES_CTX;
+typedef ICA_DES_CTX ICA_TDES_CTX;
+
+#define AES_128_KEYLEN  AES_KEY_LEN128
+typedef struct ibmca_aes_128_context {
+    unsigned char key[sizeof(ica_aes_key_len_128_t)];
+} ICA_AES_128_CTX;
+
+#define AES_192_KEYLEN  AES_KEY_LEN192
+typedef struct ibmca_aes_192_context {
+    unsigned char key[sizeof(ica_aes_key_len_192_t)];
+} ICA_AES_192_CTX;
+
+#define AES_256_KEYLEN  AES_KEY_LEN256
+typedef struct ibmca_aes_256_context {
+    unsigned char key[sizeof(ica_aes_key_len_256_t)];
+} ICA_AES_256_CTX;
+
+typedef struct ibmca_aes_gcm_context {
+    unsigned char key[32];
+    int key_set;
+    int iv_set;
+
+    unsigned char tag[16];
+    unsigned char subkey[16];
+    unsigned char icb[16];
+    unsigned char ucb[16];
+    unsigned long long ptlen;
+    unsigned long long aadlen;
+
+    unsigned char *iv;
+    int ivlen;
+    int taglen;
+    int iv_gen;
+    int tls_aadlen;
+
+} ICA_AES_GCM_CTX;
+
+#if defined(NID_aes_128_cfb128) && ! defined (NID_aes_128_cfb)
+#define NID_aes_128_cfb NID_aes_128_cfb128
+#endif
+
+#if defined(NID_aes_128_ofb128) && ! defined (NID_aes_128_ofb)
+#define NID_aes_128_ofb NID_aes_128_ofb128
+#endif
+
+#if defined(NID_aes_192_cfb128) && ! defined (NID_aes_192_cfb)
+#define NID_aes_192_cfb NID_aes_192_cfb128
+#endif
+
+#if defined(NID_aes_192_ofb128) && ! defined (NID_aes_192_ofb)
+#define NID_aes_192_ofb NID_aes_192_ofb128
+#endif
+
+#if defined(NID_aes_256_cfb128) && ! defined (NID_aes_256_cfb)
+#define NID_aes_256_cfb NID_aes_256_cfb128
+#endif
+
+#if defined(NID_aes_256_ofb128) && ! defined (NID_aes_256_ofb)
+#define NID_aes_256_ofb NID_aes_256_ofb128
+#endif
+
+#if defined(NID_des_ofb64) && ! defined (NID_des_ofb)
+#define NID_des_ofb NID_des_ofb64
+#endif
+
+#if defined(NID_des_ede3_ofb64) && ! defined (NID_des_ede3_ofb)
+#define NID_des_ede3_ofb NID_des_ede3_ofb64
+#endif
+
+#if defined(NID_des_cfb64) && ! defined (NID_des_cfb)
+#define NID_des_cfb NID_des_cfb64
+#endif
+
+#if defined(NID_des_ede3_cfb64) && ! defined (NID_des_ede3_cfb)
+#define NID_des_ede3_cfb NID_des_ede3_cfb64
+#endif
+
+const EVP_CIPHER *ibmca_des_ecb();
+const EVP_CIPHER *ibmca_des_cbc();
+const EVP_CIPHER *ibmca_des_ofb();
+const EVP_CIPHER *ibmca_des_cfb();
+const EVP_CIPHER *ibmca_tdes_ecb();
+const EVP_CIPHER *ibmca_tdes_cbc();
+const EVP_CIPHER *ibmca_tdes_ofb();
+const EVP_CIPHER *ibmca_tdes_cfb();
+const EVP_CIPHER *ibmca_aes_128_ecb();
+const EVP_CIPHER *ibmca_aes_128_cbc();
+const EVP_CIPHER *ibmca_aes_128_ofb();
+const EVP_CIPHER *ibmca_aes_128_cfb();
+const EVP_CIPHER *ibmca_aes_192_ecb();
+const EVP_CIPHER *ibmca_aes_192_cbc();
+const EVP_CIPHER *ibmca_aes_192_ofb();
+const EVP_CIPHER *ibmca_aes_192_cfb();
+const EVP_CIPHER *ibmca_aes_256_ecb();
+const EVP_CIPHER *ibmca_aes_256_cbc();
+const EVP_CIPHER *ibmca_aes_256_ofb();
+const EVP_CIPHER *ibmca_aes_256_cfb();
+#ifndef OPENSSL_NO_AES_GCM
+const EVP_CIPHER *ibmca_aes_128_gcm();
+const EVP_CIPHER *ibmca_aes_192_gcm();
+const EVP_CIPHER *ibmca_aes_256_gcm();
+#endif
+
+#ifndef OLDER_OPENSSL
+void ibmca_des_ecb_destroy();
+void ibmca_des_cbc_destroy();
+void ibmca_des_ofb_destroy();
+void ibmca_des_cfb_destroy();
+void ibmca_tdes_ecb_destroy();
+void ibmca_tdes_cbc_destroy();
+void ibmca_tdes_ofb_destroy();
+void ibmca_tdes_cfb_destroy();
+void ibmca_aes_128_ecb_destroy();
+void ibmca_aes_128_cbc_destroy();
+void ibmca_aes_128_ofb_destroy();
+void ibmca_aes_128_cfb_destroy();
+void ibmca_aes_192_ecb_destroy();
+void ibmca_aes_192_cbc_destroy();
+void ibmca_aes_192_ofb_destroy();
+void ibmca_aes_192_cfb_destroy();
+void ibmca_aes_256_ecb_destroy();
+void ibmca_aes_256_cbc_destroy();
+void ibmca_aes_256_ofb_destroy();
+void ibmca_aes_256_cfb_destroy();
+void ibmca_aes_128_gcm_destroy();
+void ibmca_aes_192_gcm_destroy();
+void ibmca_aes_256_gcm_destroy();
+#endif
+
+/******************************* Libica stuff *********************************/
 /*
  * These are the function pointers that are (un)set when the library has
  * successfully (un)loaded.
