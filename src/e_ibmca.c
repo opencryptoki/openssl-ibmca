@@ -35,27 +35,12 @@
 #include <openssl/obj_mac.h>
 #include <openssl/aes.h>
 
+#include <ica_api.h>
+#include "ibmca.h"
+#include "e_ibmca_err.h"
+
 #ifndef OPENSSL_NO_HW
 #ifndef OPENSSL_NO_HW_IBMCA
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
- #define OLDER_OPENSSL
-#endif
-
-/*
- * Here is a DEBUG_PRINTF makro which expands to nothing
- * at production level and is active only when the
- * ibmca build is configured with --enable-debug
- */
-#ifdef DEBUG
- #define DEBUG_PRINTF(...) printf(__VA_ARGS__)
-#else
- #define DEBUG_PRINTF(...) do{} while(0)
-#endif
-
-
-#include <ica_api.h>
-#include "e_ibmca_err.h"
 
 #define IBMCA_LIB_NAME "ibmca engine"
 #define LIBICA_SHARED_LIB "libica.so"
@@ -228,11 +213,11 @@ static int ibmca_crypto_algos[] = {
         0
 };
 
-
 #define MAX_CIPHER_NIDS sizeof(ibmca_crypto_algos)
+
 /*
  * This struct maps one NID to one crypto algo.
- * So we can tell OpenSSL thsi NID maps to this function.
+ * So we can tell OpenSSL this NID maps to this function.
  */
 struct crypto_pair
 {
@@ -252,7 +237,6 @@ static size_t size_digest_list = 0;
 
 static struct crypto_pair ibmca_cipher_lists;
 static struct crypto_pair ibmca_digest_lists;
-
 
 static int ibmca_destroy(ENGINE * e);
 static int ibmca_init(ENGINE * e);
@@ -408,7 +392,7 @@ static int ibmca_sha512_cleanup(EVP_MD_CTX * ctx);
 static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
 	{IBMCA_CMD_SO_PATH,
 	 "SO_PATH",
-	 "Specifies the path to the 'atasi' shared library",
+	 "Specifies the path to the 'ibmca' shared library",
 	 ENGINE_CMD_FLAG_STRING},
 	{0, NULL, NULL, 0}
 };
@@ -1438,9 +1422,16 @@ static int ibmca_destroy(ENGINE * e)
 	ibmca_aes_256_gcm_destroy();
 # endif
 
+# ifndef OPENSSL_NO_SHA1
 	ibmca_sha1_destroy();
+# endif
+# ifndef OPENSSL_NO_SHA256
 	ibmca_sha256_destroy();
+# endif
+# ifndef OPENSSL_NO_SHA512
 	ibmca_sha512_destroy();
+# endif
+
 #endif
 	ERR_unload_IBMCA_strings();
 	return 1;
