@@ -1,5 +1,5 @@
 /*
- * Copyright [2005-2017] International Business Machines Corp.
+ * Copyright [2005-2018] International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,49 @@
 
 static const char *LIBICA_NAME = "ica";
 
+/* Constants used when creating the ENGINE */
+static const char *engine_ibmca_id = "ibmca";
+static const char *engine_ibmca_name = "Ibmca hardware engine support";
+
+/* This is a process-global DSO handle used for loading and unloading
+ * the Ibmca library. NB: This is only set (or unset) during an
+ * init() or finish() call (reference counts permitting) and they're
+ * operating with global locks, so this should be thread-safe
+ * implicitly. */
+void *ibmca_dso = NULL;
+
+ica_adapter_handle_t ibmca_handle = 0;
+
+/* entry points into libica, filled out at DSO load time */
+ica_get_functionlist_t          p_ica_get_functionlist;
+ica_set_fallback_mode_t         p_ica_set_fallback_mode;
+ica_open_adapter_t              p_ica_open_adapter;
+ica_close_adapter_t             p_ica_close_adapter;
+ica_rsa_mod_expo_t              p_ica_rsa_mod_expo;
+ica_random_number_generate_t    p_ica_random_number_generate;
+ica_rsa_crt_t                   p_ica_rsa_crt;
+ica_sha1_t                      p_ica_sha1;
+ica_sha256_t                    p_ica_sha256;
+ica_sha512_t                    p_ica_sha512;
+ica_des_ecb_t                   p_ica_des_ecb;
+ica_des_cbc_t                   p_ica_des_cbc;
+ica_des_ofb_t                   p_ica_des_ofb;
+ica_des_cfb_t                   p_ica_des_cfb;
+ica_3des_ecb_t                  p_ica_3des_ecb;
+ica_3des_cbc_t                  p_ica_3des_cbc;
+ica_3des_cfb_t                  p_ica_3des_cfb;
+ica_3des_ofb_t                  p_ica_3des_ofb;
+ica_aes_ecb_t                   p_ica_aes_ecb;
+ica_aes_cbc_t                   p_ica_aes_cbc;
+ica_aes_ofb_t                   p_ica_aes_ofb;
+ica_aes_cfb_t                   p_ica_aes_cfb;
+#ifndef OPENSSL_NO_AES_GCM
+ica_aes_gcm_initialize_t        p_ica_aes_gcm_initialize;
+ica_aes_gcm_intermediate_t      p_ica_aes_gcm_intermediate;
+ica_aes_gcm_last_t              p_ica_aes_gcm_last;
+#endif
+
+
 /*
  * ibmca_crypto_algos lists the supported crypto algos by ibmca.
  * This list is matched against all algo support by libica. Only if
@@ -78,17 +121,15 @@ static int ibmca_crypto_algos[] = {
 	AES_GCM_KMA,
         0
 };
-
 #define MAX_CIPHER_NIDS sizeof(ibmca_crypto_algos)
 
 /*
  * This struct maps one NID to one crypto algo.
  * So we can tell OpenSSL this NID maps to this function.
  */
-struct crypto_pair
-{
-        int nids[MAX_CIPHER_NIDS];
-        const void *crypto_meths[MAX_CIPHER_NIDS];
+struct crypto_pair {
+    int nids[MAX_CIPHER_NIDS];
+    const void *crypto_meths[MAX_CIPHER_NIDS];
 };
 
 /* We can not say how much crypto algos are
@@ -104,38 +145,16 @@ static size_t size_digest_list = 0;
 static struct crypto_pair ibmca_cipher_lists;
 static struct crypto_pair ibmca_digest_lists;
 
-static int ibmca_destroy(ENGINE * e);
-static int ibmca_init(ENGINE * e);
-static int ibmca_finish(ENGINE * e);
-static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ());
-
-ica_adapter_handle_t ibmca_handle = 0;
+static int ibmca_usable_ciphers(const int **nids);
+static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
+                                const int **nids, int nid);
+static int ibmca_usable_digests(const int **nids);
+static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
+                                const int **nids, int nid);
 
 /* RAND stuff */
 static int ibmca_rand_bytes(unsigned char *buf, int num);
 static int ibmca_rand_status(void);
-
-static int ibmca_usable_ciphers(const int **nids);
-
-static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
-				const int **nids, int nid);
-
-static int ibmca_usable_digests(const int **nids);
-
-static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
-				const int **nids, int nid);
-
-/* WJH - check for more commands, like in nuron */
-
-/* The definitions for control commands specific to this engine */
-#define IBMCA_CMD_SO_PATH		ENGINE_CMD_BASE
-static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
-	{IBMCA_CMD_SO_PATH,
-	 "SO_PATH",
-	 "Specifies the path to the 'ibmca' shared library",
-	 ENGINE_CMD_FLAG_STRING},
-	{0, NULL, NULL, 0}
-};
 
 static RAND_METHOD ibmca_rand = {
 	/* "IBMCA RAND method", */
@@ -147,10 +166,127 @@ static RAND_METHOD ibmca_rand = {
 	ibmca_rand_status,     /* status */
 };
 
-/* Constants used when creating the ENGINE */
-static const char *engine_ibmca_id = "ibmca";
-static const char *engine_ibmca_name = "Ibmca hardware engine support";
 
+/* The definitions for control commands specific to this engine */
+#define IBMCA_CMD_SO_PATH		ENGINE_CMD_BASE
+static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
+    {IBMCA_CMD_SO_PATH,
+     "SO_PATH",
+     "Specifies the path to the 'ibmca' shared library",
+     ENGINE_CMD_FLAG_STRING},
+    {0, NULL, NULL, 0}
+};
+
+/* Destructor (complements the "ENGINE_ibmca()" constructor) */
+static int ibmca_destroy(ENGINE * e)
+{
+    /* Unload the ibmca error strings so any error state including our
+     * functs or reasons won't lead to a segfault (they simply get displayed
+     * without corresponding string data because none will be found).
+     */
+#ifndef OLDER_OPENSSL
+    ibmca_des_ecb_destroy();
+    ibmca_des_cbc_destroy();
+    ibmca_des_ofb_destroy();
+    ibmca_des_cfb_destroy();
+    ibmca_tdes_ecb_destroy();
+    ibmca_tdes_cbc_destroy();
+    ibmca_tdes_ofb_destroy();
+    ibmca_tdes_cfb_destroy();
+
+    ibmca_aes_128_ecb_destroy();
+    ibmca_aes_128_cbc_destroy();
+    ibmca_aes_128_ofb_destroy();
+    ibmca_aes_128_cfb_destroy();
+    ibmca_aes_192_ecb_destroy();
+    ibmca_aes_192_cbc_destroy();
+    ibmca_aes_192_ofb_destroy();
+    ibmca_aes_192_cfb_destroy();
+    ibmca_aes_256_ecb_destroy();
+    ibmca_aes_256_cbc_destroy();
+    ibmca_aes_256_ofb_destroy();
+    ibmca_aes_256_cfb_destroy();
+
+#ifndef OPENSSL_NO_AES_GCM
+    ibmca_aes_128_gcm_destroy();
+    ibmca_aes_192_gcm_destroy();
+    ibmca_aes_256_gcm_destroy();
+#endif
+
+#ifndef OPENSSL_NO_SHA1
+    ibmca_sha1_destroy();
+#endif
+#ifndef OPENSSL_NO_SHA256
+    ibmca_sha256_destroy();
+#endif
+#ifndef OPENSSL_NO_SHA512
+    ibmca_sha512_destroy();
+#endif
+
+#endif
+    ERR_unload_IBMCA_strings();
+    return 1;
+}
+
+int is_crypto_card_loaded()
+{
+	DIR* sysDir;
+	FILE *file;
+	char dev[PATH_MAX] = AP_PATH;
+	struct dirent *direntp;
+	char *type = NULL;
+	size_t size;
+	char c;
+
+	if ((sysDir = opendir(dev)) == NULL )
+		return 0;
+
+	while((direntp = readdir(sysDir)) != NULL){
+		if(strstr(direntp->d_name, "card") != 0){
+			snprintf(dev, PATH_MAX, "%s/%s/type", AP_PATH,
+				direntp->d_name);
+
+			if ((file = fopen(dev, "r")) == NULL){
+	                        closedir(sysDir);
+                                return 0;
+			}
+
+			if (getline(&type, &size, file) == -1){
+				fclose(file);
+				closedir(sysDir);
+				return 0;
+			}
+
+			/* ignore \n
+			 * looking for CEX??A and CEX??C
+			 * Skip type CEX??P cards
+			 */
+			if (type[strlen(type)-2] == 'P'){
+				free(type);
+				type = NULL;
+				fclose(file);
+				continue;
+			}
+			free(type);
+			type = NULL;
+			fclose(file);
+
+			snprintf(dev, PATH_MAX, "%s/%s/online", AP_PATH,
+				direntp->d_name);
+			if ((file = fopen(dev, "r")) == NULL){
+				closedir(sysDir);
+				return 0;
+			}
+			if((c = fgetc(file)) == '1'){
+				fclose(file);
+				return 1;
+			}
+			fclose(file);
+		}
+	}
+	closedir(sysDir);
+	return 0;
+}
 
 inline static int set_RSA_prop(ENGINE *e)
 {
@@ -175,7 +311,6 @@ inline static int set_RSA_prop(ENGINE *e)
 	rsa_enabled = 1;
 	return 1;
 }
-
 
 /*
  * dig_nid_cnt and ciph_nid_cnt count the number of enabled crypt mechanims.
@@ -301,66 +436,6 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt, int 
 	return 1;
 }
 
-int is_crypto_card_loaded()
-{
-	DIR* sysDir;
-	FILE *file;
-	char dev[PATH_MAX] = AP_PATH;
-	struct dirent *direntp;
-	char *type = NULL;
-	size_t size;
-	char c;
-
-	if ((sysDir = opendir(dev)) == NULL )
-		return 0;
-
-	while((direntp = readdir(sysDir)) != NULL){
-		if(strstr(direntp->d_name, "card") != 0){
-			snprintf(dev, PATH_MAX, "%s/%s/type", AP_PATH,
-				direntp->d_name);
-
-			if ((file = fopen(dev, "r")) == NULL){
-	                        closedir(sysDir);
-                                return 0;
-			}
-
-			if (getline(&type, &size, file) == -1){
-				fclose(file);
-				closedir(sysDir);
-				return 0;
-			}
-
-			/* ignore \n
-			 * looking for CEX??A and CEX??C
-			 * Skip type CEX??P cards
-			 */
-			if (type[strlen(type)-2] == 'P'){
-				free(type);
-				type = NULL;
-				fclose(file);
-				continue;
-			}
-			free(type);
-			type = NULL;
-			fclose(file);
-
-			snprintf(dev, PATH_MAX, "%s/%s/online", AP_PATH,
-				direntp->d_name);
-			if ((file = fopen(dev, "r")) == NULL){
-				closedir(sysDir);
-				return 0;
-			}
-			if((c = fgetc(file)) == '1'){
-				fclose(file);
-				return 1;
-			}
-			fclose(file);
-		}
-	}
-	closedir(sysDir);
-	return 0;
-}
-
 static int set_supported_meths(ENGINE *e)
 {
 	int i, j;
@@ -422,137 +497,6 @@ out:
 	free(pmech_list);
 	return rc;
 }
-
-
-/* This internal function is used by ENGINE_ibmca() and possibly by the
- * "dynamic" ENGINE support too */
-static int bind_helper(ENGINE * e)
-{
-	if (!ENGINE_set_id(e, engine_ibmca_id) ||
-	    !ENGINE_set_name(e, engine_ibmca_name) ||
-	    !ENGINE_set_destroy_function(e, ibmca_destroy) ||
-	    !ENGINE_set_init_function(e, ibmca_init) ||
-	    !ENGINE_set_finish_function(e, ibmca_finish) ||
-	    !ENGINE_set_ctrl_function(e, ibmca_ctrl) ||
-	    !ENGINE_set_cmd_defns(e, ibmca_cmd_defns))
-		return 0;
-
-	/* Ensure the ibmca error handling is set up */
-	ERR_load_IBMCA_strings();
-	/* initialize the engine implizit */
-	ibmca_init(e);
-	return 1;
-}
-
-static ENGINE *engine_ibmca(void)
-{
-	ENGINE *ret = ENGINE_new();
-	if (!ret)
-		return NULL;
-	if (!bind_helper(ret)) {
-		ENGINE_free(ret);
-		return NULL;
-	}
-	return ret;
-}
-
-void ENGINE_load_ibmca(void)
-{
-	/* Copied from eng_[openssl|dyn].c */
-	ENGINE *toadd = engine_ibmca();
-	if (!toadd)
-		return;
-	ENGINE_add(toadd);
-	ENGINE_free(toadd);
-	ERR_clear_error();
-}
-
-/* Destructor (complements the "ENGINE_ibmca()" constructor) */
-static int ibmca_destroy(ENGINE * e)
-{
-	/* Unload the ibmca error strings so any error state including our
-	 * functs or reasons won't lead to a segfault (they simply get displayed
-	 * without corresponding string data because none will be found). */
-#ifndef OLDER_OPENSSL
-	ibmca_des_ecb_destroy();
-	ibmca_des_cbc_destroy();
-	ibmca_des_ofb_destroy();
-	ibmca_des_cfb_destroy();
-	ibmca_tdes_ecb_destroy();
-	ibmca_tdes_cbc_destroy();
-	ibmca_tdes_ofb_destroy();
-	ibmca_tdes_cfb_destroy();
-
-	ibmca_aes_128_ecb_destroy();
-	ibmca_aes_128_cbc_destroy();
-	ibmca_aes_128_ofb_destroy();
-	ibmca_aes_128_cfb_destroy();
-	ibmca_aes_192_ecb_destroy();
-	ibmca_aes_192_cbc_destroy();
-	ibmca_aes_192_ofb_destroy();
-	ibmca_aes_192_cfb_destroy();
-	ibmca_aes_256_ecb_destroy();
-	ibmca_aes_256_cbc_destroy();
-	ibmca_aes_256_ofb_destroy();
-	ibmca_aes_256_cfb_destroy();
-
-# ifndef OPENSSL_NO_AES_GCM
-	ibmca_aes_128_gcm_destroy();
-	ibmca_aes_192_gcm_destroy();
-	ibmca_aes_256_gcm_destroy();
-# endif
-
-# ifndef OPENSSL_NO_SHA1
-	ibmca_sha1_destroy();
-# endif
-# ifndef OPENSSL_NO_SHA256
-	ibmca_sha256_destroy();
-# endif
-# ifndef OPENSSL_NO_SHA512
-	ibmca_sha512_destroy();
-# endif
-
-#endif
-	ERR_unload_IBMCA_strings();
-	return 1;
-}
-
-/* This is a process-global DSO handle used for loading and unloading
- * the Ibmca library. NB: This is only set (or unset) during an
- * init() or finish() call (reference counts permitting) and they're
- * operating with global locks, so this should be thread-safe
- * implicitly. */
-
-void *ibmca_dso = NULL;
-
-/* entry points into libica, filled out at DSO load time */
-ica_get_functionlist_t          p_ica_get_functionlist;
-ica_set_fallback_mode_t         p_ica_set_fallback_mode;
-ica_open_adapter_t              p_ica_open_adapter;
-ica_close_adapter_t             p_ica_close_adapter;
-ica_rsa_mod_expo_t              p_ica_rsa_mod_expo;
-ica_random_number_generate_t    p_ica_random_number_generate;
-ica_rsa_crt_t                   p_ica_rsa_crt;
-ica_sha1_t                      p_ica_sha1;
-ica_sha256_t                    p_ica_sha256;
-ica_sha512_t                    p_ica_sha512;
-ica_des_ecb_t                   p_ica_des_ecb;
-ica_des_cbc_t                   p_ica_des_cbc;
-ica_des_ofb_t                   p_ica_des_ofb;
-ica_des_cfb_t                   p_ica_des_cfb;
-ica_3des_ecb_t                  p_ica_3des_ecb;
-ica_3des_cbc_t                  p_ica_3des_cbc;
-ica_3des_cfb_t                  p_ica_3des_cfb;
-ica_3des_ofb_t                  p_ica_3des_ofb;
-ica_aes_ecb_t                   p_ica_aes_ecb;
-ica_aes_cbc_t                   p_ica_aes_cbc;
-ica_aes_ofb_t                   p_ica_aes_ofb;
-ica_aes_cfb_t                   p_ica_aes_cfb;
-#ifndef OPENSSL_NO_AES_GCM
-ica_aes_gcm_initialize_t        p_ica_aes_gcm_initialize;
-ica_aes_gcm_intermediate_t      p_ica_aes_gcm_intermediate;
-ica_aes_gcm_last_t              p_ica_aes_gcm_last;
-#endif
 
 /* utility function to obtain a context */
 static int get_context(ica_adapter_handle_t * p_handle)
@@ -720,6 +664,52 @@ static int ibmca_ctrl(ENGINE * e, int cmd, long i, void *p, void (*f) ())
 }
 
 /*
+ * This internal function is used by ENGINE_ibmca()
+ * and possibly by the "dynamic" ENGINE support too
+ */
+static int bind_helper(ENGINE * e)
+{
+	if (!ENGINE_set_id(e, engine_ibmca_id) ||
+	    !ENGINE_set_name(e, engine_ibmca_name) ||
+	    !ENGINE_set_destroy_function(e, ibmca_destroy) ||
+	    !ENGINE_set_init_function(e, ibmca_init) ||
+	    !ENGINE_set_finish_function(e, ibmca_finish) ||
+	    !ENGINE_set_ctrl_function(e, ibmca_ctrl) ||
+	    !ENGINE_set_cmd_defns(e, ibmca_cmd_defns))
+		return 0;
+
+	/* Ensure the ibmca error handling is set up */
+	ERR_load_IBMCA_strings();
+	/* initialize the engine implizit */
+	ibmca_init(e);
+
+    return 1;
+}
+
+static ENGINE *engine_ibmca(void)
+{
+	ENGINE *ret = ENGINE_new();
+	if (!ret)
+		return NULL;
+	if (!bind_helper(ret)) {
+		ENGINE_free(ret);
+		return NULL;
+	}
+	return ret;
+}
+
+void ENGINE_load_ibmca(void)
+{
+	/* Copied from eng_[openssl|dyn].c */
+	ENGINE *toadd = engine_ibmca();
+	if (!toadd)
+		return;
+	ENGINE_add(toadd);
+	ENGINE_free(toadd);
+	ERR_clear_error();
+}
+
+/*
  * ENGINE calls this to find out how to deal with
  * a particular NID in the ENGINE.
  */
@@ -742,10 +732,10 @@ static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
 
 static int ibmca_usable_ciphers(const int **nids)
 {
+    if(nids)
+        *nids = ibmca_cipher_lists.nids;
 
-        if(nids)
-	        *nids = ibmca_cipher_lists.nids;
-	return size_cipher_list;
+    return size_cipher_list;
 }
 
 static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
@@ -768,9 +758,10 @@ static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
 
 static int ibmca_usable_digests(const int **nids)
 {
-        if(nids)
-		*nids = ibmca_digest_lists.nids;
-	return size_digest_list;
+    if(nids)
+        *nids = ibmca_digest_lists.nids;
+
+    return size_digest_list;
 }
 
 /* Random bytes are good */
@@ -783,7 +774,8 @@ static int ibmca_rand_bytes(unsigned char *buf, int num)
 		IBMCAerr(IBMCA_F_IBMCA_RAND_BYTES, IBMCA_R_REQUEST_FAILED);
 		return 0;
 	}
-	return 1;
+
+    return 1;
 }
 
 static int ibmca_rand_status(void)
@@ -791,15 +783,22 @@ static int ibmca_rand_status(void)
 	return 1;
 }
 
-/* This stuff is needed if this ENGINE is being compiled into a self-contained
- * shared-library. */
+/*
+ * This stuff is needed if this ENGINE is being
+ * compiled into a self-contained shared-library.
+ */
 static int bind_fn(ENGINE * e, const char *id)
 {
-	if (id && (strcmp(id, engine_ibmca_id) != 0))	/* WJH XXX */
+	if (id && (strcmp(id, engine_ibmca_id) != 0)) {
+        fprintf(stderr, "wrong engine id\n");
 		return 0;
-	if (!bind_helper(e))
+    }
+    if (!bind_helper(e)) {
+        fprintf(stderr, "bind failed\n");
 		return 0;
-	return 1;
+    }
+
+    return 1;
 }
 
 IMPLEMENT_DYNAMIC_CHECK_FN()
