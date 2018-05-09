@@ -1,3 +1,5 @@
+VERSION = 2:0:0
+
 lib_LTLIBRARIES=ibmca.la
 
 ibmca_la_SOURCES=e_ibmca.c \
@@ -8,7 +10,8 @@ ibmca_la_SOURCES=e_ibmca.c \
 				 ibmca_dsa.c \
 				 ibmca_dh.c
 ibmca_la_LIBADD=-ldl
-ibmca_la_LDFLAGS=-module -version-info 0:2:0 -shared -no-undefined -avoid-version
+ibmca_la_LDFLAGS=-module -version-info ${VERSION} -shared -no-undefined \
+				 -Wl,--version-script=${srcdir}/../ibmca.map
 
 dist_ibmca_la_SOURCES=ibmca.h e_ibmca_err.h
 EXTRA_DIST = openssl.cnf.sample
