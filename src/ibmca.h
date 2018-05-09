@@ -270,6 +270,7 @@ DH_METHOD *ibmca_dh();
 
 
 
+/******************************* Libica stuff *********************************/
 /*
  * These are the function pointers that are (un)set when the library has
  * successfully (un)loaded.
@@ -280,11 +281,11 @@ typedef void         (*ica_set_fallback_mode_t)(int);
 typedef unsigned int (*ica_open_adapter_t)(ica_adapter_handle_t *);
 typedef unsigned int (*ica_close_adapter_t)(ica_adapter_handle_t);
 typedef unsigned int (*ica_rsa_mod_expo_t)(ica_adapter_handle_t,
-                      unsigned char *,
-                      ica_rsa_key_mod_expo_t *,
-                      unsigned char *);
+                                           unsigned char *,
+                                           ica_rsa_key_mod_expo_t *,
+                                           unsigned char *);
 typedef unsigned int (*ica_rsa_crt_t)(ica_adapter_handle_t, unsigned char *,
-                      ica_rsa_key_crt_t *, unsigned char *);
+                                      ica_rsa_key_crt_t *, unsigned char *);
 typedef unsigned int (*ica_random_number_generate_t)(unsigned int,
                                                      unsigned char *);
 typedef unsigned int (*ica_sha1_t)(unsigned int, unsigned int, unsigned char *,
