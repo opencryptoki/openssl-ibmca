@@ -1,0 +1,9 @@
+IBMCA_2.0.0 {
+    global:
+        v_check;
+        bind_engine;
+        ENGINE_load_ibmca;
+
+    local:
+        *;
+};
