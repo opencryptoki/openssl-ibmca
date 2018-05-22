@@ -15,6 +15,11 @@
  *
  */
 
+#include <errno.h>
+#include <string.h>
+#include <openssl/ec.h>
+#include <openssl/ecdh.h>
+#include <openssl/ecdsa.h>
 #include <ica_api.h>
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -269,6 +274,98 @@ DH_METHOD *ibmca_dh();
 #endif
 
 
+/********************************** EC stuff **********************************/
+
+/* Either enable or disable ALL ECC */
+#ifndef OPENSSL_NO_EC
+ #if defined(OPENSSL_NO_ECDH) || defined(OPENSSL_NO_ECDSA)
+  #define OPENSSL_NO_EC
+ #endif
+#endif
+
+#define IBMCA_EC_MAX_D_LEN	66
+#define IBMCA_EC_MAX_Q_LEN	(2 * IBMCA_EC_MAX_D_LEN)
+#define IBMCA_EC_MAX_SIG_LEN	IBMCA_EC_MAX_Q_LEN
+#define IBMCA_EC_MAX_Z_LEN	IBMCA_EC_MAX_D_LEN
+
+#ifndef OPENSSL_NO_EC
+void ibmca_ec_destroy(void);
+
+int ibmca_ecdh_compute_key(unsigned char **pout, size_t *poutlen,
+			   const EC_POINT *pub_key, const EC_KEY *ecdh);
+ECDSA_SIG *ibmca_ecdsa_sign_sig(const unsigned char *dgst, int dgst_len,
+				const BIGNUM *in_kinv, const BIGNUM *in_r,
+				EC_KEY *eckey);
+int ibmca_ecdsa_verify_sig(const unsigned char *dgst, int dgst_len,
+			   const ECDSA_SIG *sig, EC_KEY *eckey);
+ #ifdef OLDER_OPENSSL
+extern ECDSA_METHOD *ibmca_ecdsa;
+extern ECDH_METHOD *ibmca_ecdh;
+extern const ECDSA_METHOD *ossl_ecdsa;
+extern const ECDH_METHOD *ossl_ecdh;
+
+int ibmca_older_ecdh_compute_key(void *out, size_t len,
+				 const EC_POINT *pub_key,
+				 EC_KEY *ecdh,
+				 void *(*KDF)(const void *in, size_t inlen,
+					      void *out, size_t *outlen));
+ECDSA_SIG *ibmca_older_ecdsa_do_sign(const unsigned char *dgst, int dlen,
+				     const BIGNUM *, const BIGNUM *,
+				     EC_KEY *eckey);
+int ibmca_older_ecdsa_do_verify(const unsigned char *dgst, int dgst_len,
+				const ECDSA_SIG *sig, EC_KEY *eckey);
+
+/*
+ * APIs which are missing in openssl 1.0.2.
+ */
+ECDH_METHOD *ECDH_METHOD_new(const ECDH_METHOD *meth);
+void ECDH_METHOD_set_compute_key(ECDH_METHOD *meth,
+				 int (*compute_key)(void *out, size_t len,
+						    const EC_POINT *pub_key,
+						    EC_KEY *ecdh,
+						    void *(*KDF)(const void *in,
+								 size_t inlen,
+								 void *out,
+								 size_t *outlen)));
+void ECDH_METHOD_get_compute_key(const ECDH_METHOD *meth,
+                                 int (**compute_key)(void *out, size_t len,
+                                                     const EC_POINT *pub_key,
+                                                     EC_KEY *ecdh,
+                                                     void *(*KDF)(const void *in,
+                                                                  size_t inlen,
+                                                                  void *out,
+                                                                  size_t *outlen)));
+void ECDH_METHOD_set_name(ECDH_METHOD *meth, char *name);
+void ECDH_METHOD_free(ECDH_METHOD *meth);
+
+void ECDSA_METHOD_get_sign(const ECDSA_METHOD *meth,
+                           int (**psign_setup)(EC_KEY *eckey, BN_CTX *ctx_in,
+                                               BIGNUM **kinvp, BIGNUM **rp),
+                           ECDSA_SIG *(**psign_sig)(const unsigned char *dgst,
+                                                    int dgst_len,
+                                                    const BIGNUM *in_kinv,
+                                                    const BIGNUM *in_r,
+                                                    EC_KEY *eckey));
+
+void ECDSA_METHOD_get_verify(const ECDSA_METHOD *meth,
+                             int (**pverify_sig)(const unsigned char *dgst,
+                                                 int dgst_len,
+                                                 const ECDSA_SIG *sig,
+                                                 EC_KEY *eckey));
+
+ #else
+extern EC_KEY_METHOD *ibmca_ec;
+extern const EC_KEY_METHOD *ossl_ec;
+
+int ibmca_ec_key_gen(EC_KEY *eckey);
+int ibmca_ecdsa_sign(int type, const unsigned char *dgst, int dlen,
+		     unsigned char *sig_array, unsigned int *siglen,
+		     const BIGNUM *kinv, const BIGNUM *r, EC_KEY *eckey);
+int ibmca_ecdsa_verify(int type, const unsigned char *dgst, int dgst_len,
+		       const unsigned char *sigbuf, int sig_len,
+		       EC_KEY *eckey);
+ #endif
+#endif
 
 /******************************* Libica stuff *********************************/
 /*
@@ -400,6 +497,38 @@ typedef unsigned int (*ica_aes_gcm_last_t)(unsigned char *icb,
                                            unsigned char *subkey,
                                            unsigned int direction);
 
+#ifndef OPENSSL_NO_EC
+typedef ICA_EC_KEY* (*ica_ec_key_new_t)(unsigned int nid,
+					unsigned int *privlen);
+typedef int (*ica_ec_key_init_t)(const unsigned char *X,
+				 const unsigned char *Y,
+				 const unsigned char *D, ICA_EC_KEY *key);
+typedef int (*ica_ec_key_generate_t)(ica_adapter_handle_t adapter_handle,
+				     ICA_EC_KEY *key);
+typedef int (*ica_ecdh_derive_secret_t)(ica_adapter_handle_t adapter_handle,
+					const ICA_EC_KEY *privkey_A,
+					const ICA_EC_KEY *pubkey_B,
+					unsigned char *z,
+					unsigned int z_length);
+typedef int (*ica_ecdsa_sign_t)(ica_adapter_handle_t adapter_handle,
+				const ICA_EC_KEY *privkey,
+				const unsigned char *hash,
+				unsigned int hash_length,
+				unsigned char *signature,
+				unsigned int signature_length);
+typedef int (*ica_ecdsa_verify_t)(ica_adapter_handle_t adapter_handle,
+				  const ICA_EC_KEY *pubkey,
+				  const unsigned char *hash,
+				  unsigned int hash_length,
+				  const unsigned char *signature,
+				  unsigned int signature_length);
+typedef int (*ica_ec_key_get_public_key_t)(ICA_EC_KEY *key, unsigned char *q,
+					   unsigned int *q_len);
+typedef int (*ica_ec_key_get_private_key_t)(ICA_EC_KEY *key, unsigned char *d,
+					    unsigned int *d_len);
+typedef void (*ica_ec_key_free_t)(ICA_EC_KEY *key);
+#endif
+
 /* entry points into libica, filled out at DSO load time */
 extern ica_get_functionlist_t           p_ica_get_functionlist;
 extern ica_set_fallback_mode_t          p_ica_set_fallback_mode;
@@ -427,4 +556,15 @@ extern ica_aes_cfb_t                    p_ica_aes_cfb;
 extern ica_aes_gcm_initialize_t         p_ica_aes_gcm_initialize;
 extern ica_aes_gcm_intermediate_t       p_ica_aes_gcm_intermediate;
 extern ica_aes_gcm_last_t               p_ica_aes_gcm_last;
+#endif
+#ifndef OPENSSL_NO_EC
+extern ica_ec_key_new_t			p_ica_ec_key_new;
+extern ica_ec_key_init_t		p_ica_ec_key_init;
+extern ica_ec_key_generate_t		p_ica_ec_key_generate;
+extern ica_ecdh_derive_secret_t		p_ica_ecdh_derive_secret;
+extern ica_ecdsa_sign_t			p_ica_ecdsa_sign;
+extern ica_ecdsa_verify_t		p_ica_ecdsa_verify;
+extern ica_ec_key_get_public_key_t	p_ica_ec_key_get_public_key;
+extern ica_ec_key_get_private_key_t	p_ica_ec_key_get_private_key;
+extern ica_ec_key_free_t		p_ica_ec_key_free;
 #endif

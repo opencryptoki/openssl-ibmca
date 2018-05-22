@@ -91,6 +91,15 @@ ica_aes_gcm_intermediate_t      p_ica_aes_gcm_intermediate;
 ica_aes_gcm_last_t              p_ica_aes_gcm_last;
 #endif
 
+/* save libcrypto's default ec methods */
+#ifndef NO_EC
+ #ifdef OLDER_OPENSSL
+    const ECDSA_METHOD *ossl_ecdsa;
+    const ECDH_METHOD *ossl_ecdh;
+ #else
+    const EC_KEY_METHOD *ossl_ec;
+ #endif
+#endif
 
 /*
  * ibmca_crypto_algos lists the supported crypto algos by ibmca.
@@ -119,6 +128,10 @@ static int ibmca_crypto_algos[] = {
     AES_OFB,
     AES_CFB,
     AES_GCM_KMA,
+    EC_KGEN,
+    EC_DSA_SIGN,
+    EC_DSA_VERIFY,
+    EC_DH,
     0
 };
 
@@ -223,6 +236,9 @@ static int ibmca_destroy(ENGINE *e)
 #ifndef OPENSSL_NO_SHA512
     ibmca_sha512_destroy();
 #endif
+#ifndef NO_EC
+    ibmca_ec_destroy();
+#endif
 
 #endif
     ERR_unload_IBMCA_strings();
@@ -314,6 +330,54 @@ inline static int set_RSA_prop(ENGINE *e)
     return 1;
 }
 
+#ifndef OPENSSL_NO_EC
+inline static int set_EC_prop(ENGINE *e)
+{
+    static int ec_enabled = 0;
+
+    if (ec_enabled) {
+        return 1;
+    }
+
+ #ifdef OLDER_OPENSSL
+    ossl_ecdh = ECDH_get_default_method();
+    ossl_ecdsa = ECDSA_get_default_method();
+
+    ibmca_ecdh = ECDH_METHOD_new(NULL);
+    ibmca_ecdsa = ECDSA_METHOD_new(NULL);
+
+    ECDSA_METHOD_set_name(ibmca_ecdsa, "Ibmca ECDSA method");
+    ECDSA_METHOD_set_sign(ibmca_ecdsa, ibmca_older_ecdsa_do_sign);
+    ECDSA_METHOD_set_verify(ibmca_ecdsa, ibmca_older_ecdsa_do_verify);
+
+    ECDH_METHOD_set_name(ibmca_ecdh, "Ibmca ECDH method");
+    ECDH_METHOD_set_compute_key(ibmca_ecdh, ibmca_older_ecdh_compute_key);
+
+    if (!ENGINE_set_ECDH(e, ibmca_ecdh))
+        return 0;
+    if (!ENGINE_set_ECDSA(e, ibmca_ecdsa))
+        return 0;
+ #else
+    ossl_ec = EC_KEY_get_default_method();
+
+    ibmca_ec = EC_KEY_METHOD_new(ibmca_ec);
+    EC_KEY_METHOD_set_keygen(ibmca_ec, ibmca_ec_key_gen);
+    EC_KEY_METHOD_set_compute_key(ibmca_ec, ibmca_ecdh_compute_key);
+    EC_KEY_METHOD_set_sign(ibmca_ec, ibmca_ecdsa_sign, ECDSA_sign_setup,
+                           ibmca_ecdsa_sign_sig);
+    EC_KEY_METHOD_set_verify(ibmca_ec, ibmca_ecdsa_verify,
+                             ibmca_ecdsa_verify_sig);
+
+    if (!ENGINE_set_EC(e, ibmca_ec))
+        return 0;
+ #endif
+
+    ec_enabled = 1;
+
+    return 1;
+}
+#endif
+
 /*
  * dig_nid_cnt and ciph_nid_cnt count the number of enabled crypt mechanims.
  * dig_nid_cnt and ciph_nid_cnt needs to be pointer, because only
@@ -324,6 +388,9 @@ inline static int set_RSA_prop(ENGINE *e)
 inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
                                   int *ciph_nid_cnt)
 {
+    static int ec_kgen_switch, ec_dh_switch, ec_dsa_sign_switch,
+               ec_dsa_verify_switch;
+
     switch (algo_id) {
     case P_RNG:
         if (!ENGINE_set_RAND(e, &ibmca_rand))
@@ -446,9 +513,31 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
             ibmca_aes_256_gcm();
         break;
 #endif
+#ifndef OPENSSL_NO_EC
+    case EC_KGEN:
+        ec_kgen_switch = 1;
+        break;
+    case EC_DH:
+        ec_dh_switch = 1;
+        break;
+    case EC_DSA_SIGN:
+        ec_dsa_sign_switch = 1;
+        break;
+    case EC_DSA_VERIFY:
+        ec_dsa_verify_switch = 1;
+        break;
+#endif
     default:
         break;                  /* do nothing */
     }
+
+#ifndef OPENSSL_NO_EC
+    if (ec_kgen_switch && ec_dh_switch && ec_dsa_sign_switch
+        && ec_dsa_verify_switch) {
+        if (!set_EC_prop(e))
+            return 0;
+    }
+#endif
 
     size_cipher_list = *ciph_nid_cnt;
     size_digest_list = *dig_nid_cnt;
@@ -592,6 +681,17 @@ static int ibmca_init(ENGINE *e)
         || !BIND(ibmca_dso, ica_aes_gcm_intermediate)
         || !BIND(ibmca_dso, ica_aes_gcm_last)
 #endif
+#ifndef OPENSSL_NO_EC
+	|| !BIND(ibmca_dso, ica_ec_key_new)
+	|| !BIND(ibmca_dso, ica_ec_key_init)
+	|| !BIND(ibmca_dso, ica_ec_key_generate)
+	|| !BIND(ibmca_dso, ica_ecdh_derive_secret)
+	|| !BIND(ibmca_dso, ica_ecdsa_sign)
+	|| !BIND(ibmca_dso, ica_ecdsa_verify)
+	|| !BIND(ibmca_dso, ica_ec_key_get_public_key)
+	|| !BIND(ibmca_dso, ica_ec_key_get_private_key)
+	|| !BIND(ibmca_dso, ica_ec_key_free)
+#endif
         ) {
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
         DEBUG_PRINTF("%s: function bind failed\n", __func__);
@@ -641,6 +741,17 @@ err:
     p_ica_aes_gcm_initialize = NULL;
     p_ica_aes_gcm_intermediate = NULL;
     p_ica_aes_gcm_last = NULL;
+#endif
+#ifndef OPENSSL_NO_EC
+    p_ica_ec_key_new = NULL;
+    p_ica_ec_key_init = NULL;
+    p_ica_ec_key_generate = NULL;
+    p_ica_ecdh_derive_secret = NULL;
+    p_ica_ecdsa_sign = NULL;
+    p_ica_ecdsa_verify = NULL;
+    p_ica_ec_key_get_public_key = NULL;
+    p_ica_ec_key_get_private_key = NULL;
+    p_ica_ec_key_free = NULL;
 #endif
 
     return 0;
