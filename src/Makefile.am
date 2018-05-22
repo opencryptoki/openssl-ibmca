@@ -8,7 +8,9 @@ ibmca_la_SOURCES=e_ibmca.c \
 				 ibmca_digest.c \
 				 ibmca_rsa.c \
 				 ibmca_dsa.c \
-				 ibmca_dh.c
+				 ibmca_dh.c \
+				 ibmca_ec.c
+
 ibmca_la_LIBADD=-ldl
 ibmca_la_LDFLAGS=-module -version-info ${VERSION} -shared -no-undefined \
 				 -Wl,--version-script=${srcdir}/../ibmca.map
