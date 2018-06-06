@@ -47,6 +47,14 @@
 
 #define AP_PATH "/sys/devices/ap"
 
+/*
+ * It would be good to disable libica's software-fallbacks for they may
+ * eventually lead to infinite looping (libcrypto->ibmca->libica->libcrypto).
+ * However, right now we cannot disable the fallbacks because they are still
+ * needed for rsa > 4k.
+ */
+#define DISABLE_SW_FALLBACKS	0
+
 static const char *LIBICA_NAME = "ica";
 
 /* Constants used when creating the ENGINE */
@@ -599,8 +607,10 @@ static int ibmca_init(ENGINE *e)
     }
 
     /* disable fallbacks on Libica */
+#if DISABLE_SW_FALLBACKS
     if (BIND(ibmca_dso, ica_set_fallback_mode))
         p_ica_set_fallback_mode(0);
+#endif
 
     if (!set_supported_meths(e))
         goto err;
