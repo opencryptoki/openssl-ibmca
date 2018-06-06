@@ -1,3 +1,11 @@
+* openssl-ibmca 2.0.0
+- Add ECC support.
+- Add check and distcheck make-targets.
+- Project cleanup, code was broken into multiple files and coding style cleanup.
+- Improvements to compat macros for openssl.
+- Don't disable libica sw fallbacks.
+- Fix dlclose logic.
+
 * openssl-ibmca 1.4.1
 - Fix structure size for aes-256-ecb/cbc/cfb/ofb
 - Update man page

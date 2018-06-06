@@ -8,14 +8,14 @@ cryptographic operations.
 
 The build requirements are:
  * openssl-devel >= 0.9.8
- * libica-devel >= 3.1.1
+ * libica-devel >= 3.3.0
  * autoconf
  * automake
  * libtool
 
 The runtime requirements are:
  * openssl >= 0.9.8
- * libica >= 3.1.1
+ * libica >= 3.3.0
 
 
 ## Installing
