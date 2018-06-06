@@ -1,7 +1,7 @@
 %global enginesdir %(pkg-config --variable=enginesdir libcrypto)
 
 Name:       openssl-ibmca
-Version:    1.4.1
+Version:    2.0.0
 Release:    1%{?dist}
 Summary:    An IBMCA OpenSSL dynamic engine
 
@@ -9,8 +9,8 @@ License:    ASL 2.0
 URL:        https://github.com/opencryptoki/openssl-ibmca
 Source0:    https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 
-Requires:       openssl >= 0.9.8 libica >= 3.1.1
-BuildRequires:  openssl-devel >= 0.9.8 libica-devel >= 3.1.1
+Requires:       openssl >= 0.9.8 libica >= 3.3.0
+BuildRequires:  openssl-devel >= 0.9.8 libica-devel >= 3.3.0
 BuildRequires:  autoconf automake libtool
 
 ExclusiveArch: s390 s390x
@@ -44,6 +44,10 @@ popd
 %{_mandir}/man5/ibmca.5*
 
 %changelog
+* Wed Jun 06 2018 Eduardo Barretto <ebarretto@linux.vnet.ibm.com> 2.0.0
+- Update Version
+- Update libica version required for building ibmca
+
 * Wed Feb 21 2018 Eduardo Barretto <ebarretto@linux.vnet.ibm.com> 1.4.1
 - Updated to 1.4.1
 
