@@ -397,6 +397,11 @@ RSA_METHOD *ibmca_rsa(void)
 done:
     return rsa_m;
 }
+
+void ibmca_rsa_destroy(void)
+{
+    RSA_meth_free(rsa_m);
+}
 #endif
 
 #endif                          /* endif OPENSSL_NO_RSA */

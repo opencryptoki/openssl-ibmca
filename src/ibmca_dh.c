@@ -76,6 +76,11 @@ DH_METHOD *ibmca_dh(void)
 done:
     return dh_m;
 }
+
+void ibmca_dh_destroy(void)
+{
+    DH_meth_free(dh_m);
+}
 #endif
 
 #endif                          /* end OPENSSL_NO_DH */
