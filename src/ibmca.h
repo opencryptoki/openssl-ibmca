@@ -255,6 +255,9 @@ int ibmca_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 /********************************* RSA stuff **********************************/
 #ifndef OPENSSL_NO_RSA
 RSA_METHOD *ibmca_rsa();
+#ifndef OLDER_OPENSSL
+void ibmca_rsa_destroy(void);
+#endif
 #endif
 
 extern ica_adapter_handle_t ibmca_handle;
@@ -264,6 +267,9 @@ extern ica_adapter_handle_t ibmca_handle;
 /********************************* DSA stuff **********************************/
 #ifndef OPENSSL_NO_DSA
 DSA_METHOD *ibmca_dsa();
+#ifndef OLDER_OPENSSL
+void ibmca_dsa_destroy(void);
+#endif
 #endif
 
 
@@ -271,6 +277,9 @@ DSA_METHOD *ibmca_dsa();
 /********************************** DH stuff **********************************/
 #ifndef OPENSSL_NO_DH
 DH_METHOD *ibmca_dh();
+#ifndef OLDER_OPENSSL
+void ibmca_dh_destroy(void);
+#endif
 #endif
 
 

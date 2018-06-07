@@ -126,5 +126,10 @@ DSA_METHOD *ibmca_dsa(void)
 done:
     return dsa_m;
 }
+
+void ibmca_dsa_destroy(void)
+{
+    DSA_meth_free(dsa_m);
+}
 #endif
 #endif                          /* endif OPENSSL_NO_DSA */

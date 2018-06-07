@@ -236,10 +236,20 @@ static int ibmca_destroy(ENGINE *e)
 #ifndef OPENSSL_NO_SHA512
     ibmca_sha512_destroy();
 #endif
-#ifndef NO_EC
-    ibmca_ec_destroy();
+#ifndef OPENSSL_NO_RSA
+    ibmca_rsa_destroy();
+#endif
+#ifndef OPENSSL_NO_DSA
+    ibmca_dsa_destroy();
+#endif
+#ifndef OPENSSL_NO_DH
+    ibmca_dh_destroy();
 #endif
 
+#endif /* !OLDER_OPENSSL */
+
+#ifndef NO_EC
+    ibmca_ec_destroy();
 #endif
     ERR_unload_IBMCA_strings();
 
