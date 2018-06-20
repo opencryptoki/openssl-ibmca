@@ -68,7 +68,7 @@ static const char *engine_ibmca_name = "Ibmca hardware engine support";
  * implicitly. */
 void *ibmca_dso = NULL;
 
-ica_adapter_handle_t ibmca_handle = 0;
+ica_adapter_handle_t ibmca_handle = DRIVER_NOT_LOADED;
 
 /* entry points into libica, filled out at DSO load time */
 ica_get_functionlist_t          p_ica_get_functionlist;
@@ -259,8 +259,6 @@ static int ibmca_destroy(ENGINE *e)
 #ifndef NO_EC
     ibmca_ec_destroy();
 #endif
-    ERR_unload_IBMCA_strings();
-
     return 1;
 }
 
@@ -626,45 +624,17 @@ out:
     return rc;
 }
 
-/* utility function to obtain a context */
-static int get_context(ica_adapter_handle_t *p_handle)
-{
-    unsigned int status = 0;
-
-    status = p_ica_open_adapter(p_handle);
-    if (status != 0)
-        return 0;
-
-    return 1;
-}
-
-/* similarly to release one. */
-static void release_context(ica_adapter_handle_t i_handle)
-{
-    p_ica_close_adapter(i_handle);
-}
-
-/* initialisation functions. */
-#define BIND(dso, sym)	(p_##sym = (sym##_t)dlsym(dso, #sym))
-static int ibmca_init(ENGINE *e)
+__attribute__((constructor))
+static void ibmca_constructor(void)
 {
     static int init = 0;
 
-    if (init)                   /* Engine already loaded. */
-        return 1;
-    init++;
-
     DEBUG_PRINTF(">%s\n", __func__);
 
-    /* Attempt to load libica.so. Needs to be
-     * changed unfortunately because the Ibmca drivers don't have
-     * standard library names that can be platform-translated well. */
-    /* TODO: Work out how to actually map to the names the Ibmca
-     * drivers really use - for now a symbollic link needs to be
-     * created on the host system from libica.so to ica.so on
-     * unix variants. */
+    if (init)
+        return;
 
-    /* WJH XXX check name translation */
+    ERR_load_IBMCA_strings();
 
     ibmca_dso = dlopen(LIBICA_SHARED_LIB, RTLD_NOW);
     if (ibmca_dso == NULL) {
@@ -673,75 +643,89 @@ static int ibmca_init(ENGINE *e)
         goto err;
     }
 
+#define BIND(dso, sym)	(p_##sym = (sym##_t)dlsym(dso, #sym))
+
     if (!BIND(ibmca_dso, ica_open_adapter)
         || !BIND(ibmca_dso, ica_close_adapter)
-        || !BIND(ibmca_dso, ica_rsa_mod_expo)
-        || !BIND(ibmca_dso, ica_rsa_crt)
-        || !BIND(ibmca_dso, ica_random_number_generate)
-        || !BIND(ibmca_dso, ica_sha1)
-        || !BIND(ibmca_dso, ica_sha256)
-        || !BIND(ibmca_dso, ica_sha512)
-        || !BIND(ibmca_dso, ica_aes_ecb)
-        || !BIND(ibmca_dso, ica_des_ecb)
-        || !BIND(ibmca_dso, ica_3des_ecb)
-        || !BIND(ibmca_dso, ica_aes_cbc)
-        || !BIND(ibmca_dso, ica_des_cbc)
-        || !BIND(ibmca_dso, ica_3des_cbc)
-        || !BIND(ibmca_dso, ica_aes_ofb)
-        || !BIND(ibmca_dso, ica_des_ofb)
-        || !BIND(ibmca_dso, ica_3des_ofb)
-        || !BIND(ibmca_dso, ica_aes_cfb)
-        || !BIND(ibmca_dso, ica_des_cfb)
-        || !BIND(ibmca_dso, ica_3des_cfb)
-        || !BIND(ibmca_dso, ica_get_functionlist)
-#ifndef OPENSSL_NO_AES_GCM
-        || !BIND(ibmca_dso, ica_aes_gcm_initialize)
-        || !BIND(ibmca_dso, ica_aes_gcm_intermediate)
-        || !BIND(ibmca_dso, ica_aes_gcm_last)
-#endif
-#ifndef OPENSSL_NO_EC
-	|| !BIND(ibmca_dso, ica_ec_key_new)
-	|| !BIND(ibmca_dso, ica_ec_key_init)
-	|| !BIND(ibmca_dso, ica_ec_key_generate)
-	|| !BIND(ibmca_dso, ica_ecdh_derive_secret)
-	|| !BIND(ibmca_dso, ica_ecdsa_sign)
-	|| !BIND(ibmca_dso, ica_ecdsa_verify)
-	|| !BIND(ibmca_dso, ica_ec_key_get_public_key)
-	|| !BIND(ibmca_dso, ica_ec_key_get_private_key)
-	|| !BIND(ibmca_dso, ica_ec_key_free)
-#endif
-        ) {
+        || !BIND(ibmca_dso, ica_get_functionlist)) {
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
         DEBUG_PRINTF("%s: function bind failed\n", __func__);
         goto err;
     }
-
-    /* disable fallbacks on Libica */
+    BIND(ibmca_dso, ica_rsa_mod_expo);
+    BIND(ibmca_dso, ica_rsa_crt);
+    BIND(ibmca_dso, ica_random_number_generate);
+    BIND(ibmca_dso, ica_sha1);
+    BIND(ibmca_dso, ica_sha256);
+    BIND(ibmca_dso, ica_sha512);
+    BIND(ibmca_dso, ica_aes_ecb);
+    BIND(ibmca_dso, ica_des_ecb);
+    BIND(ibmca_dso, ica_3des_ecb);
+    BIND(ibmca_dso, ica_aes_cbc);
+    BIND(ibmca_dso, ica_des_cbc);
+    BIND(ibmca_dso, ica_3des_cbc);
+    BIND(ibmca_dso, ica_aes_ofb);
+    BIND(ibmca_dso, ica_des_ofb);
+    BIND(ibmca_dso, ica_3des_ofb);
+    BIND(ibmca_dso, ica_aes_cfb);
+    BIND(ibmca_dso, ica_des_cfb);
+    BIND(ibmca_dso, ica_3des_cfb);
+#ifndef OPENSSL_NO_AES_GCM
+    BIND(ibmca_dso, ica_aes_gcm_initialize);
+    BIND(ibmca_dso, ica_aes_gcm_intermediate);
+    BIND(ibmca_dso, ica_aes_gcm_last);
+#endif
+#ifndef OPENSSL_NO_EC
+    BIND(ibmca_dso, ica_ec_key_new);
+    BIND(ibmca_dso, ica_ec_key_init);
+    BIND(ibmca_dso, ica_ec_key_generate);
+    BIND(ibmca_dso, ica_ecdh_derive_secret);
+    BIND(ibmca_dso, ica_ecdsa_sign);
+    BIND(ibmca_dso, ica_ecdsa_verify);
+    BIND(ibmca_dso, ica_ec_key_get_public_key);
+    BIND(ibmca_dso, ica_ec_key_get_private_key);
+    BIND(ibmca_dso, ica_ec_key_free);
+#endif
 #if DISABLE_SW_FALLBACKS
+    /* disable fallbacks on Libica */
     if (BIND(ibmca_dso, ica_set_fallback_mode))
         p_ica_set_fallback_mode(0);
 #endif
 
-    if (!set_supported_meths(e))
-        goto err;
-
-    if (!get_context(&ibmca_handle)) {
+    if (p_ica_open_adapter(&ibmca_handle)) {
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_UNIT_FAILURE);
         goto err;
     }
 
     DEBUG_PRINTF("<%s success\n", __func__);
-    return 1;
+    return;
+
 err:
-    if (ibmca_dso) {
+    DEBUG_PRINTF("<%s failure\n", __func__);
+
+    if (ibmca_dso)
         dlclose(ibmca_dso);
-        ibmca_dso = NULL;
-    }
+
+    ibmca_dso = NULL;
+
     p_ica_open_adapter = NULL;
     p_ica_close_adapter = NULL;
+
     p_ica_rsa_mod_expo = NULL;
-    p_ica_random_number_generate = NULL;
     p_ica_rsa_crt = NULL;
+#ifndef OPENSSL_NO_EC
+    p_ica_ec_key_new = NULL;
+    p_ica_ec_key_init = NULL;
+    p_ica_ec_key_generate = NULL;
+    p_ica_ecdh_derive_secret = NULL;
+    p_ica_ecdsa_sign = NULL;
+    p_ica_ecdsa_verify = NULL;
+    p_ica_ec_key_get_public_key = NULL;
+    p_ica_ec_key_get_private_key = NULL;
+    p_ica_ec_key_free = NULL;
+#endif
+
+    p_ica_random_number_generate = NULL;
     p_ica_sha1 = NULL;
     p_ica_sha256 = NULL;
     p_ica_sha512 = NULL;
@@ -762,34 +746,36 @@ err:
     p_ica_aes_gcm_intermediate = NULL;
     p_ica_aes_gcm_last = NULL;
 #endif
-#ifndef OPENSSL_NO_EC
-    p_ica_ec_key_new = NULL;
-    p_ica_ec_key_init = NULL;
-    p_ica_ec_key_generate = NULL;
-    p_ica_ecdh_derive_secret = NULL;
-    p_ica_ecdsa_sign = NULL;
-    p_ica_ecdsa_verify = NULL;
-    p_ica_ec_key_get_public_key = NULL;
-    p_ica_ec_key_get_private_key = NULL;
-    p_ica_ec_key_free = NULL;
-#endif
+}
 
-    return 0;
+__attribute__((destructor))
+static void ibmca_destructor(void)
+{
+    ERR_unload_IBMCA_strings();
+
+    if (ibmca_dso == NULL) {
+        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_NOT_LOADED);
+        return;
+    }
+
+    if (dlclose(ibmca_dso)) {
+        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
+        return;
+    }
+
+    p_ica_close_adapter(ibmca_handle);
+}
+
+static int ibmca_init(ENGINE *e)
+{
+    if (ibmca_dso == NULL)
+        return 0;
+
+    return 1;
 }
 
 static int ibmca_finish(ENGINE *e)
 {
-    if (ibmca_dso == NULL) {
-        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_NOT_LOADED);
-        return 0;
-    }
-    release_context(ibmca_handle);
-    if (dlclose(ibmca_dso)) {
-        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
-        return 0;
-    }
-    ibmca_dso = NULL;
-
     return 1;
 }
 
@@ -831,10 +817,11 @@ static int bind_helper(ENGINE *e)
         !ENGINE_set_cmd_defns(e, ibmca_cmd_defns))
         return 0;
 
-    /* Ensure the ibmca error handling is set up */
-    ERR_load_IBMCA_strings();
-    /* initialize the engine implizit */
-    ibmca_init(e);
+    if (ibmca_dso == NULL)
+        return 0;
+
+    if (!set_supported_meths(e))
+        return 0;
 
     return 1;
 }
