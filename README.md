@@ -16,6 +16,7 @@ The build requirements are:
 The runtime requirements are:
  * openssl >= 0.9.8
  * libica >= 3.3.0
+ * ECC via shared CEX4C adapter under z/VM 6.4 requires APAR VM65942
 
 
 ## Installing
