@@ -1,3 +1,6 @@
+* openssl-ibmca 2.0.1
+- Dont fail when a libica symbol cannot be resolved.
+
 * openssl-ibmca 2.0.0
 - Add ECC support.
 - Add check and distcheck make-targets.
