@@ -43,7 +43,7 @@
 #ifndef OPENSSL_NO_HW_IBMCA
 
 #define IBMCA_LIB_NAME "ibmca engine"
-#define LIBICA_SHARED_LIB "libica.so"
+#define LIBICA_SHARED_LIB "libica.so.3"
 
 #define AP_PATH "/sys/devices/ap"
 
