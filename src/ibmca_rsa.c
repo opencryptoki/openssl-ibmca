@@ -309,7 +309,7 @@ static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
     RSA_get0_key(rsa, &n, NULL, &d);
     RSA_get0_factors(rsa, &p, &q);
     RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
-    if (!p || !q || !dmp1 || !dmq1 || iqmp) {
+    if (!p || !q || !dmp1 || !dmq1 || !iqmp) {
         if (!d || !n) {
             IBMCAerr(IBMCA_F_IBMCA_RSA_MOD_EXP, IBMCA_R_MISSING_KEY_COMPONENTS);
             goto err;
