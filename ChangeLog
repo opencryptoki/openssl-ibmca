@@ -1,3 +1,6 @@
+* openssl-ibmca 2.0.2
+- Fix doing rsa-me, altough rsa-crt would be possible.
+
 * openssl-ibmca 2.0.1
 - Dont fail when a libica symbol cannot be resolved.
 
