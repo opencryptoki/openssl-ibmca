@@ -231,22 +231,22 @@ void ibmca_tdes_##mode##_destroy(void)                                  \
 #endif
 
 DECLARE_TDES_EVP(ecb, sizeof(ica_des_vector_t), sizeof(ica_des_key_triple_t),
-                 sizeof(ica_des_vector_t), EVP_CIPH_ECB_MODE,
+                 sizeof(ica_des_vector_t), EVP_CIPH_ECB_MODE | EVP_CIPH_FLAG_FIPS,
                  sizeof(struct ibmca_des_context), ibmca_init_key,
                  ibmca_3des_cipher, ibmca_cipher_cleanup,
                  EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv)
 DECLARE_TDES_EVP(cbc, sizeof(ica_des_vector_t), sizeof(ica_des_key_triple_t),
-                 sizeof(ica_des_vector_t), EVP_CIPH_CBC_MODE,
+                 sizeof(ica_des_vector_t), EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_FIPS,
                  sizeof(struct ibmca_des_context), ibmca_init_key,
                  ibmca_3des_cipher, ibmca_cipher_cleanup,
                  EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv)
 DECLARE_TDES_EVP(ofb, 1, sizeof(ica_des_key_triple_t),
-                 sizeof(ica_des_vector_t), EVP_CIPH_OFB_MODE,
+                 sizeof(ica_des_vector_t), EVP_CIPH_OFB_MODE | EVP_CIPH_FLAG_FIPS,
                  sizeof(struct ibmca_des_context), ibmca_init_key,
                  ibmca_3des_cipher, ibmca_cipher_cleanup,
                  EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv)
 DECLARE_TDES_EVP(cfb, 1, sizeof(ica_des_key_triple_t),
-                 sizeof(ica_des_vector_t), EVP_CIPH_CFB_MODE,
+                 sizeof(ica_des_vector_t), EVP_CIPH_CFB_MODE | EVP_CIPH_FLAG_FIPS,
                  sizeof(struct ibmca_des_context), ibmca_init_key,
                  ibmca_3des_cipher, ibmca_cipher_cleanup,
                  EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv)
@@ -716,21 +716,21 @@ void ibmca_aes_##kbits##_##mode##_destroy(void)                         \
 
 DECLARE_AES_EVP(128, ecb, sizeof(ica_aes_vector_t),
                 sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
-                EVP_CIPH_ECB_MODE, sizeof(ICA_AES_128_CTX),
+                EVP_CIPH_ECB_MODE | EVP_CIPH_FLAG_FIPS, sizeof(ICA_AES_128_CTX),
                 ibmca_init_key, ibmca_aes_128_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(128, cbc, sizeof(ica_aes_vector_t),
                 sizeof(ica_aes_key_len_128_t), sizeof(ica_aes_vector_t),
-                EVP_CIPH_CBC_MODE, sizeof(ICA_AES_128_CTX),
+                EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_FIPS, sizeof(ICA_AES_128_CTX),
                 ibmca_init_key, ibmca_aes_128_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(128, ofb, 1, sizeof(ica_aes_key_len_128_t),
-                sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
+                sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE | EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_128_CTX), ibmca_init_key,
                 ibmca_aes_128_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(128, cfb, 1, sizeof(ica_aes_key_len_128_t),
-                sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
+                sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE | EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_128_CTX), ibmca_init_key,
                 ibmca_aes_128_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
@@ -740,7 +740,8 @@ DECLARE_AES_EVP(128, gcm, 1, sizeof(ica_aes_key_len_128_t),
                 EVP_CIPH_GCM_MODE | EVP_CIPH_FLAG_DEFAULT_ASN1
                 | EVP_CIPH_CUSTOM_IV | EVP_CIPH_FLAG_CUSTOM_CIPHER
                 | EVP_CIPH_ALWAYS_CALL_INIT | EVP_CIPH_CTRL_INIT
-                | EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_AEAD_CIPHER,
+                | EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_AEAD_CIPHER
+		| EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_GCM_CTX),
                 ibmca_aes_gcm_init_key, ibmca_aes_gcm_cipher, NULL, NULL,
                 NULL, ibmca_aes_gcm_ctrl)
@@ -748,21 +749,21 @@ DECLARE_AES_EVP(128, gcm, 1, sizeof(ica_aes_key_len_128_t),
 
 DECLARE_AES_EVP(192, ecb, sizeof(ica_aes_vector_t),
                 sizeof(ica_aes_key_len_192_t), sizeof(ica_aes_vector_t),
-                EVP_CIPH_ECB_MODE, sizeof(ICA_AES_192_CTX),
+                EVP_CIPH_ECB_MODE | EVP_CIPH_FLAG_FIPS, sizeof(ICA_AES_192_CTX),
                 ibmca_init_key, ibmca_aes_192_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(192, cbc, sizeof(ica_aes_vector_t),
                 sizeof(ica_aes_key_len_192_t), sizeof(ica_aes_vector_t),
-                EVP_CIPH_CBC_MODE, sizeof(ICA_AES_192_CTX),
+                EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_FIPS, sizeof(ICA_AES_192_CTX),
                 ibmca_init_key, ibmca_aes_192_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(192, ofb, 1, sizeof(ica_aes_key_len_192_t),
-                sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
+                sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE | EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_192_CTX), ibmca_init_key,
                 ibmca_aes_192_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(192, cfb, 1, sizeof(ica_aes_key_len_192_t),
-                sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
+                sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE | EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_192_CTX), ibmca_init_key,
                 ibmca_aes_192_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
@@ -772,7 +773,8 @@ DECLARE_AES_EVP(192, gcm, 1, sizeof(ica_aes_key_len_192_t),
                 EVP_CIPH_GCM_MODE | EVP_CIPH_FLAG_DEFAULT_ASN1
                 | EVP_CIPH_CUSTOM_IV | EVP_CIPH_FLAG_CUSTOM_CIPHER
                 | EVP_CIPH_ALWAYS_CALL_INIT | EVP_CIPH_CTRL_INIT
-                | EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_AEAD_CIPHER,
+                | EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_AEAD_CIPHER
+		| EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_GCM_CTX),
                 ibmca_aes_gcm_init_key, ibmca_aes_gcm_cipher, NULL, NULL,
                 NULL, ibmca_aes_gcm_ctrl)
@@ -780,21 +782,21 @@ DECLARE_AES_EVP(192, gcm, 1, sizeof(ica_aes_key_len_192_t),
 
 DECLARE_AES_EVP(256, ecb, sizeof(ica_aes_vector_t),
                 sizeof(ica_aes_key_len_256_t), sizeof(ica_aes_vector_t),
-                EVP_CIPH_ECB_MODE, sizeof(ICA_AES_256_CTX),
+                EVP_CIPH_ECB_MODE | EVP_CIPH_FLAG_FIPS, sizeof(ICA_AES_256_CTX),
                 ibmca_init_key, ibmca_aes_256_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(256, cbc, sizeof(ica_aes_vector_t),
                 sizeof(ica_aes_key_len_256_t), sizeof(ica_aes_vector_t),
-                EVP_CIPH_CBC_MODE, sizeof(ICA_AES_256_CTX),
+                EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_FIPS, sizeof(ICA_AES_256_CTX),
                 ibmca_init_key, ibmca_aes_256_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(256, ofb, 1, sizeof(ica_aes_key_len_256_t),
-                sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE,
+                sizeof(ica_aes_vector_t), EVP_CIPH_OFB_MODE | EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_256_CTX), ibmca_init_key,
                 ibmca_aes_256_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
 DECLARE_AES_EVP(256, cfb, 1, sizeof(ica_aes_key_len_256_t),
-                sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE,
+                sizeof(ica_aes_vector_t), EVP_CIPH_CFB_MODE | EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_256_CTX), ibmca_init_key,
                 ibmca_aes_256_cipher, ibmca_cipher_cleanup,
                 EVP_CIPHER_set_asn1_iv, EVP_CIPHER_get_asn1_iv, NULL)
@@ -804,7 +806,8 @@ DECLARE_AES_EVP(256, gcm, 1, sizeof(ica_aes_key_len_256_t),
                 EVP_CIPH_GCM_MODE | EVP_CIPH_FLAG_DEFAULT_ASN1
                 | EVP_CIPH_CUSTOM_IV | EVP_CIPH_FLAG_CUSTOM_CIPHER
                 | EVP_CIPH_ALWAYS_CALL_INIT | EVP_CIPH_CTRL_INIT
-                | EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_AEAD_CIPHER,
+                | EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_AEAD_CIPHER
+		| EVP_CIPH_FLAG_FIPS,
                 sizeof(ICA_AES_GCM_CTX),
                 ibmca_aes_gcm_init_key, ibmca_aes_gcm_cipher, NULL, NULL,
                 NULL, ibmca_aes_gcm_ctrl)

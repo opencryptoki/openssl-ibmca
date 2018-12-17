@@ -342,7 +342,7 @@ static RSA_METHOD rsa_m = {
     ibmca_mod_exp_mont,         /* bn_mod_exp */
     ibmca_rsa_init,             /* init */
     NULL,                       /* finish */
-    0,                          /* flags */
+    RSA_FLAG_FIPS_METHOD,       /* flags */
     NULL,                       /* app_data */
     NULL,                       /* rsa_sign */
     NULL,                       /* rsa_verify */
@@ -386,7 +386,8 @@ RSA_METHOD *ibmca_rsa(void)
         || !RSA_meth_set_priv_dec(method, RSA_meth_get_priv_dec(meth1))
         || !RSA_meth_set_mod_exp(method, ibmca_rsa_mod_exp)
         || !RSA_meth_set_bn_mod_exp(method, ibmca_mod_exp_mont)
-        || !RSA_meth_set_init(method, ibmca_rsa_init)) {
+        || !RSA_meth_set_init(method, ibmca_rsa_init)
+        || !RSA_meth_set_flags(method, RSA_FLAG_FIPS_METHOD)) {
         RSA_meth_free(method);
         method = NULL;
         meth1 = NULL;
