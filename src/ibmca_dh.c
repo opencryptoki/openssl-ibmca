@@ -37,7 +37,7 @@ static DH_METHOD dh_m = {
     ibmca_mod_exp_dh,           /* bn_mod_exp */
     NULL,                       /* init */
     NULL,                       /* finish */
-    0,                          /* flags */
+    DH_FLAG_FIPS_METHOD,        /* flags */
     NULL                        /* app_data */
 };
 
@@ -65,7 +65,8 @@ DH_METHOD *ibmca_dh(void)
         || (meth1 = DH_OpenSSL()) == NULL
         || !DH_meth_set_generate_key(method, DH_meth_get_generate_key(meth1))
         || !DH_meth_set_compute_key(method, DH_meth_get_compute_key(meth1))
-        || !DH_meth_set_bn_mod_exp(method, ibmca_mod_exp_dh)) {
+        || !DH_meth_set_bn_mod_exp(method, ibmca_mod_exp_dh)
+        || !DH_meth_set_flags(method, DH_FLAG_FIPS_METHOD)) {
         DH_meth_free(method);
         method = NULL;
         meth1 = NULL;

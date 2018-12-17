@@ -84,7 +84,7 @@ static DSA_METHOD dsa_m = {
     ibmca_mod_exp_dsa,          /* bn_mod_exp */
     NULL,                       /* init */
     NULL,                       /* finish */
-    0,                          /* flags */
+    DSA_FLAG_FIPS_METHOD,       /* flags */
     NULL                        /* app_data */
 };
 
@@ -115,7 +115,8 @@ DSA_METHOD *ibmca_dsa(void)
         || !DSA_meth_set_sign_setup(method, DSA_meth_get_sign_setup(meth1))
         || !DSA_meth_set_verify(method, DSA_meth_get_verify(meth1))
         || !DSA_meth_set_mod_exp(method, ibmca_dsa_mod_exp)
-        || !DSA_meth_set_bn_mod_exp(method, ibmca_mod_exp_dsa)) {
+        || !DSA_meth_set_bn_mod_exp(method, ibmca_mod_exp_dsa)
+        || !DSA_meth_set_flags(method, DSA_FLAG_FIPS_METHOD)) {
         DSA_meth_free(method);
         method = NULL;
         meth1 = NULL;

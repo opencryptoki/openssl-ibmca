@@ -365,9 +365,11 @@ inline static int set_EC_prop(ENGINE *e)
     ECDSA_METHOD_set_name(ibmca_ecdsa, "Ibmca ECDSA method");
     ECDSA_METHOD_set_sign(ibmca_ecdsa, ibmca_older_ecdsa_do_sign);
     ECDSA_METHOD_set_verify(ibmca_ecdsa, ibmca_older_ecdsa_do_verify);
+    ECDSA_METHOD_set_flags(ibmca_ecdsa, ECDSA_FLAG_FIPS_METHOD);
 
     ECDH_METHOD_set_name(ibmca_ecdh, "Ibmca ECDH method");
     ECDH_METHOD_set_compute_key(ibmca_ecdh, ibmca_older_ecdh_compute_key);
+    ECDH_METHOD_set_flags(ibmca_ecdh, ECDH_FLAG_FIPS_METHOD);
 
     if (!ENGINE_set_ECDH(e, ibmca_ecdh))
         return 0;
