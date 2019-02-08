@@ -38,38 +38,11 @@ $ ./configure --prefix=/usr --libdir=/usr/lib64/openssl/engines
 
 ## Enabling IBMCA
 
-Included in this package there is a sample `openssl.cnf` file
-(`openssl.cnf.sample`), which can be used to turn on use of the IBMCA engine in
-apps where OpenSSL config support is compiled in.
+Apps with compiled-in OpenSSL config support can enable the engine via
+an OpenSSL configuration file. Refer to config(5). A sample OpenSSL
+configuration file (`openssl.cnf.sample`) is included in this package.
 
-In order to enable IBMCA, use the following instructions to apply the
-configurations from `openssl.cnf.sample` to the `openssl.cnf` file installed
-in the host by the OpenSSL package. **WARNING:** you may want to save the
-original `openssl.cnf` file before changing it.
-
-In `openssl.cnf.sample`, the *dynamic_path* variable is set to the default
-location, which is `/usr/local/lib/ibmca.so` by default. However, if the
-ibmca.so library has been installed anywhere else, then update the
-*dynamic_path* variable.
-
-Locate where the `openssl.cnf` file has been installed in the host and append
-the content of the `openssl.cnf.sample` file to it.
-
-```
-$ rpm -ql openssl | grep openssl.cnf
-$ cat openssl.cnf.sample >> /path/to/openssl.cnf
-```
-
-In `openssl.cnf` file, move the *openssl_conf* variable from the bottom to the
-top of the file, such as in the example below:
-
-```
-HOME = .
-RANDFILE = $ENV::HOME/.rnd
-openssl_conf = openssl_def
-```
-
-Finally, check if the IBMCA is now enabled. The command below should return the
+If the engine is configured properly, the command below should return the
 IBMCA engine and all the supported cryptographic methods.
 
 ```
