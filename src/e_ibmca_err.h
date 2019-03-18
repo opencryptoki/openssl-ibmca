@@ -20,7 +20,6 @@
 
 /* BEGIN ERROR CODES */
 void ERR_load_IBMCA_strings(void);
-void ERR_unload_IBMCA_strings(void);
 void ERR_IBMCA_error(int function, int reason, char *file, int line);
 #define IBMCAerr(f,r) ERR_IBMCA_error((f),(r),__FILE__,__LINE__)
 

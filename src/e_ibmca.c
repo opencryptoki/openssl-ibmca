@@ -635,6 +635,7 @@ static void ibmca_constructor(void)
 
     if (init)
         return;
+    init = 1;
 
     ERR_load_IBMCA_strings();
 
@@ -753,8 +754,6 @@ err:
 __attribute__((destructor))
 static void ibmca_destructor(void)
 {
-    ERR_unload_IBMCA_strings();
-
     if (ibmca_dso == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_NOT_LOADED);
         return;

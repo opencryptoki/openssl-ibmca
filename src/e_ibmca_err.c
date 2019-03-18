@@ -92,42 +92,26 @@ static ERR_STRING_DATA IBMCA_lib_name[] = {
 };
 #endif
 
-
 static int IBMCA_lib_error_code = 0;
-static int IBMCA_error_init = 1;
+static int IBMCA_error_init = 0;
 
 void ERR_load_IBMCA_strings(void)
 {
-    if (IBMCA_lib_error_code == 0)
-        IBMCA_lib_error_code = ERR_get_next_error_library();
+    if (IBMCA_error_init)
+        return;
+    IBMCA_error_init = 1;
 
-    if (IBMCA_error_init) {
-        IBMCA_error_init = 0;
+    IBMCA_lib_error_code = ERR_get_next_error_library();
+
 #ifndef OPENSSL_NO_ERR
-        ERR_load_strings(IBMCA_lib_error_code, IBMCA_str_functs);
-        ERR_load_strings(IBMCA_lib_error_code, IBMCA_str_reasons);
+    ERR_load_strings(IBMCA_lib_error_code, IBMCA_str_functs);
+    ERR_load_strings(IBMCA_lib_error_code, IBMCA_str_reasons);
 #endif
 
 #ifdef IBMCA_LIB_NAME
-        IBMCA_lib_name->error = ERR_PACK(IBMCA_lib_error_code, 0, 0);
-        ERR_load_strings(0, IBMCA_lib_name);
+    IBMCA_lib_name->error = ERR_PACK(lib_error_code, 0, 0);
+    ERR_load_strings(0, IBMCA_lib_name);
 #endif
-    }
-}
-
-void ERR_unload_IBMCA_strings(void)
-{
-    if (IBMCA_error_init == 0) {
-#ifndef OPENSSL_NO_ERR
-        ERR_unload_strings(IBMCA_lib_error_code, IBMCA_str_functs);
-        ERR_unload_strings(IBMCA_lib_error_code, IBMCA_str_reasons);
-#endif
-
-#ifdef IBMCA_LIB_NAME
-        ERR_unload_strings(0, IBMCA_lib_name);
-#endif
-        IBMCA_error_init = 1;
-    }
 }
 
 void ERR_IBMCA_error(int function, int reason, char *file, int line)
