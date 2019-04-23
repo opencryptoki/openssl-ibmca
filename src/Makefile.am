@@ -12,7 +12,7 @@ ibmca_la_SOURCES=e_ibmca.c \
 				 ibmca_ec.c
 
 ibmca_la_LIBADD=-ldl
-ibmca_la_LDFLAGS=-module -version-info ${VERSION} -shared -no-undefined \
+ibmca_la_LDFLAGS=-module -version-number ${VERSION} -shared -no-undefined \
 		  -avoid-version -Wl,--version-script=${srcdir}/../ibmca.map
 
 dist_ibmca_la_SOURCES=ibmca.h e_ibmca_err.h
