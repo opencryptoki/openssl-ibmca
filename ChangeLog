@@ -1,3 +1,6 @@
+* openssl-ibmca 2.0.3
+- Add MSA9 CPACF support for ECDSA sign/verify
+
 * openssl-ibmca 2.0.2
 - Fix doing rsa-me, altough rsa-crt would be possible.
 
