@@ -1,4 +1,4 @@
-VERSION = 2:0:2
+VERSION = 2:0:3
 
 lib_LTLIBRARIES=ibmca.la
 
