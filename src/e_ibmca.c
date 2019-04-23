@@ -259,6 +259,8 @@ static int ibmca_destroy(ENGINE *e)
 #ifndef NO_EC
     ibmca_ec_destroy();
 #endif
+
+    ERR_unload_IBMCA_strings();
     return 1;
 }
 
@@ -641,8 +643,6 @@ static void ibmca_constructor(void)
     if (init)
         return;
 
-    ERR_load_IBMCA_strings();
-
     ibmca_dso = dlopen(LIBICA_SHARED_LIB, RTLD_NOW);
     if (ibmca_dso == NULL) {
         DEBUG_PRINTF("%s: dlopen(%s) failed\n", __func__, LIBICA_SHARED_LIB);
@@ -758,8 +758,6 @@ err:
 __attribute__((destructor))
 static void ibmca_destructor(void)
 {
-    ERR_unload_IBMCA_strings();
-
     if (ibmca_dso == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_NOT_LOADED);
         return;
@@ -815,6 +813,8 @@ static int ibmca_ctrl(ENGINE *e, int cmd, long i, void *p, void (*f) ())
  */
 static int bind_helper(ENGINE *e)
 {
+    ERR_load_IBMCA_strings();
+
     if (!ENGINE_set_id(e, engine_ibmca_id) ||
         !ENGINE_set_name(e, engine_ibmca_name) ||
         !ENGINE_set_destroy_function(e, ibmca_destroy) ||
