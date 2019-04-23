@@ -594,7 +594,8 @@ static int set_supported_meths(ENGINE *e)
          * If no crypto card is available, disable crypto algos that can
          * only operate on HW on card
          */
-        if ((f->flags & ICA_FLAG_DHW) && !card_loaded)
+        if ((f->flags & ICA_FLAG_DHW) && !card_loaded
+	    && !(f->flags & ICA_FLAG_SHW))
             continue;
         /* Check if this crypto algorithm is supported by ibmca */
         for (j = 0; ibmca_crypto_algos[j]; j++)
