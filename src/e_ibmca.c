@@ -264,65 +264,6 @@ static int ibmca_destroy(ENGINE *e)
     return 1;
 }
 
-int is_crypto_card_loaded()
-{
-    DIR *sysDir;
-    FILE *file;
-    char dev[PATH_MAX] = AP_PATH;
-    struct dirent *direntp;
-    char *type = NULL;
-    size_t size;
-    char c;
-
-    if ((sysDir = opendir(dev)) == NULL)
-        return 0;
-
-    while ((direntp = readdir(sysDir)) != NULL) {
-        if (strstr(direntp->d_name, "card") != 0) {
-            snprintf(dev, PATH_MAX, "%s/%s/type", AP_PATH, direntp->d_name);
-
-            if ((file = fopen(dev, "r")) == NULL) {
-                closedir(sysDir);
-                return 0;
-            }
-
-            if (getline(&type, &size, file) == -1) {
-                fclose(file);
-                closedir(sysDir);
-                return 0;
-            }
-
-            /* ignore \n
-             * looking for CEX??A and CEX??C
-             * Skip type CEX??P cards
-             */
-            if (type[strlen(type) - 2] == 'P') {
-                free(type);
-                type = NULL;
-                fclose(file);
-                continue;
-            }
-            free(type);
-            type = NULL;
-            fclose(file);
-
-            snprintf(dev, PATH_MAX, "%s/%s/online", AP_PATH, direntp->d_name);
-            if ((file = fopen(dev, "r")) == NULL) {
-                closedir(sysDir);
-                return 0;
-            }
-            if ((c = fgetc(file)) == '1') {
-                fclose(file);
-                return 1;
-            }
-            fclose(file);
-        }
-    }
-    closedir(sysDir);
-
-    return 0;
-}
-
 inline static int set_RSA_prop(ENGINE *e)
 {
     static int rsa_enabled = 0;
@@ -577,7 +518,6 @@ static int set_supported_meths(ENGINE *e)
     int rc = 0;
     int dig_nid_cnt = 0;
     int ciph_nid_cnt = 0;
-    int card_loaded;
 
     if (p_ica_get_functionlist(NULL, &mech_len))
         return 0;
@@ -589,20 +529,14 @@ static int set_supported_meths(ENGINE *e)
     if (p_ica_get_functionlist(pmech_list, &mech_len))
         goto out;
 
-    card_loaded = is_crypto_card_loaded();
-
     for (i = 0; i < mech_len; i++) {
+
         libica_func_list_element *f = &pmech_list[i];
+
         /* Disable crypto algorithm if not supported in hardware */
         if (!(f->flags & (ICA_FLAG_SHW | ICA_FLAG_DHW)))
             continue;
-        /*
-         * If no crypto card is available, disable crypto algos that can
-         * only operate on HW on card
-         */
-        if ((f->flags & ICA_FLAG_DHW) && !card_loaded
-	    && !(f->flags & ICA_FLAG_SHW))
-            continue;
+
         /* Check if this crypto algorithm is supported by ibmca */
         for (j = 0; ibmca_crypto_algos[j]; j++)
             if (ibmca_crypto_algos[j] == f->mech_mode_id)
