@@ -9,7 +9,8 @@ ibmca_la_SOURCES=e_ibmca.c \
 				 ibmca_rsa.c \
 				 ibmca_dsa.c \
 				 ibmca_dh.c \
-				 ibmca_ec.c
+				 ibmca_ec.c \
+				 ibmca_pkey.c
 
 ibmca_la_LIBADD=-ldl
 ibmca_la_LDFLAGS=-module -version-number ${VERSION} -shared -no-undefined \

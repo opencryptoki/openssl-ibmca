@@ -55,6 +55,8 @@ static ERR_STRING_DATA IBMCA_str_functs[] = {
     {ERR_PACK(0, IBMCA_F_ICA_ECDH_DERIVE_SECRET, 0), "ICA_ECDH_DERIVE_SECRET"},
     {ERR_PACK(0, IBMCA_F_ICA_ECDSA_SIGN, 0), "ICA_ECDSA_SIGN"},
     {ERR_PACK(0, IBMCA_F_ICA_ECDSA_VERIFY, 0), "ICA_ECDSA_VERIFY"},
+    {ERR_PACK(0, IBMCA_F_ICA_ECDSA_VERIFY, 0), "IBMCA_X25519_KEYGEN"},
+    {ERR_PACK(0, IBMCA_F_ICA_ECDSA_VERIFY, 0), "IBMCA_X25519_DERIVE"},
     {0, NULL}
 };
 
@@ -80,6 +82,9 @@ static ERR_STRING_DATA IBMCA_str_reasons[] = {
     {IBMCA_R_EC_INTERNAL_ERROR, "ec internal error"},
     {IBMCA_R_EC_ICA_EC_KEY_INIT, "ec ica ec key init"},
     {IBMCA_R_EC_CURVE_DOES_NOT_SUPPORT_SIGNING, "ec curve does not support signing"},
+    {IBMCA_R_PKEY_INTERNAL_ERROR, "internal error"},
+    {IBMCA_R_PKEY_KEYGEN_FAILED, "keygen failed"},
+    {IBMCA_R_PKEY_KEYS_NOT_SET, "keys not set"},
     {0, NULL}
 };
 

@@ -376,6 +376,15 @@ int ibmca_ecdsa_verify(int type, const unsigned char *dgst, int dgst_len,
  #endif
 #endif
 
+const EVP_PKEY_METHOD *ibmca_x25519(void);
+const EVP_PKEY_METHOD *ibmca_x448(void);
+const EVP_PKEY_METHOD *ibmca_ed25519(void);
+const EVP_PKEY_METHOD *ibmca_ed448(void);
+void ibmca_x25519_destroy(void);
+void ibmca_x448_destroy(void);
+void ibmca_ed25519_destroy(void);
+void ibmca_ed448_destroy(void);
+
 /******************************* Libica stuff *********************************/
 /*
  * These are the function pointers that are (un)set when the library has
@@ -538,6 +547,75 @@ typedef int (*ica_ec_key_get_private_key_t)(ICA_EC_KEY *key, unsigned char *d,
 typedef void (*ica_ec_key_free_t)(ICA_EC_KEY *key);
 #endif
 
+typedef
+int (*ica_x25519_ctx_new_t)(ICA_X25519_CTX **ctx);
+typedef
+int (*ica_x448_ctx_new_t)(ICA_X448_CTX **ctx);
+typedef
+int (*ica_ed25519_ctx_new_t)(ICA_ED25519_CTX **ctx);
+typedef
+int (*ica_ed448_ctx_new_t)(ICA_ED448_CTX **ctx);
+typedef
+int (*ica_x25519_key_set_t)(ICA_X25519_CTX *ctx, const unsigned char priv[32],
+		       const unsigned char pub[32]);
+typedef
+int (*ica_x448_key_set_t)(ICA_X448_CTX *ctx, const unsigned char priv[56],
+		     const unsigned char pub[56]);
+typedef
+int (*ica_ed25519_key_set_t)(ICA_ED25519_CTX *ctx, const unsigned char priv[32],
+			const unsigned char pub[32]);
+typedef
+int (*ica_ed448_key_set_t)(ICA_ED448_CTX *ctx, const unsigned char priv[56],
+		      const unsigned char pub[56]);
+typedef
+int (*ica_x25519_key_get_t)(ICA_X25519_CTX *ctx, unsigned char priv[32],
+		       unsigned char pub[32]);
+typedef
+int (*ica_x448_key_get_t)(ICA_X448_CTX *ctx, unsigned char priv[56],
+		     unsigned char pub[56]);
+typedef
+int (*ica_ed25519_key_get_t)(ICA_ED25519_CTX *ctx, unsigned char priv[32],
+			unsigned char pub[32]);
+typedef
+int (*ica_ed448_key_get_t)(ICA_ED448_CTX *ctx, unsigned char priv[57],
+		      unsigned char pub[57]);
+typedef
+int (*ica_x25519_key_gen_t)(ICA_X25519_CTX *ctx);
+typedef
+int (*ica_x448_key_gen_t)(ICA_X448_CTX *ctx);
+typedef
+int (*ica_ed25519_key_gen_t)(ICA_ED25519_CTX *ctx);
+typedef
+int (*ica_ed448_key_gen_t)(ICA_ED448_CTX *ctx);
+typedef
+int (*ica_x25519_derive_t)(ICA_X25519_CTX *ctx,
+		      unsigned char shared_secret[32],
+		      const unsigned char peer_pub[32]);
+typedef
+int (*ica_x448_derive_t)(ICA_X448_CTX *ctx,
+		    unsigned char shared_secret[56],
+		    const unsigned char peer_pub[56]);
+typedef
+int (*ica_ed25519_sign_t)(ICA_ED25519_CTX *ctx, unsigned char sig[64],
+		     const unsigned char *msg, size_t msglen);
+typedef
+int (*ica_ed448_sign_t)(ICA_ED448_CTX *ctx, unsigned char sig[114],
+		   const unsigned char *msg, size_t msglen);
+typedef
+int (*ica_ed25519_verify_t)(ICA_ED25519_CTX *ctx, const unsigned char sig[64],
+		       const unsigned char *msg, size_t msglen);
+typedef
+int (*ica_ed448_verify_t)(ICA_ED448_CTX *ctx, const unsigned char sig[114],
+		     const unsigned char *msg, size_t msglen);
+typedef
+int (*ica_x25519_ctx_del_t)(ICA_X25519_CTX **ctx);
+typedef
+int (*ica_x448_ctx_del_t)(ICA_X448_CTX **ctx);
+typedef
+int (*ica_ed25519_ctx_del_t)(ICA_ED25519_CTX **ctx);
+typedef
+int (*ica_ed448_ctx_del_t)(ICA_ED448_CTX **ctx);
+
 /* entry points into libica, filled out at DSO load time */
 extern ica_get_functionlist_t           p_ica_get_functionlist;
 extern ica_set_fallback_mode_t          p_ica_set_fallback_mode;
@@ -577,3 +655,29 @@ extern ica_ec_key_get_public_key_t	p_ica_ec_key_get_public_key;
 extern ica_ec_key_get_private_key_t	p_ica_ec_key_get_private_key;
 extern ica_ec_key_free_t		p_ica_ec_key_free;
 #endif
+extern ica_x25519_ctx_new_t		p_ica_x25519_ctx_new;
+extern ica_x448_ctx_new_t		p_ica_x448_ctx_new;
+extern ica_ed25519_ctx_new_t		p_ica_ed25519_ctx_new;
+extern ica_ed448_ctx_new_t		p_ica_ed448_ctx_new;
+extern ica_x25519_key_set_t		p_ica_x25519_key_set;
+extern ica_x448_key_set_t		p_ica_x448_key_set;
+extern ica_ed25519_key_set_t		p_ica_ed25519_key_set;
+extern ica_ed448_key_set_t		p_ica_ed448_key_set;
+extern ica_x25519_key_get_t		p_ica_x25519_key_get;
+extern ica_x448_key_get_t		p_ica_x448_key_get;
+extern ica_ed25519_key_get_t		p_ica_ed25519_key_get;
+extern ica_ed448_key_get_t		p_ica_ed448_key_get;
+extern ica_x25519_key_gen_t		p_ica_x25519_key_gen;
+extern ica_x448_key_gen_t		p_ica_x448_key_gen;
+extern ica_ed25519_key_gen_t		p_ica_ed25519_key_gen;
+extern ica_ed448_key_gen_t		p_ica_ed448_key_gen;
+extern ica_x25519_derive_t		p_ica_x25519_derive;
+extern ica_x448_derive_t		p_ica_x448_derive;
+extern ica_ed25519_sign_t		p_ica_ed25519_sign;
+extern ica_ed448_sign_t			p_ica_ed448_sign;
+extern ica_ed25519_verify_t		p_ica_ed25519_verify;
+extern ica_ed448_verify_t		p_ica_ed448_verify;
+extern ica_x25519_ctx_del_t		p_ica_x25519_ctx_del;
+extern ica_x448_ctx_del_t		p_ica_x448_ctx_del;
+extern ica_ed25519_ctx_del_t		p_ica_ed25519_ctx_del;
+extern ica_ed448_ctx_del_t		p_ica_ed448_ctx_del;
