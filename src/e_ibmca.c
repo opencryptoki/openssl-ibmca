@@ -140,6 +140,16 @@ static int ibmca_crypto_algos[] = {
     EC_DSA_SIGN,
     EC_DSA_VERIFY,
     EC_DH,
+    ED25519_KEYGEN,
+    ED25519_SIGN,
+    ED25519_VERIFY,
+    ED448_KEYGEN,
+    ED448_SIGN,
+    ED448_VERIFY,
+    X25519_KEYGEN,
+    X25519_DERIVE,
+    X448_KEYGEN,
+    X448_DERIVE,
     0
 };
 
@@ -163,9 +173,11 @@ struct crypto_pair {
  */
 static size_t size_cipher_list = 0;
 static size_t size_digest_list = 0;
+static size_t size_pkey_meths_list = 0;
 
 static struct crypto_pair ibmca_cipher_lists;
 static struct crypto_pair ibmca_digest_lists;
+static struct crypto_pair ibmca_pkey_meths_lists;
 
 static int ibmca_usable_ciphers(const int **nids);
 static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
@@ -173,6 +185,9 @@ static int ibmca_engine_ciphers(ENGINE * e, const EVP_CIPHER ** cipher,
 static int ibmca_usable_digests(const int **nids);
 static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
                                 const int **nids, int nid);
+static int ibmca_engine_pkey_meths(ENGINE *e, EVP_PKEY_METHOD **pmeth,
+                                   const int **nids, int nid);
+static int ibmca_usable_pkey_meths(const int **nids);
 
 /* RAND stuff */
 static int ibmca_rand_bytes(unsigned char *buf, int num);
@@ -290,7 +305,7 @@ inline static int set_RSA_prop(ENGINE *e)
 }
 
 #ifndef OPENSSL_NO_EC
-inline static int set_EC_prop(ENGINE *e)
+static int set_EC_prop(ENGINE *e)
 {
     static int ec_enabled = 0;
 
@@ -351,10 +366,15 @@ inline static int set_EC_prop(ENGINE *e)
  * feasible
  */
 inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
-                                  int *ciph_nid_cnt)
+                                  int *ciph_nid_cnt, int *pkey_nid_cnt)
 {
     static int ec_kgen_switch, ec_dh_switch, ec_dsa_sign_switch,
-               ec_dsa_verify_switch;
+               ec_dsa_verify_switch, x25519_keygen_switch,
+               x25519_derive_switch, x448_keygen_switch, x448_derive_switch,
+               ed25519_keygen_switch, ed25519_sign_switch,
+               ed25519_verify_switch, ed448_keygen_switch, ed448_sign_switch,
+               ed448_verify_switch, x25519_switch, x448_switch,
+               ed25519_switch, ed448_switch;
 
     switch (algo_id) {
     case P_RNG:
@@ -492,6 +512,36 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
         ec_dsa_verify_switch = 1;
         break;
 #endif
+    case ED25519_KEYGEN:
+        ed25519_keygen_switch = 1;
+        break;
+    case ED25519_SIGN:
+        ed25519_sign_switch = 1;
+        break;
+    case ED25519_VERIFY:
+        ed25519_verify_switch = 1;
+        break;
+    case ED448_KEYGEN:
+        ed448_keygen_switch = 1;
+        break;
+    case ED448_SIGN:
+        ed448_sign_switch = 1;
+        break;
+    case ED448_VERIFY:
+        ed448_verify_switch = 1;
+        break;
+    case X25519_KEYGEN:
+        x25519_keygen_switch = 1;
+        break;
+    case X25519_DERIVE:
+        x25519_derive_switch = 1;
+        break;
+    case X448_KEYGEN:
+        x448_keygen_switch = 1;
+        break;
+    case X448_DERIVE:
+        x448_derive_switch = 1;
+        break;
     default:
         break;                  /* do nothing */
     }
@@ -504,9 +554,36 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
     }
 #endif
 
+    if (x25519_keygen_switch && x25519_derive_switch && !x25519_switch) {
+        x25519_switch = 1;
+        ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_X25519;
+        ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
+          = ibmca_x25519();
+    }
+    if (x448_keygen_switch && x448_derive_switch && !x448_switch) {
+        x448_switch = 1;
+        ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_X448;
+        ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
+          = ibmca_x448();
+    }
+    if (ed25519_keygen_switch && ed25519_sign_switch
+        && ed25519_verify_switch && !ed25519_switch) {
+        ed25519_switch = 1;
+        ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_ED25519;
+        ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
+          = ibmca_ed25519();
+    }
+    if (ed448_keygen_switch && ed448_sign_switch
+        && ed448_verify_switch && !ed448_switch) {
+        ed448_switch = 1;
+        ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_ED448;
+        ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
+          = ibmca_ed448();
+    }
+
     size_cipher_list = *ciph_nid_cnt;
     size_digest_list = *dig_nid_cnt;
-
+    size_pkey_meths_list = *pkey_nid_cnt;
     return 1;
 }
 
@@ -518,6 +595,7 @@ static int set_supported_meths(ENGINE *e)
     int rc = 0;
     int dig_nid_cnt = 0;
     int ciph_nid_cnt = 0;
+    int pkey_nid_cnt = 0;
 
     if (p_ica_get_functionlist(NULL, &mech_len))
         return 0;
@@ -548,7 +626,7 @@ static int set_supported_meths(ENGINE *e)
          * Set NID, ibmca struct and the info for the ENGINE struct
          */
         if (!set_engine_prop(e, ibmca_crypto_algos[j],
-                             &dig_nid_cnt, &ciph_nid_cnt))
+                             &dig_nid_cnt, &ciph_nid_cnt, &pkey_nid_cnt))
             goto out;
     }
 
@@ -558,6 +636,10 @@ static int set_supported_meths(ENGINE *e)
 
     if (ciph_nid_cnt > 0)
         if (!ENGINE_set_ciphers(e, ibmca_engine_ciphers))
+            goto out;
+
+    if (pkey_nid_cnt > 0)
+        if (!ENGINE_set_pkey_meths(e, ibmca_engine_pkey_meths))
             goto out;
 
     rc = 1;
@@ -844,6 +926,33 @@ static int ibmca_usable_digests(const int **nids)
         *nids = ibmca_digest_lists.nids;
 
     return size_digest_list;
+}
+
+static int ibmca_engine_pkey_meths(ENGINE *e, EVP_PKEY_METHOD **pmeth,
+                                   const int **nids, int nid)
+{
+    int i;
+
+    if (!pmeth)
+        return (ibmca_usable_pkey_meths(nids));
+
+    *pmeth = NULL;
+    for (i = 0; i < size_pkey_meths_list; i++) {
+        if (nid == ibmca_pkey_meths_lists.nids[i]) {
+            *pmeth = (EVP_PKEY_METHOD *)ibmca_pkey_meths_lists.crypto_meths[i];
+            break;
+        }
+    }
+
+    return (*pmeth != NULL);
+}
+
+static int ibmca_usable_pkey_meths(const int **nids)
+{
+    if (nids)
+        *nids = ibmca_pkey_meths_lists.nids;
+
+    return size_pkey_meths_list;
 }
 
 /* Random bytes are good */

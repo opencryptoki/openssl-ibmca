@@ -13,13 +13,10 @@ openssl_conf = openssl_def
 [openssl_def]
 engines = engine_section
 
-
 [engine_section]
 ibmca = ibmca_section
 
-
 [ibmca_section]
-
 # The openssl engine path for ibmca.so.
 # Set the dynamic_path to where the ibmca.so engine
 # resides on the system.
@@ -64,5 +61,7 @@ init = 1
 # DIGESTS
 # - SHA1, SHA256, SHA512 digests
 #
+# PKEY_CRYPTO
+# - X25519, X448, ED25519, ED448
 default_algorithms = ALL
-#default_algorithms = RAND,RSA,DH,DSA,CIPHERS,DIGESTS
+#default_algorithms = PKEY_CRYPTO,RAND,RSA,DH,DSA,CIPHERS,DIGESTS
