@@ -1,3 +1,6 @@
+* openssl-ibmca 2.1.0
+- Add MSA9 CPACF support for X25519, X448, Ed25519 and Ed448
+
 * openssl-ibmca 2.0.3
 - Add MSA9 CPACF support for ECDSA sign/verify
 
