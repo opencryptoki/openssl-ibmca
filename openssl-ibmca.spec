@@ -9,8 +9,8 @@ License:    ASL 2.0
 URL:        https://github.com/opencryptoki/openssl-ibmca
 Source0:    https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 
-Requires:       openssl >= 0.9.8 libica >= 3.3.0
-BuildRequires:  openssl-devel >= 0.9.8 libica-devel >= 3.3.0
+Requires:       openssl >= 1.1.1 libica >= 3.6.0
+BuildRequires:  openssl-devel >= 1.1.1 libica-devel >= 3.6.0
 BuildRequires:  autoconf automake libtool
 
 ExclusiveArch: s390 s390x
