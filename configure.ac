@@ -26,13 +26,13 @@ AC_PROG_CC
 LT_INIT
 
 # Checks for libraries.
-AC_CHECK_LIB([crypto], [RAND_add], [], AC_MSG_ERROR([*** openssl >= 0.9.8 is required ***]))
-AC_CHECK_LIB([ica], [ica_get_functionlist], [], AC_MSG_ERROR([*** libica >= 3.3.0 is required ***]))
+AC_CHECK_LIB([crypto], [RAND_add], [], AC_MSG_ERROR([*** openssl >= 1.1.1 is required ***]))
+AC_CHECK_LIB([ica], [ica_get_functionlist], [], AC_MSG_ERROR([*** libica >= 3.6.0 is required ***]))
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h netdb.h netinet/in.h stddef.h stdlib.h \
                  string.h strings.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h unistd.h])
-AC_CHECK_HEADER([ica_api.h], [], AC_MSG_ERROR([*** libica-devel >= 3.3.0 is required ***]))
+AC_CHECK_HEADER([ica_api.h], [], AC_MSG_ERROR([*** libica-devel >= 3.6.0 is required ***]))
 
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -44,7 +44,7 @@ AC_TYPE_SSIZE_T
 # Checks for library functions.
 AC_CHECK_FUNCS([gethostbyaddr gethostbyname memset strcasecmp strncasecmp strstr malloc])
 AC_CHECK_DECLS([ICA_FLAG_DHW,ica_get_functionlist,ica_open_adapter,DES_ECB], [],
-		AC_MSG_ERROR([*** libica >= 3.3.0 and libica-devel >= 3.3.0 are required ***]),
+		AC_MSG_ERROR([*** libica >= 3.6.0 and libica-devel >= 3.6.0 are required ***]),
 		[#include <ica_api.h>])
 
 AC_CONFIG_FILES([
