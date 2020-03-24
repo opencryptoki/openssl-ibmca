@@ -285,7 +285,7 @@ static int ibmca_aes_gcm(ICA_AES_GCM_CTX *ctx, const unsigned char *in,
 
     mlen += len;
     if (mlen > ((1ULL << 36) - 32) || (sizeof(len) == 8 && mlen < len))
-        return -1;
+        return 0;
 
     ctx->ptlen = mlen;
 
@@ -300,10 +300,13 @@ static int ibmca_aes_gcm(ICA_AES_GCM_CTX *ctx, const unsigned char *in,
     /* ctx->taglen is not set at this time... and is not needed. The
      * function only checks, if it's a valid gcm tag length. So we chose 16.
      */
-    rv = !(p_ica_aes_gcm_intermediate(pt, len, ct, ctx->ucb, NULL, 0,
+    rv = p_ica_aes_gcm_intermediate(pt, len, ct, ctx->ucb, NULL, 0,
                                       ctx->tag, 16, ctx->key, keylen,
-                                      ctx->subkey, enc));
-    return rv;
+                                      ctx->subkey, enc);
+    if (rv)
+        return 0;
+
+    return 1;
 }
 
 static int ibmca_aes_gcm_init_key(EVP_CIPHER_CTX *ctx,
