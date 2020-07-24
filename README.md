@@ -76,6 +76,12 @@ Regarding technical or usage questions, send email to
     https://sourceforge.net/p/opencryptoki/mailman/opencryptoki-users)
  mailing list respectively.
 
+## Limitations
+
+The ibmca engine's cipher and digest implementations do not
+support the processing of messages in arbitrary chunk sizes.
+All chunks, except the final one, are required to be a multiple
+of the primitive's block size.
 
 ## Contributing
 
