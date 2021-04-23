@@ -1,5 +1,5 @@
 /*
- * Copyright [2005-2018] International Business Machines Corp.
+ * Copyright [2005-2021] International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -175,6 +175,10 @@ static size_t size_cipher_list = 0;
 static size_t size_digest_list = 0;
 static size_t size_pkey_meths_list = 0;
 
+static CRYPTO_ONCE bindcountlockinitonce = CRYPTO_ONCE_STATIC_INIT;
+static CRYPTO_RWLOCK *bindcountlock = NULL;
+static int bindcount = 0;
+
 static struct crypto_pair ibmca_cipher_lists;
 static struct crypto_pair ibmca_digest_lists;
 static struct crypto_pair ibmca_pkey_meths_lists;
@@ -188,6 +192,11 @@ static int ibmca_engine_digests(ENGINE * e, const EVP_MD ** digest,
 static int ibmca_engine_pkey_meths(ENGINE *e, EVP_PKEY_METHOD **pmeth,
                                    const int **nids, int nid);
 static int ibmca_usable_pkey_meths(const int **nids);
+
+static void bindcountlockinit(void)
+{
+    bindcountlock = CRYPTO_THREAD_lock_new();
+}
 
 /* RAND stuff */
 static int ibmca_rand_bytes(unsigned char *buf, int num);
@@ -217,6 +226,10 @@ static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
 /* Destructor (complements the "ENGINE_ibmca()" constructor) */
 static int ibmca_destroy(ENGINE *e)
 {
+    int newbindcount;
+    CRYPTO_atomic_add(&bindcount, -1, &newbindcount, bindcountlock);
+    if (newbindcount)
+        return 1;
     /* Unload the ibmca error strings so any error state including our
      * functs or reasons won't lead to a segfault (they simply get displayed
      * without corresponding string data because none will be found).
@@ -785,11 +798,17 @@ static void ibmca_destructor(void)
     }
 
     p_ica_close_adapter(ibmca_handle);
+
+    if (bindcountlock)
+        CRYPTO_THREAD_lock_free(bindcountlock);
 }
 
 static int ibmca_init(ENGINE *e)
 {
     if (ibmca_dso == NULL)
+        return 0;
+
+    if (!set_supported_meths(e))
         return 0;
 
     return 1;
@@ -829,6 +848,11 @@ static int ibmca_ctrl(ENGINE *e, int cmd, long i, void *p, void (*f) ())
  */
 static int bind_helper(ENGINE *e)
 {
+    int ignored;
+
+    CRYPTO_THREAD_run_once(&bindcountlockinitonce, bindcountlockinit);
+    
+    CRYPTO_atomic_add(&bindcount, 1, &ignored, bindcountlock);
     ERR_load_IBMCA_strings();
 
     if (!ENGINE_set_id(e, engine_ibmca_id) ||
@@ -841,9 +865,6 @@ static int bind_helper(ENGINE *e)
         return 0;
 
     if (ibmca_dso == NULL)
-        return 0;
-
-    if (!set_supported_meths(e))
         return 0;
 
     return 1;
