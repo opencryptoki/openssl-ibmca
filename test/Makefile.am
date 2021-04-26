@@ -18,7 +18,17 @@ aes-192-ofb-test.pl \
 aes-256-ecb-test.pl \
 aes-256-cbc-test.pl \
 aes-256-cfb-test.pl \
-aes-256-ofb-test.pl
+aes-256-ofb-test.pl \
+loadtest \
+loadtest-ec
+
+check_PROGRAMS = loadtest loadtest-ec
+
+loadtest_SOURCES = loadtest.c
+loadtest_LDADD = -lssl -lcrypto
+
+loadtest_ec_SOURCES = loadtest-ec.c
+loadtest_ec_LDADD = -lssl -lcrypto
 
 AM_TESTS_ENVIRONMENT = export IBMCA_TEST_PATH=${top_builddir}/src/.libs/ibmca.so IBMCA_OPENSSL_TEST_CONF=${srcdir}/openssl-test.cnf PERL5LIB=${srcdir};
 EXTRA_DIST = ${TESTS} test.pm openssl-test.cnf
