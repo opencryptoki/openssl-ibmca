@@ -1,5 +1,5 @@
 /*
- * Copyright [2005-2018] International Business Machines Corp.
+ * Copyright [2005-2021] International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -367,7 +367,7 @@ static int ibmca_aes_gcm_setiv(EVP_CIPHER_CTX *c)
     const int gkeylen = EVP_CIPHER_CTX_key_length(c);
     int enc = EVP_CIPHER_CTX_encrypting(c);
 
-    if (gctx->key == NULL || !gctx->key_set)
+    if (!gctx->key_set)
         return 0;
 
     memset(gctx->icb, 0, sizeof(gctx->icb));
