@@ -1,7 +1,7 @@
 %global enginesdir %(pkg-config --variable=enginesdir libcrypto)
 
 Name:       openssl-ibmca
-Version:    2.1.1
+Version:    2.1.2
 Release:    1%{?dist}
 Summary:    An IBMCA OpenSSL dynamic engine
 
@@ -44,6 +44,9 @@ popd
 %{_mandir}/man5/ibmca.5*
 
 %changelog
+* Wed Apr 28 2021 Juergen Christ <jchrist@linux.ibm.com> 2.1.2
+- Update Version
+
 * Tue May 05 2020 Patrick Steuer <patrick.steuer@de.ibm.com> 2.1.1
 - Update Version
 
