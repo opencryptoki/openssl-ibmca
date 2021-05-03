@@ -17,6 +17,9 @@
 
 static int setup()
 {
+    ENGINE        *engine;
+    EVP_PKEY_CTX  *pctx = NULL;
+
     OPENSSL_load_builtin_modules();
 
     ENGINE_load_builtin_engines();
@@ -37,6 +40,14 @@ static int setup()
 #else
     OpenSSL_add_all_algorithms();
 #endif
+
+    engine = ENGINE_by_id("ibmca");
+    pctx = EVP_PKEY_CTX_new_id(NID_X25519, engine);
+    if (pctx == NULL) {
+        return 0;
+    }
+    EVP_PKEY_CTX_free(pctx);
+
     return 1;
 }
 
@@ -132,7 +143,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    setup();
+    if (setup() != 1) {
+        fprintf(stderr, "Failed to set up test.  Skipping...\n");
+        return 77;
+    }
     
     me = pthread_self();
     // Start threads
