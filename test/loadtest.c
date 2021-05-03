@@ -12,6 +12,8 @@ int setup()
 {
     const SSL_METHOD *req_method;
     SSL_CTX *ctx;
+    ENGINE        *engine;
+    EVP_PKEY_CTX  *pctx = NULL;
 
     /* Start code copy from libcurl 7.61.1 Curl_ossl_init function */
     OPENSSL_load_builtin_modules();
@@ -52,6 +54,13 @@ int setup()
     OpenSSL_add_all_algorithms();
 #endif
     /* End code copy from libcurl 7.61.1 Curl_ossl_init function */
+
+    engine = ENGINE_by_id("ibmca");
+    pctx = EVP_PKEY_CTX_new_id(NID_X25519, engine);
+    if (pctx == NULL) {
+        return 0;
+    }
+    EVP_PKEY_CTX_free(pctx);
     
     /* Start extraction from libcurl 7.61.1 ossl_connect_step1 */
     req_method = TLS_client_method();
@@ -112,8 +121,8 @@ int main(int argc, char **argv)
     }
     
     if (!setup()) {
-        fprintf(stderr, "Setup failed!\n");
-        return 99;
+        fprintf(stderr, "Setup failed!  Skipping...\n");
+        return 77;
     }
     if (!check_globals()) {
         fprintf(stderr, "Check for global variables failed!\n");

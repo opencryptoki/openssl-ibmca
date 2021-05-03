@@ -11,7 +11,11 @@
 int setup()
 {
     const SSL_METHOD *req_method;
-    SSL_CTX *ctx;
+    SSL_CTX          *ctx;
+    EC_KEY           *eckey = NULL;
+    ENGINE           *ibmca;
+    ENGINE           *actual;
+    int               ret = 0;
 
     /* Start code copy from libcurl 7.61.1 Curl_ossl_init function */
     OPENSSL_load_builtin_modules();
@@ -52,6 +56,24 @@ int setup()
     OpenSSL_add_all_algorithms();
 #endif
     /* End code copy from libcurl 7.61.1 Curl_ossl_init function */
+
+    ibmca = ENGINE_by_id("ibmca");
+    if (ibmca == NULL) {
+        fprintf(stderr, "Failed to retrieve ibmca engine\n");
+        goto out;
+    }
+    
+    eckey = EC_KEY_new_by_curve_name(NID_secp384r1);
+    if (eckey == NULL) {
+        /* error */
+        fprintf(stderr, "Failed to create EC_KEY for secp384r1\n");
+        goto out;
+    }
+    actual = EC_KEY_get0_engine(eckey);
+    if (ibmca != actual) {
+        fprintf(stderr, "EC_KEY not associated with ibmca\n");
+        goto out;
+    }
     
     /* Start extraction from libcurl 7.61.1 ossl_connect_step1 */
     req_method = TLS_client_method();
@@ -59,7 +81,11 @@ int setup()
        second time. */
     ctx = SSL_CTX_new(req_method);
     SSL_CTX_free(ctx);
-    return 1;
+    ret = 1;
+ out:
+    if (eckey)
+        EC_KEY_free(eckey);
+    return ret;
 }
 
 int check_globals()
@@ -68,8 +94,16 @@ int check_globals()
     ECDSA_SIG     *sig = NULL;
     EC_KEY        *eckey = NULL;
     unsigned char  digest[20];
+    ENGINE        *ibmca;
+    ENGINE        *actual;
 
     memset(digest, 0, sizeof(digest));
+
+    ibmca = ENGINE_by_id("ibmca");
+    if (ibmca == NULL) {
+        fprintf(stderr, "Failed to retrieve ibmca engine\n");
+        goto out;
+    }
     
     eckey = EC_KEY_new_by_curve_name(NID_secp384r1);
     if (eckey == NULL) {
@@ -82,6 +116,13 @@ int check_globals()
         fprintf(stderr, "Failed to generate EC_KEY\n");
         goto out;
     }
+
+    actual = EC_KEY_get0_engine(eckey);
+    if (ibmca != actual) {
+        fprintf(stderr, "EC_KEY not associated with ibmca\n");
+        goto out;
+    }
+    
     sig = ECDSA_do_sign(digest, sizeof(digest), eckey);
     if (sig == NULL) {
         /* error */
@@ -123,8 +164,8 @@ int main(int argc, char **argv)
     }
     
     if (!setup()) {
-        fprintf(stderr, "Setup failed!\n");
-        return 99;
+        fprintf(stderr, "Setup failed!  Skipping...\n");
+        return 77;
     }
     if (!check_globals()) {
         fprintf(stderr, "Check for global variables failed!\n");
