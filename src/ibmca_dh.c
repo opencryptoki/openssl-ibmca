@@ -17,15 +17,23 @@
 
 #include <openssl/dh.h>
 #include "ibmca.h"
+#include <stdio.h>
 
 #ifndef OPENSSL_NO_DH
+
+static int (*ibmca_mod_exp_dh_backup)(DH const *dh, BIGNUM *r,
+                                      const BIGNUM *a, const BIGNUM *p,
+                                      const BIGNUM *m, BN_CTX *ctx,
+                                      BN_MONT_CTX *m_ctx);
 
 /* This function is aliased to mod_exp (with the dh and mont dropped). */
 static int ibmca_mod_exp_dh(DH const *dh, BIGNUM *r,
                             const BIGNUM *a, const BIGNUM *p,
                             const BIGNUM *m, BN_CTX *ctx, BN_MONT_CTX *m_ctx)
 {
-    return ibmca_mod_exp(r, a, p, m, ctx);
+	if (!ibmca_mod_exp(r, a, p, m, ctx) && ibmca_mod_exp_dh_backup)
+		return ibmca_mod_exp_dh_backup(dh, r, a, p, m, ctx, m_ctx);
+	return 1;
 }
 
 
@@ -45,6 +53,7 @@ DH_METHOD *ibmca_dh(void)
 {
     const DH_METHOD *meth1 = DH_OpenSSL();
 
+    ibmca_mod_exp_dh_backup = meth1->bn_mod_exp;
     dh_m.generate_key = meth1->generate_key;
     dh_m.compute_key = meth1->compute_key;
 
@@ -63,6 +72,7 @@ DH_METHOD *ibmca_dh(void)
 
     if ((method = DH_meth_new("Ibmca DH method", 0)) == NULL
         || (meth1 = DH_OpenSSL()) == NULL
+	    || (ibmca_mod_exp_dh_backup = DH_meth_get_bn_mod_exp(method)) == NULL
         || !DH_meth_set_generate_key(method, DH_meth_get_generate_key(meth1))
         || !DH_meth_set_compute_key(method, DH_meth_get_compute_key(meth1))
         || !DH_meth_set_bn_mod_exp(method, ibmca_mod_exp_dh)

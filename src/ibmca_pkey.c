@@ -1,5 +1,5 @@
 /*
- * Copyright [2019] International Business Machines Corp.
+ * Copyright 2019-2021 International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,15 +123,15 @@ static int ibmca_x25519_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
     ICA_X25519_CTX *ctx = NULL;
     int rc = 0;
 
-    if (ica_x25519_ctx_new(&ctx) != 0) {
+    if (p_ica_x25519_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_KEYGEN, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
-    if (ica_x25519_key_gen(ctx) != 0) {
+    if (p_ica_x25519_key_gen(ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
-    if (ica_x25519_key_get(ctx, priv, pub) != 0) {
+    if (p_ica_x25519_key_get(ctx, priv, pub) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
@@ -155,7 +155,7 @@ ret:
         free(private);
     }
     if (ctx != NULL)
-        ica_x25519_ctx_del(&ctx);
+        p_ica_x25519_ctx_del(&ctx);
     return rc;
 }
 
@@ -194,23 +194,23 @@ static int ibmca_x25519_derive(EVP_PKEY_CTX *pkey_ctx, unsigned char *key, size_
         goto ret;
     }
 
-    if (ica_x25519_ctx_new(&ctx) != 0) {
+    if (p_ica_x25519_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_DERIVE, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
 
-    if (ica_x25519_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_x25519_key_set(ctx, key_ecx->priv, NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_DERIVE, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;;
     }
 
-    if (ica_x25519_derive(ctx, key, peerkey_ecx->pub) != 0)
+    if (p_ica_x25519_derive(ctx, key, peerkey_ecx->pub) != 0)
         goto ret;
 
     rc = 1;
 ret:
     if (ctx != NULL)
-        ica_x25519_ctx_del(&ctx);
+        p_ica_x25519_ctx_del(&ctx);
     return rc;
 }
 
@@ -223,15 +223,15 @@ static int ibmca_x448_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
     ICA_X448_CTX *ctx = NULL;
     int rc = 0;
 
-    if (ica_x448_ctx_new(&ctx) != 0) {
+    if (p_ica_x448_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X448_KEYGEN, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
-    if (ica_x448_key_gen(ctx) != 0) {
+    if (p_ica_x448_key_gen(ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X448_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
-    if (ica_x448_key_get(ctx, priv, pub) != 0) {
+    if (p_ica_x448_key_get(ctx, priv, pub) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X448_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
@@ -255,7 +255,7 @@ ret:
         free(private);
     }
     if (ctx != NULL)
-        ica_x448_ctx_del(&ctx);
+        p_ica_x448_ctx_del(&ctx);
     return rc;
 }
 
@@ -294,23 +294,23 @@ static int ibmca_x448_derive(EVP_PKEY_CTX *pkey_ctx, unsigned char *key, size_t 
         goto ret;
     }
 
-    if (ica_x448_ctx_new(&ctx) != 0) {
+    if (p_ica_x448_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X448_DERIVE, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
 
-    if (ica_x448_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_x448_key_set(ctx, key_ecx->priv, NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X448_DERIVE, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;;
     }
 
-    if (ica_x448_derive(ctx, key, peerkey_ecx->pub) != 0)
+    if (p_ica_x448_derive(ctx, key, peerkey_ecx->pub) != 0)
         goto ret;
 
     rc = 1;
 ret:
     if (ctx != NULL)
-        ica_x448_ctx_del(&ctx);
+        p_ica_x448_ctx_del(&ctx);
     return rc;
 }
 
@@ -328,15 +328,15 @@ static int ibmca_ed25519_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
     ICA_ED25519_CTX *ctx = NULL;
     int rc = 0;
 
-    if (ica_ed25519_ctx_new(&ctx) != 0) {
+    if (p_ica_ed25519_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_KEYGEN, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
-    if (ica_ed25519_key_gen(ctx) != 0) {
+    if (p_ica_ed25519_key_gen(ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
-    if (ica_ed25519_key_get(ctx, priv, pub) != 0) {
+    if (p_ica_ed25519_key_get(ctx, priv, pub) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
@@ -360,7 +360,7 @@ ret:
         free(private);
     }
     if (ctx != NULL)
-        ica_ed25519_ctx_del(&ctx);
+        p_ica_ed25519_ctx_del(&ctx);
     return rc;
 }
 
@@ -393,24 +393,24 @@ static int ibmca_ed25519_sign(EVP_MD_CTX *md_ctx, unsigned char *sig,
         goto ret;
     }
 
-    if (ica_ed25519_ctx_new(&ctx) != 0) {
+    if (p_ica_ed25519_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_SIGN, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
 
-    if (ica_ed25519_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_ed25519_key_set(ctx, key_ecx->priv, NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_SIGN, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;;
     }
 
-    if (ica_ed25519_sign(ctx, sig, tbs, tbslen) != 0)
+    if (p_ica_ed25519_sign(ctx, sig, tbs, tbslen) != 0)
         goto ret;
 
     *siglen = 2 * 32;
     rc = 1;
 ret:
     if (ctx != NULL)
-        ica_ed25519_ctx_del(&ctx);
+        p_ica_ed25519_ctx_del(&ctx);
     return rc;
 }
 
@@ -438,23 +438,23 @@ static int ibmca_ed25519_verify(EVP_MD_CTX *md_ctx, const unsigned char *sig,
         goto ret;
     }
 
-    if (ica_ed25519_ctx_new(&ctx) != 0) {
+    if (p_ica_ed25519_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_VERIFY, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
 
-    if (ica_ed25519_key_set(ctx, NULL, key_ecx->pub) != 0) {
+    if (p_ica_ed25519_key_set(ctx, NULL, key_ecx->pub) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_VERIFY, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;
     }
 
-    if (ica_ed25519_verify(ctx, sig, tbv, tbvlen) != 0)
+    if (p_ica_ed25519_verify(ctx, sig, tbv, tbvlen) != 0)
         goto ret;
 
     rc = 1;
 ret:
     if (ctx != NULL)
-        ica_ed25519_ctx_del(&ctx);
+        p_ica_ed25519_ctx_del(&ctx);
     return rc;
 }
 
@@ -472,15 +472,15 @@ static int ibmca_ed448_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
     ICA_ED448_CTX *ctx = NULL;
     int rc = 0;
 
-    if (ica_ed448_ctx_new(&ctx) != 0) {
+    if (p_ica_ed448_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_KEYGEN, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
-    if (ica_ed448_key_gen(ctx) != 0) {
+    if (p_ica_ed448_key_gen(ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
-    if (ica_ed448_key_get(ctx, priv, pub) != 0) {
+    if (p_ica_ed448_key_get(ctx, priv, pub) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
@@ -504,7 +504,7 @@ ret:
         free(private);
     }
     if (ctx != NULL)
-        ica_ed448_ctx_del(&ctx);
+        p_ica_ed448_ctx_del(&ctx);
     return rc;
 }
 
@@ -537,24 +537,24 @@ static int ibmca_ed448_sign(EVP_MD_CTX *md_ctx, unsigned char *sig,
         goto ret;
     }
 
-    if (ica_ed448_ctx_new(&ctx) != 0) {
+    if (p_ica_ed448_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_SIGN, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
 
-    if (ica_ed448_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_ed448_key_set(ctx, key_ecx->priv, NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_SIGN, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;;
     }
 
-    if (ica_ed448_sign(ctx, sig, tbs, tbslen) != 0)
+    if (p_ica_ed448_sign(ctx, sig, tbs, tbslen) != 0)
         goto ret;
 
     *siglen = 2 * 57;
     rc = 1;
 ret:
     if (ctx != NULL)
-        ica_ed448_ctx_del(&ctx);
+        p_ica_ed448_ctx_del(&ctx);
     return rc;
 }
 
@@ -582,23 +582,23 @@ static int ibmca_ed448_verify(EVP_MD_CTX *md_ctx, const unsigned char *sig,
         goto ret;
     }
 
-    if (ica_ed448_ctx_new(&ctx) != 0) {
+    if (p_ica_ed448_ctx_new(&ctx) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_VERIFY, IBMCA_R_PKEY_INTERNAL_ERROR);
         goto ret;
     }
 
-    if (ica_ed448_key_set(ctx, NULL, key_ecx->pub) != 0) {
+    if (p_ica_ed448_key_set(ctx, NULL, key_ecx->pub) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_VERIFY, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;
     }
 
-    if (ica_ed448_verify(ctx, sig, tbv, tbvlen) != 0)
+    if (p_ica_ed448_verify(ctx, sig, tbv, tbvlen) != 0)
         goto ret;
 
     rc = 1;
 ret:
     if (ctx != NULL)
-        ica_ed448_ctx_del(&ctx);
+        p_ica_ed448_ctx_del(&ctx);
     return rc;
 }
 

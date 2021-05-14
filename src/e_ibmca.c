@@ -43,19 +43,23 @@
 #ifndef OPENSSL_NO_HW_IBMCA
 
 #define IBMCA_LIB_NAME "ibmca engine"
-#define LIBICA_SHARED_LIB "libica.so.3"
 
 #define AP_PATH "/sys/devices/ap"
 
 /*
- * It would be good to disable libica's software-fallbacks for they may
- * eventually lead to infinite looping (libcrypto->ibmca->libica->libcrypto).
- * However, right now we cannot disable the fallbacks because they are still
- * needed for rsa > 4k.
+ * The default library name.  The macro LIBICA_SHARED_LIB is provided
+ * via configure at the command line.
  */
-#define DISABLE_SW_FALLBACKS	0
-
-static const char *LIBICA_NAME = "ica";
+static const char *LIBICA_NAME = LIBICA_SHARED_LIB;
+/*
+ * If a ctrl command is used to set libica name, we have to strdup the
+ * argument since the config parser will free and clear the element at
+ * the end of parsing.  If the engine is not loaded during
+ * configuration, we will not be able to use the string provided by
+ * the ctrl command since it is cleared.  Remember if we strdup'ed the
+ * string such that we free it at the end.
+ */
+static int LIBICA_NAME_allocated;
 
 /* Constants used when creating the ENGINE */
 static const char *engine_ibmca_id = "ibmca";
@@ -175,6 +179,29 @@ static size_t size_cipher_list = 0;
 static size_t size_digest_list = 0;
 static size_t size_pkey_meths_list = 0;
 
+static struct registration_helper {
+    int rsa_enabled;
+    int ec_enabled;
+    int ec_kgen_switch;
+    int ec_dh_switch;
+    int ec_dsa_sign_switch;
+    int ec_dsa_verify_switch;
+    int x25519_keygen_switch;
+    int x25519_derive_switch;
+    int x448_keygen_switch;
+    int x448_derive_switch;
+    int ed25519_keygen_switch;
+    int ed25519_sign_switch;
+    int ed25519_verify_switch;
+    int ed448_keygen_switch;
+    int ed448_sign_switch;
+    int ed448_verify_switch;
+    int x25519_switch;
+    int x448_switch;
+    int ed25519_switch;
+    int ed448_switch;
+} ibmca_registration;
+
 static CRYPTO_ONCE bindcountlockinitonce = CRYPTO_ONCE_STATIC_INIT;
 static CRYPTO_RWLOCK *bindcountlock = NULL;
 static int bindcount = 0;
@@ -215,10 +242,15 @@ static RAND_METHOD ibmca_rand = {
 
 /* The definitions for control commands specific to this engine */
 #define IBMCA_CMD_SO_PATH		ENGINE_CMD_BASE
+#define IBMCA_CMD_LIBICA        (ENGINE_CMD_BASE + 1)
 static const ENGINE_CMD_DEFN ibmca_cmd_defns[] = {
     {IBMCA_CMD_SO_PATH,
      "SO_PATH",
      "Specifies the path to the 'ibmca' shared library",
+     ENGINE_CMD_FLAG_STRING},
+    {IBMCA_CMD_LIBICA,
+     "libica",
+     "Specifies the path to the 'libica' shared library",
      ENGINE_CMD_FLAG_STRING},
     {0, NULL, NULL, 0}
 };
@@ -234,69 +266,13 @@ static int ibmca_destroy(ENGINE *e)
      * functs or reasons won't lead to a segfault (they simply get displayed
      * without corresponding string data because none will be found).
      */
-#ifndef OLDER_OPENSSL
-    ibmca_des_ecb_destroy();
-    ibmca_des_cbc_destroy();
-    ibmca_des_ofb_destroy();
-    ibmca_des_cfb_destroy();
-    ibmca_tdes_ecb_destroy();
-    ibmca_tdes_cbc_destroy();
-    ibmca_tdes_ofb_destroy();
-    ibmca_tdes_cfb_destroy();
-
-    ibmca_aes_128_ecb_destroy();
-    ibmca_aes_128_cbc_destroy();
-    ibmca_aes_128_ofb_destroy();
-    ibmca_aes_128_cfb_destroy();
-    ibmca_aes_192_ecb_destroy();
-    ibmca_aes_192_cbc_destroy();
-    ibmca_aes_192_ofb_destroy();
-    ibmca_aes_192_cfb_destroy();
-    ibmca_aes_256_ecb_destroy();
-    ibmca_aes_256_cbc_destroy();
-    ibmca_aes_256_ofb_destroy();
-    ibmca_aes_256_cfb_destroy();
-
-#ifndef OPENSSL_NO_AES_GCM
-    ibmca_aes_128_gcm_destroy();
-    ibmca_aes_192_gcm_destroy();
-    ibmca_aes_256_gcm_destroy();
-#endif
-
-#ifndef OPENSSL_NO_SHA1
-    ibmca_sha1_destroy();
-#endif
-#ifndef OPENSSL_NO_SHA256
-    ibmca_sha256_destroy();
-#endif
-#ifndef OPENSSL_NO_SHA512
-    ibmca_sha512_destroy();
-#endif
-#ifndef OPENSSL_NO_RSA
-    ibmca_rsa_destroy();
-#endif
-#ifndef OPENSSL_NO_DSA
-    ibmca_dsa_destroy();
-#endif
-#ifndef OPENSSL_NO_DH
-    ibmca_dh_destroy();
-#endif
-
-#endif /* !OLDER_OPENSSL */
-
-#ifndef NO_EC
-    ibmca_ec_destroy();
-#endif
-
     ERR_unload_IBMCA_strings();
     return 1;
 }
 
 inline static int set_RSA_prop(ENGINE *e)
 {
-    static int rsa_enabled = 0;
-
-    if (rsa_enabled) {
+    if (ibmca_registration.rsa_enabled) {
         return 1;
     }
     if (
@@ -312,7 +288,7 @@ inline static int set_RSA_prop(ENGINE *e)
         )
         return 0;
 
-    rsa_enabled = 1;
+    ibmca_registration.rsa_enabled = 1;
 
     return 1;
 }
@@ -320,9 +296,7 @@ inline static int set_RSA_prop(ENGINE *e)
 #ifndef OPENSSL_NO_EC
 static int set_EC_prop(ENGINE *e)
 {
-    static int ec_enabled = 0;
-
-    if (ec_enabled) {
+    if (ibmca_registration.ec_enabled) {
         return 1;
     }
 
@@ -365,7 +339,7 @@ static int set_EC_prop(ENGINE *e)
         return 0;
  #endif
 
-    ec_enabled = 1;
+    ibmca_registration.ec_enabled = 1;
 
     return 1;
 }
@@ -381,14 +355,6 @@ static int set_EC_prop(ENGINE *e)
 inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
                                   int *ciph_nid_cnt, int *pkey_nid_cnt)
 {
-    static int ec_kgen_switch, ec_dh_switch, ec_dsa_sign_switch,
-               ec_dsa_verify_switch, x25519_keygen_switch,
-               x25519_derive_switch, x448_keygen_switch, x448_derive_switch,
-               ed25519_keygen_switch, ed25519_sign_switch,
-               ed25519_verify_switch, ed448_keygen_switch, ed448_sign_switch,
-               ed448_verify_switch, x25519_switch, x448_switch,
-               ed25519_switch, ed448_switch;
-
     switch (algo_id) {
     case P_RNG:
         if (!ENGINE_set_RAND(e, &ibmca_rand))
@@ -513,82 +479,91 @@ inline static int set_engine_prop(ENGINE *e, int algo_id, int *dig_nid_cnt,
 #endif
 #ifndef OPENSSL_NO_EC
     case EC_KGEN:
-        ec_kgen_switch = 1;
+        ibmca_registration.ec_kgen_switch = 1;
         break;
     case EC_DH:
-        ec_dh_switch = 1;
+        ibmca_registration.ec_dh_switch = 1;
         break;
     case EC_DSA_SIGN:
-        ec_dsa_sign_switch = 1;
+        ibmca_registration.ec_dsa_sign_switch = 1;
         break;
     case EC_DSA_VERIFY:
-        ec_dsa_verify_switch = 1;
+        ibmca_registration.ec_dsa_verify_switch = 1;
         break;
 #endif
     case ED25519_KEYGEN:
-        ed25519_keygen_switch = 1;
+        ibmca_registration.ed25519_keygen_switch = 1;
         break;
     case ED25519_SIGN:
-        ed25519_sign_switch = 1;
+        ibmca_registration.ed25519_sign_switch = 1;
         break;
     case ED25519_VERIFY:
-        ed25519_verify_switch = 1;
+        ibmca_registration.ed25519_verify_switch = 1;
         break;
     case ED448_KEYGEN:
-        ed448_keygen_switch = 1;
+        ibmca_registration.ed448_keygen_switch = 1;
         break;
     case ED448_SIGN:
-        ed448_sign_switch = 1;
+        ibmca_registration.ed448_sign_switch = 1;
         break;
     case ED448_VERIFY:
-        ed448_verify_switch = 1;
+        ibmca_registration.ed448_verify_switch = 1;
         break;
     case X25519_KEYGEN:
-        x25519_keygen_switch = 1;
+        ibmca_registration.x25519_keygen_switch = 1;
         break;
     case X25519_DERIVE:
-        x25519_derive_switch = 1;
+        ibmca_registration.x25519_derive_switch = 1;
         break;
     case X448_KEYGEN:
-        x448_keygen_switch = 1;
+        ibmca_registration.x448_keygen_switch = 1;
         break;
     case X448_DERIVE:
-        x448_derive_switch = 1;
+        ibmca_registration.x448_derive_switch = 1;
         break;
     default:
         break;                  /* do nothing */
     }
 
 #ifndef OPENSSL_NO_EC
-    if (ec_kgen_switch && ec_dh_switch && ec_dsa_sign_switch
-        && ec_dsa_verify_switch) {
+    if (ibmca_registration.ec_kgen_switch && ibmca_registration.ec_dh_switch
+        && ibmca_registration.ec_dsa_sign_switch
+        && ibmca_registration.ec_dsa_verify_switch) {
         if (!set_EC_prop(e))
             return 0;
     }
 #endif
 
-    if (x25519_keygen_switch && x25519_derive_switch && !x25519_switch) {
-        x25519_switch = 1;
+    if (ibmca_registration.x25519_keygen_switch
+        && ibmca_registration.x25519_derive_switch
+        && !ibmca_registration.x25519_switch) {
+        ibmca_registration.x25519_switch = 1;
         ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_X25519;
         ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
           = ibmca_x25519();
     }
-    if (x448_keygen_switch && x448_derive_switch && !x448_switch) {
-        x448_switch = 1;
+    if (ibmca_registration.x448_keygen_switch
+        && ibmca_registration.x448_derive_switch
+        && !ibmca_registration.x448_switch) {
+        ibmca_registration.x448_switch = 1;
         ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_X448;
         ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
           = ibmca_x448();
     }
-    if (ed25519_keygen_switch && ed25519_sign_switch
-        && ed25519_verify_switch && !ed25519_switch) {
-        ed25519_switch = 1;
+    if (ibmca_registration.ed25519_keygen_switch
+        && ibmca_registration.ed25519_sign_switch
+        && ibmca_registration.ed25519_verify_switch
+        && !ibmca_registration.ed25519_switch) {
+        ibmca_registration.ed25519_switch = 1;
         ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_ED25519;
         ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
           = ibmca_ed25519();
     }
-    if (ed448_keygen_switch && ed448_sign_switch
-        && ed448_verify_switch && !ed448_switch) {
-        ed448_switch = 1;
+    if (ibmca_registration.ed448_keygen_switch
+        && ibmca_registration.ed448_sign_switch
+        && ibmca_registration.ed448_verify_switch
+        && !ibmca_registration.ed448_switch) {
+        ibmca_registration.ed448_switch = 1;
         ibmca_pkey_meths_lists.nids[*pkey_nid_cnt] = NID_ED448;
         ibmca_pkey_meths_lists.crypto_meths[(*pkey_nid_cnt)++]
           = ibmca_ed448();
@@ -665,16 +640,98 @@ out:
 __attribute__((constructor))
 static void ibmca_constructor(void)
 {
-    static int init = 0;
-
     DEBUG_PRINTF(">%s\n", __func__);
+}
 
-    if (init)
+__attribute__((destructor))
+static void ibmca_destructor(void)
+{
+    if (bindcountlock)
+        CRYPTO_THREAD_lock_free(bindcountlock);
+    if (LIBICA_NAME_allocated)
+        free((void *)LIBICA_NAME);
+}
+
+static void ica_cleanup(void)
+{
+    if (ibmca_dso && dlclose(ibmca_dso)) {
+        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
         return;
+    }
 
-    ibmca_dso = dlopen(LIBICA_SHARED_LIB, RTLD_NOW);
+    ibmca_dso = NULL;
+
+    p_ica_open_adapter = NULL;
+    p_ica_close_adapter = NULL;
+
+    p_ica_rsa_mod_expo = NULL;
+    p_ica_rsa_crt = NULL;
+#ifndef OPENSSL_NO_EC
+    p_ica_ec_key_new = NULL;
+    p_ica_ec_key_init = NULL;
+    p_ica_ec_key_generate = NULL;
+    p_ica_ecdh_derive_secret = NULL;
+    p_ica_ecdsa_sign = NULL;
+    p_ica_ecdsa_verify = NULL;
+    p_ica_ec_key_get_public_key = NULL;
+    p_ica_ec_key_get_private_key = NULL;
+    p_ica_ec_key_free = NULL;
+#endif
+
+    p_ica_random_number_generate = NULL;
+    p_ica_sha1 = NULL;
+    p_ica_sha256 = NULL;
+    p_ica_sha512 = NULL;
+    p_ica_aes_ecb = NULL;
+    p_ica_des_ecb = NULL;
+    p_ica_3des_ecb = NULL;
+    p_ica_aes_cbc = NULL;
+    p_ica_des_cbc = NULL;
+    p_ica_3des_cbc = NULL;
+    p_ica_aes_ofb = NULL;
+    p_ica_des_ofb = NULL;
+    p_ica_3des_ofb = NULL;
+    p_ica_aes_cfb = NULL;
+    p_ica_des_cfb = NULL;
+    p_ica_3des_cfb = NULL;
+#ifndef OPENSSL_NO_AES_GCM
+    p_ica_aes_gcm_initialize = NULL;
+    p_ica_aes_gcm_intermediate = NULL;
+    p_ica_aes_gcm_last = NULL;
+#endif
+    p_ica_x25519_ctx_new = NULL;
+    p_ica_x448_ctx_new = NULL;
+    p_ica_ed25519_ctx_new = NULL;
+    p_ica_ed448_ctx_new = NULL;
+    p_ica_x25519_key_set = NULL;
+    p_ica_x448_key_set = NULL;
+    p_ica_ed25519_key_set = NULL;
+    p_ica_ed448_key_set = NULL;
+    p_ica_x25519_key_get = NULL;
+    p_ica_x448_key_get = NULL;
+    p_ica_ed25519_key_get = NULL;
+    p_ica_ed448_key_get = NULL;
+    p_ica_x25519_key_gen = NULL;
+    p_ica_x448_key_gen = NULL;
+    p_ica_ed25519_key_gen = NULL;
+    p_ica_ed448_key_gen = NULL;
+    p_ica_x25519_derive = NULL;
+    p_ica_x448_derive = NULL;
+    p_ica_ed25519_sign = NULL;
+    p_ica_ed448_sign = NULL;
+    p_ica_ed25519_verify = NULL;
+    p_ica_ed448_verify = NULL;
+    p_ica_x25519_ctx_del = NULL;
+    p_ica_x448_ctx_del = NULL;
+    p_ica_ed25519_ctx_del = NULL;
+    p_ica_ed448_ctx_del = NULL;
+}
+
+static int ibmca_init(ENGINE *e)
+{
+    ibmca_dso = dlopen(LIBICA_NAME, RTLD_NOW);
     if (ibmca_dso == NULL) {
-        DEBUG_PRINTF("%s: dlopen(%s) failed\n", __func__, LIBICA_SHARED_LIB);
+        DEBUG_PRINTF("%s: dlopen(%s) failed\n", __func__, LIBICA_NAME);
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
         goto err;
     }
@@ -722,105 +779,119 @@ static void ibmca_constructor(void)
     BIND(ibmca_dso, ica_ec_key_get_private_key);
     BIND(ibmca_dso, ica_ec_key_free);
 #endif
-#if DISABLE_SW_FALLBACKS
+    BIND(ibmca_dso, ica_x25519_ctx_new);
+    BIND(ibmca_dso, ica_x448_ctx_new);
+    BIND(ibmca_dso, ica_ed25519_ctx_new);
+    BIND(ibmca_dso, ica_ed448_ctx_new);
+    BIND(ibmca_dso, ica_x25519_key_set);
+    BIND(ibmca_dso, ica_x448_key_set);
+    BIND(ibmca_dso, ica_ed25519_key_set);
+    BIND(ibmca_dso, ica_ed448_key_set);
+    BIND(ibmca_dso, ica_x25519_key_get);
+    BIND(ibmca_dso, ica_x448_key_get);
+    BIND(ibmca_dso, ica_ed25519_key_get);
+    BIND(ibmca_dso, ica_ed448_key_get);
+    BIND(ibmca_dso, ica_x25519_key_gen);
+    BIND(ibmca_dso, ica_x448_key_gen);
+    BIND(ibmca_dso, ica_ed25519_key_gen);
+    BIND(ibmca_dso, ica_ed448_key_gen);
+    BIND(ibmca_dso, ica_x25519_derive);
+    BIND(ibmca_dso, ica_x448_derive);
+    BIND(ibmca_dso, ica_ed25519_sign);
+    BIND(ibmca_dso, ica_ed448_sign);
+    BIND(ibmca_dso, ica_ed25519_verify);
+    BIND(ibmca_dso, ica_ed448_verify);
+    BIND(ibmca_dso, ica_x25519_ctx_del);
+    BIND(ibmca_dso, ica_x448_ctx_del);
+    BIND(ibmca_dso, ica_ed25519_ctx_del);
+    BIND(ibmca_dso, ica_ed448_ctx_del);
+
     /* disable fallbacks on Libica */
     if (BIND(ibmca_dso, ica_set_fallback_mode))
         p_ica_set_fallback_mode(0);
-#endif
 
     if (p_ica_open_adapter(&ibmca_handle)) {
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_UNIT_FAILURE);
         goto err;
     }
 
-    DEBUG_PRINTF("<%s success\n", __func__);
-    return;
-
-err:
-    DEBUG_PRINTF("<%s failure\n", __func__);
-
-    if (ibmca_dso)
-        dlclose(ibmca_dso);
-
-    ibmca_dso = NULL;
-
-    p_ica_open_adapter = NULL;
-    p_ica_close_adapter = NULL;
-
-    p_ica_rsa_mod_expo = NULL;
-    p_ica_rsa_crt = NULL;
-#ifndef OPENSSL_NO_EC
-    p_ica_ec_key_new = NULL;
-    p_ica_ec_key_init = NULL;
-    p_ica_ec_key_generate = NULL;
-    p_ica_ecdh_derive_secret = NULL;
-    p_ica_ecdsa_sign = NULL;
-    p_ica_ecdsa_verify = NULL;
-    p_ica_ec_key_get_public_key = NULL;
-    p_ica_ec_key_get_private_key = NULL;
-    p_ica_ec_key_free = NULL;
-#endif
-
-    p_ica_random_number_generate = NULL;
-    p_ica_sha1 = NULL;
-    p_ica_sha256 = NULL;
-    p_ica_sha512 = NULL;
-    p_ica_aes_ecb = NULL;
-    p_ica_des_ecb = NULL;
-    p_ica_3des_ecb = NULL;
-    p_ica_aes_cbc = NULL;
-    p_ica_des_cbc = NULL;
-    p_ica_3des_cbc = NULL;
-    p_ica_aes_ofb = NULL;
-    p_ica_des_ofb = NULL;
-    p_ica_3des_ofb = NULL;
-    p_ica_aes_cfb = NULL;
-    p_ica_des_cfb = NULL;
-    p_ica_3des_cfb = NULL;
-#ifndef OPENSSL_NO_AES_GCM
-    p_ica_aes_gcm_initialize = NULL;
-    p_ica_aes_gcm_intermediate = NULL;
-    p_ica_aes_gcm_last = NULL;
-#endif
-}
-
-__attribute__((destructor))
-static void ibmca_destructor(void)
-{
-    if (ibmca_dso == NULL) {
-        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_NOT_LOADED);
-        return;
-    }
-
-    if (dlclose(ibmca_dso)) {
-        IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
-        return;
-    }
-
-    p_ica_close_adapter(ibmca_handle);
-
-    if (bindcountlock)
-        CRYPTO_THREAD_lock_free(bindcountlock);
-}
-
-static int ibmca_init(ENGINE *e)
-{
-    if (ibmca_dso == NULL)
-        return 0;
-
     if (!set_supported_meths(e))
-        return 0;
+        goto err;
 
     return 1;
+
+err:
+    ica_cleanup();
+    return 0;
 }
 
 static int ibmca_finish(ENGINE *e)
 {
+#ifndef OLDER_OPENSSL
+    ibmca_des_ecb_destroy();
+    ibmca_des_cbc_destroy();
+    ibmca_des_ofb_destroy();
+    ibmca_des_cfb_destroy();
+    ibmca_tdes_ecb_destroy();
+    ibmca_tdes_cbc_destroy();
+    ibmca_tdes_ofb_destroy();
+    ibmca_tdes_cfb_destroy();
+
+    ibmca_aes_128_ecb_destroy();
+    ibmca_aes_128_cbc_destroy();
+    ibmca_aes_128_ofb_destroy();
+    ibmca_aes_128_cfb_destroy();
+    ibmca_aes_192_ecb_destroy();
+    ibmca_aes_192_cbc_destroy();
+    ibmca_aes_192_ofb_destroy();
+    ibmca_aes_192_cfb_destroy();
+    ibmca_aes_256_ecb_destroy();
+    ibmca_aes_256_cbc_destroy();
+    ibmca_aes_256_ofb_destroy();
+    ibmca_aes_256_cfb_destroy();
+
+#ifndef OPENSSL_NO_AES_GCM
+    ibmca_aes_128_gcm_destroy();
+    ibmca_aes_192_gcm_destroy();
+    ibmca_aes_256_gcm_destroy();
+#endif
+
+#ifndef OPENSSL_NO_SHA1
+    ibmca_sha1_destroy();
+#endif
+#ifndef OPENSSL_NO_SHA256
+    ibmca_sha256_destroy();
+#endif
+#ifndef OPENSSL_NO_SHA512
+    ibmca_sha512_destroy();
+#endif
+#ifndef OPENSSL_NO_RSA
+    ibmca_rsa_destroy();
+#endif
+#ifndef OPENSSL_NO_DSA
+    ibmca_dsa_destroy();
+#endif
+#ifndef OPENSSL_NO_DH
+    ibmca_dh_destroy();
+#endif
+
+#endif /* !OLDER_OPENSSL */
+
+#ifndef NO_EC
+    ibmca_ec_destroy();
+#endif
+
+    if (p_ica_close_adapter)
+        p_ica_close_adapter(ibmca_handle);
+
+    ica_cleanup();
+    memset(&ibmca_registration, 0, sizeof(ibmca_registration));
     return 1;
 }
 
 static int ibmca_ctrl(ENGINE *e, int cmd, long i, void *p, void (*f) ())
 {
+    char *tmp;
     int initialised = ((ibmca_dso == NULL) ? 0 : 1);
     switch (cmd) {
     case IBMCA_CMD_SO_PATH:
@@ -832,7 +903,25 @@ static int ibmca_ctrl(ENGINE *e, int cmd, long i, void *p, void (*f) ())
             IBMCAerr(IBMCA_F_IBMCA_CTRL, IBMCA_R_ALREADY_LOADED);
             return 0;
         }
-        LIBICA_NAME = (const char *) p;
+        return 1;
+    case IBMCA_CMD_LIBICA:
+        if (p == NULL) {
+            IBMCAerr(IBMCA_F_IBMCA_CTRL, ERR_R_PASSED_NULL_PARAMETER);
+            return 0;
+        }
+        if (initialised) {
+            IBMCAerr(IBMCA_F_IBMCA_CTRL, IBMCA_R_ALREADY_LOADED);
+            return 0;
+        }
+        tmp = strdup((const char *) p);
+        if (!tmp) {
+            IBMCAerr(IBMCA_F_IBMCA_CTRL, ERR_R_MALLOC_FAILURE);
+            return 0;
+        }
+        if (LIBICA_NAME_allocated)
+            free((void *)LIBICA_NAME);
+        LIBICA_NAME = tmp;
+        LIBICA_NAME_allocated = 1;
         return 1;
     default:
         break;
@@ -862,9 +951,6 @@ static int bind_helper(ENGINE *e)
         !ENGINE_set_finish_function(e, ibmca_finish) ||
         !ENGINE_set_ctrl_function(e, ibmca_ctrl) ||
         !ENGINE_set_cmd_defns(e, ibmca_cmd_defns))
-        return 0;
-
-    if (ibmca_dso == NULL)
         return 0;
 
     return 1;
