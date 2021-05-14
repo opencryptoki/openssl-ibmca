@@ -1,0 +1,20 @@
+openssl_conf = openssl_def
+
+[openssl_def]
+engines = engine_section
+
+[engine_section]
+ibmca = ibmca_section
+
+[ibmca_section]
+dynamic_path = $ENV::IBMCA_TEST_PATH
+engine_id = ibmca
+init = 0
+
+# OpenSSL <  1.1.0
+#   ALL  = RSA,DSA,DH,RAND,CIPHERS,DIGESTS,PKEY,ECDH,ECDSA
+#   PKEY = PKEY_CRYPTO,PKEY_ASN1
+# OpenSSL >= 1.1.0
+#   ALL  = RSA,DSA,DH,RAND,CIPHERS,DIGESTS,PKEY,EC
+#   PKEY = PKEY_CRYPTO,PKEY_ASN1
+default_algorithms = ALL
