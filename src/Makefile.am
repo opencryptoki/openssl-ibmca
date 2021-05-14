@@ -17,7 +17,12 @@ ibmca_la_LDFLAGS=-module -version-number ${VERSION} -shared -no-undefined \
 		  -avoid-version -Wl,--version-script=${srcdir}/../ibmca.map
 
 dist_ibmca_la_SOURCES=ibmca.h e_ibmca_err.h
-EXTRA_DIST = openssl.cnf.sample
+EXTRA_DIST = openssl.cnf.sample gensamplecfg.pl
 
 ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = doc
+
+pkgdata_DATA = openssl.cnf.defaultlibica openssl.cnf.libica openssl.cnf.libica-cex
+
+openssl.cnf.defaultlibica openssl.cnf.libica openssl.cnf.libica-cex:
+	$(AM_V_GEN)./gensamplecfg.pl @libdir@

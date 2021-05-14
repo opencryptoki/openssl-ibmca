@@ -1,5 +1,5 @@
 /*
- * Copyright [2005-2018] International Business Machines Corp.
+ * Copyright [2005-2021] International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
 #include <openssl/rsa.h>
 #include "ibmca.h"
 #include "e_ibmca_err.h"
+
+#include <stdio.h>
 
 /*
  * Define compat functions for older OpenSSL versions
@@ -53,7 +55,6 @@ void RSA_get0_crt_params(const RSA *rsa, const BIGNUM **dmp1,
         *iqmp = rsa->iqmp;
 }
 #endif
-
 
 int ibmca_mod_exp(BIGNUM * r, const BIGNUM * a, const BIGNUM * p,
                   const BIGNUM * m, BN_CTX * ctx)
@@ -264,7 +265,7 @@ static int ibmca_mod_exp_crt(BIGNUM * r, const BIGNUM * a,
 
     rc = p_ica_rsa_crt(ibmca_handle, input, key, output);
     if (rc != 0) {
-        IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
+        //IBMCAerr(IBMCA_F_IBMCA_MOD_EXP, IBMCA_R_REQUEST_FAILED);
         goto err;
     } else {
         rc = 1;
@@ -300,10 +301,13 @@ static int ibmca_rsa_init(RSA * rsa)
     return 1;
 }
 
+static int (*ibmca_rsa_mod_exp_backup)(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
+                                       BN_CTX * ctx);
+
 static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
                              BN_CTX * ctx)
 {
-    int to_return = 0;
+    int to_return = 0, usebackup = 1;
     const BIGNUM *d, *n, *p, *q, *dmp1, *dmq1, *iqmp;
 
     RSA_get0_key(rsa, &n, NULL, &d);
@@ -312,6 +316,7 @@ static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
     if (!p || !q || !dmp1 || !dmq1 || !iqmp) {
         if (!d || !n) {
             IBMCAerr(IBMCA_F_IBMCA_RSA_MOD_EXP, IBMCA_R_MISSING_KEY_COMPONENTS);
+            usebackup = 0;
             goto err;
         }
         to_return = ibmca_mod_exp(r0, I, d, n, ctx);
@@ -320,15 +325,27 @@ static int ibmca_rsa_mod_exp(BIGNUM * r0, const BIGNUM * I, RSA * rsa,
     }
 
 err:
+    if (!to_return && usebackup && ibmca_rsa_mod_exp_backup)
+        return ibmca_rsa_mod_exp_backup(r0, I, rsa, ctx);
     return to_return;
 }
+
+static int (*ibmca_mod_exp_mont_backup)(BIGNUM * r, const BIGNUM * a,
+                                        const BIGNUM * p, const BIGNUM * m,
+                                        BN_CTX * ctx, BN_MONT_CTX * m_ctx);
+
 
 /* This function is aliased to mod_exp (with the mont stuff dropped). */
 static int ibmca_mod_exp_mont(BIGNUM * r, const BIGNUM * a,
                               const BIGNUM * p, const BIGNUM * m,
                               BN_CTX * ctx, BN_MONT_CTX * m_ctx)
 {
-    return ibmca_mod_exp(r, a, p, m, ctx);
+    if (!ibmca_mod_exp(r, a, p, m, ctx)) {
+        if (ibmca_mod_exp_mont_backup)
+            return ibmca_mod_exp_mont_backup(r, a, p, m, ctx, m_ctx);
+        return 0;
+    }
+    return 1;
 }
 
 #ifdef OLDER_OPENSSL
@@ -360,6 +377,8 @@ RSA_METHOD *ibmca_rsa(void)
      * anyway! */
     const RSA_METHOD *meth1 = RSA_PKCS1_SSLeay();
 
+    ibmca_rsa_mod_exp_backup = meth1->rsa_mod_exp;
+    ibmca_mod_exp_mont_backup = meth1->bn_mod_exp;
     rsa_m.rsa_pub_enc = meth1->rsa_pub_enc;
     rsa_m.rsa_pub_dec = meth1->rsa_pub_dec;
     rsa_m.rsa_priv_enc = meth1->rsa_priv_enc;
@@ -380,6 +399,8 @@ RSA_METHOD *ibmca_rsa(void)
 
     if ((method = RSA_meth_new("Ibmca RSA method", 0)) == NULL
         || (meth1 = RSA_PKCS1_OpenSSL()) == NULL
+        || (ibmca_rsa_mod_exp_backup = RSA_meth_get_mod_exp(meth1)) == NULL
+        || (ibmca_mod_exp_mont_backup = RSA_meth_get_bn_mod_exp(meth1)) == NULL
         || !RSA_meth_set_pub_enc(method, RSA_meth_get_pub_enc(meth1))
         || !RSA_meth_set_pub_dec(method, RSA_meth_get_pub_dec(meth1))
         || !RSA_meth_set_priv_enc(method, RSA_meth_get_priv_enc(meth1))
@@ -402,6 +423,7 @@ done:
 void ibmca_rsa_destroy(void)
 {
     RSA_meth_free(rsa_m);
+    rsa_m = NULL;
 }
 #endif
 

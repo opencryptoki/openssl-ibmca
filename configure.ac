@@ -27,7 +27,6 @@ LT_INIT
 
 # Checks for libraries.
 AC_CHECK_LIB([crypto], [RAND_add], [], AC_MSG_ERROR([*** openssl >= 1.1.1 is required ***]))
-AC_CHECK_LIB([ica], [ica_get_functionlist], [], AC_MSG_ERROR([*** libica >= 3.6.0 is required ***]))
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h netdb.h netinet/in.h stddef.h stdlib.h \
@@ -43,9 +42,27 @@ AC_TYPE_SSIZE_T
 
 # Checks for library functions.
 AC_CHECK_FUNCS([gethostbyaddr gethostbyname memset strcasecmp strncasecmp strstr malloc])
-AC_CHECK_DECLS([ICA_FLAG_DHW,ica_get_functionlist,ica_open_adapter,DES_ECB], [],
-		AC_MSG_ERROR([*** libica >= 3.6.0 and libica-devel >= 3.6.0 are required ***]),
+AC_CHECK_DECLS([ICA_FLAG_DHW,DES_ECB], [],
+		AC_MSG_ERROR([*** libica-devel >= 3.6.0 are required ***]),
 		[#include <ica_api.h>])
+
+AC_ARG_WITH([libica-cex],
+	[AS_HELP_STRING([--with-libica-cex],[Use libica-cex as default library])],
+	[usecexonly=${withval}],
+	[])
+
+if test "x$usecexonly" = xyes; then
+	defaultlib="libica-cex.so.3"
+else
+	defaultlib="libica.so.3"
+fi
+
+AC_DEFINE_UNQUOTED([LIBICA_SHARED_LIB],["$defaultlib"])
+
+AC_CHECK_PROG([openssl_var],[openssl],[yes],[no])
+if test "x$openssl_var" != xyes; then
+        AC_MSG_ERROR([openssl binary required]);
+fi
 
 AC_CONFIG_FILES([
 	Makefile
@@ -56,3 +73,4 @@ AC_CONFIG_FILES([
 AC_OUTPUT
 
 echo "CFLAGS=$CFLAGS"
+echo "default library: $defaultlib"

@@ -1,5 +1,5 @@
 /*
- * Copyright [2005-2018] International Business Machines Corp.
+ * Copyright [2005-2021] International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,10 +28,18 @@
  * RSA. Just check out the "signs" statistics from the RSA and DSA parts
  * of "openssl speed -engine ibmca dsa1024 rsa1024". */
 #ifdef OLDER_OPENSSL
+static int (*ibmca_dsa_mod_exp_backup)(DSA *dsa, BIGNUM *rr, BIGNUM *a1,
+                                       BIGNUM *p1, BIGNUM *a2, BIGNUM *p2,
+                                       BIGNUM *m, BN_CTX *ctx,
+                                       BN_MONT_CTX *in_mont);
 static int ibmca_dsa_mod_exp(DSA *dsa, BIGNUM *rr, BIGNUM *a1,
                              BIGNUM *p1, BIGNUM *a2, BIGNUM *p2,
                              BIGNUM *m, BN_CTX *ctx, BN_MONT_CTX *in_mont)
 #else
+static int (*ibmca_dsa_mod_exp_backup)(DSA *dsa, BIGNUM *rr, const BIGNUM *a1,
+                                       const BIGNUM *p1, const BIGNUM *a2,
+                                       const BIGNUM *p2, const BIGNUM *m,
+                                       BN_CTX *ctx, BN_MONT_CTX *in_mont);
 static int ibmca_dsa_mod_exp(DSA *dsa, BIGNUM *rr, const BIGNUM *a1,
                              const BIGNUM *p1, const BIGNUM *a2,
                              const BIGNUM *p2, const BIGNUM *m,
@@ -57,20 +65,32 @@ static int ibmca_dsa_mod_exp(DSA *dsa, BIGNUM *rr, const BIGNUM *a1,
 end:
     BN_free(t);
 
+    if (!to_return && ibmca_dsa_mod_exp_backup)
+        return ibmca_dsa_mod_exp_backup(dsa, rr, a1, p1, a2, p2, m, ctx, in_mont);
     return to_return;
 }
 
 #ifdef OLDER_OPENSSL
+static int (*ibmca_mod_exp_dsa_backup)(DSA *dsa, BIGNUM *r, BIGNUM *a,
+                       const BIGNUM *p, const BIGNUM *m,
+                       BN_CTX *ctx, BN_MONT_CTX *m_ctx);
+
 static int ibmca_mod_exp_dsa(DSA *dsa, BIGNUM *r, BIGNUM *a,
                              const BIGNUM *p, const BIGNUM *m,
                              BN_CTX *ctx, BN_MONT_CTX *m_ctx)
 #else
+static int (*ibmca_mod_exp_dsa_backup)(DSA *dsa, BIGNUM *r, const BIGNUM *a,
+                       const BIGNUM *p, const BIGNUM *m,
+                       BN_CTX *ctx, BN_MONT_CTX *m_ctx);
+
 static int ibmca_mod_exp_dsa(DSA *dsa, BIGNUM *r, const BIGNUM *a,
                              const BIGNUM *p, const BIGNUM *m,
                              BN_CTX *ctx, BN_MONT_CTX *m_ctx)
 #endif
 {
-    return ibmca_mod_exp(r, a, p, m, ctx);
+    if (!ibmca_mod_exp(r, a, p, m, ctx) && ibmca_mod_exp_dsa_backup)
+        return ibmca_mod_exp_dsa_backup(dsa, r, a, p, m, ctx, m_ctx);
+    return 1;
 }
 
 
@@ -92,6 +112,8 @@ DSA_METHOD *ibmca_dsa(void)
 {
     const DSA_METHOD *meth1 = DSA_OpenSSL();
 
+    ibmca_dsa_mod_exp_backup = dsa->dsa_mod_exp;
+    ibmca_mod_exp_dsa_backup = dsa->bn_mod_exp;
     dsa_m.dsa_do_sign = meth1->dsa_do_sign;
     dsa_m.dsa_sign_setup = meth1->dsa_sign_setup;
     dsa_m.dsa_do_verify = meth1->dsa_do_verify;
@@ -111,6 +133,8 @@ DSA_METHOD *ibmca_dsa(void)
 
     if ((method = DSA_meth_new("Ibmca DSA method", 0)) == NULL
         || (meth1 = DSA_OpenSSL()) == NULL
+        || (ibmca_dsa_mod_exp_backup = DSA_meth_get_mod_exp(meth1)) == NULL
+        || (ibmca_mod_exp_dsa_backup = DSA_meth_get_bn_mod_exp(meth1)) == NULL
         || !DSA_meth_set_sign(method, DSA_meth_get_sign(meth1))
         || !DSA_meth_set_sign_setup(method, DSA_meth_get_sign_setup(meth1))
         || !DSA_meth_set_verify(method, DSA_meth_get_verify(meth1))
@@ -131,6 +155,7 @@ done:
 void ibmca_dsa_destroy(void)
 {
     DSA_meth_free(dsa_m);
+    dsa_m = NULL;
 }
 #endif
 #endif                          /* endif OPENSSL_NO_DSA */

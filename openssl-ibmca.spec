@@ -10,8 +10,8 @@ URL:        https://github.com/opencryptoki/openssl-ibmca
 Source0:    https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 Requires:       openssl >= 1.1.1 libica >= 3.6.0
-BuildRequires:  openssl-devel >= 1.1.1 libica-devel >= 3.6.0
-BuildRequires:  autoconf automake libtool
+BuildRequires:  openssl-devel >= 1.1.1 libica-devel >= 3.6.0 openssl >= 1.1.1
+BuildRequires:  autoconf automake libtool perl
 
 ExclusiveArch: s390 s390x
 
@@ -39,7 +39,7 @@ popd
 
 %files
 %license LICENSE
-%doc ChangeLog README.md src/openssl.cnf.sample.%{_arch}
+%doc ChangeLog README.md src/openssl.cnf.sample.%{_arch} src/openssl.cnf.defaultlibica src/openssl.cnf.libica src/openssl.cnf.libica-cex
 %{enginesdir}/ibmca.so
 %{_mandir}/man5/ibmca.5*
 

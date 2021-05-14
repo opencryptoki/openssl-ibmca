@@ -12,6 +12,8 @@ The build requirements are:
  * autoconf
  * automake
  * libtool
+ * openssl
+ * perl
 
 The runtime requirements are:
  * openssl >= 0.9.8
@@ -56,6 +58,24 @@ $ openssl engine -c
 $
 ```
 
+## Configuring OpenSSL-ibmca
+
+Since libica 3.8.0, libica provides two libraries.  The basic
+libica.so.3 contains all the features listed above and is the default
+library unless the `configure` switch `--with-libica-cex` is provided.
+In that case, libica-cex.so.3 becomes the default library.  If both
+versions of the library are installed on a system, OpenSSL-ibmca can
+be configured to use either of these two.  To use `libica.so.3`, with
+OpenSSL-ibmca, simply add the directive `libica = libica.so.3` to your
+OpenSSL configuration file in the engine section before `init = 1`.
+Similarly, to use `libica-cex.so.3`, add the line 
+`libica = libica-cex.so.3`.
+
+The build process of OpenSSL-ibmca will produce sample configuration
+files for use of the system default (`openssl.cnf.defaultlibica`),
+libica.so.3 (`openssl.cnf.libica`), and libica-cex.so.3
+(`openssl.cnf.libica-cex`) based on the openssl configuration of the
+build system.
 
 ## Support
 

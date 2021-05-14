@@ -32,9 +32,9 @@
  * ibmca build is configured with --enable-debug
  */
 #ifdef DEBUG
- #define DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#  define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
 #else
- #define DEBUG_PRINTF(...) do{} while(0)
+#  define DEBUG_PRINTF(...) do{} while(0)
 #endif
 
 /* COMPAT MACROS */
