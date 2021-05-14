@@ -56,6 +56,10 @@ if test "x$usecexonly" = xyes; then
 else
 	defaultlib="libica.so.3"
 fi
+# In cex-only mode, testing the ciphers does not make any sense since
+# they will fall back to OpenSSL without the engine.  So remove these
+# tests from that build.
+AM_CONDITIONAL([FULL_LIBICA], [test "x$usecexonly" != xyes])
 
 AC_DEFINE_UNQUOTED([LIBICA_SHARED_LIB],["$defaultlib"])
 
