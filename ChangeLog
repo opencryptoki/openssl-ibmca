@@ -1,3 +1,13 @@
+* openssl-ibmca 2.2.0
+- Implement fallbacks based on OpenSSL
+- Disable software fallbacks from libica
+- Allow to specify default library (libica vs. libica-cex) to use
+- Provide "libica" engine ctrl to switch library at load time
+- Update README.md
+- Remove libica link dependency
+- Generate sample configuration files from system configuration
+- Restructure registration global data
+
 * openssl-ibmca 2.1.3
 - Bug fix
 
