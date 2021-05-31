@@ -44,6 +44,10 @@ int check_eckey(int nid, const char *name)
         fprintf(stderr, "ibmca engine not loaded\n");
         goto out;
     }
+    if (ENGINE_get_EC(engine) == NULL) {
+        fprintf(stderr, "ibmca does not support EC_KEY.  Skipping...\n");
+        exit(77);
+    }
     eckey = EC_KEY_new_by_curve_name(nid);
     if (eckey == NULL) {
         /* curve not supported => test passed */
