@@ -72,7 +72,7 @@ DH_METHOD *ibmca_dh(void)
 
     if ((method = DH_meth_new("Ibmca DH method", 0)) == NULL
         || (meth1 = DH_OpenSSL()) == NULL
-	    || (ibmca_mod_exp_dh_backup = DH_meth_get_bn_mod_exp(method)) == NULL
+	    || (ibmca_mod_exp_dh_backup = DH_meth_get_bn_mod_exp(meth1)) == NULL
         || !DH_meth_set_generate_key(method, DH_meth_get_generate_key(meth1))
         || !DH_meth_set_compute_key(method, DH_meth_get_compute_key(meth1))
         || !DH_meth_set_bn_mod_exp(method, ibmca_mod_exp_dh)
