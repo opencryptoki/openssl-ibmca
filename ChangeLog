@@ -1,3 +1,6 @@
+* openssl-ibmca 2.2.1
+- Bug fixes
+
 * openssl-ibmca 2.2.0
 - Implement fallbacks based on OpenSSL
 - Disable software fallbacks from libica
