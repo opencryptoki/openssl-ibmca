@@ -42,6 +42,7 @@ popd
 %doc ChangeLog README.md src/openssl.cnf.sample.%{_arch} src/openssl.cnf.defaultlibica src/openssl.cnf.libica src/openssl.cnf.libica-cex
 %{enginesdir}/ibmca.so
 %{_mandir}/man5/ibmca.5*
+%{_datadir}/%{name}/openssl.cnf.*
 
 %changelog
 * Mon Sep 13 2021 Juergen Christ <jchrist@linux.ibm.com> 2.2.1
