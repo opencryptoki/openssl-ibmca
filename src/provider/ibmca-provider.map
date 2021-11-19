@@ -1,0 +1,7 @@
+IBMCA_PROVIDER_1.1.0 {
+    global:
+        OSSL_provider_init;
+
+    local:
+        *;
+};

@@ -1,0 +1,29 @@
+#
+# OpenSSL example configuration file. This file will load the IBMCA provider
+# for all apps that have OpenSSL config support compiled into them.
+#
+# Adding OpenSSL config support is as simple as adding the following line to
+# the app:
+#
+# #define OPENSSL_LOAD_CONF	1
+#
+openssl_conf = openssl_def
+
+[openssl_def]
+providers = provider_sect
+alg_section = evp_properties
+
+[provider_sect]
+default = default_sect
+ibmca_provider = ibmca_sect
+
+[default_sect]
+activate = 1
+
+[ibmca_sect]
+identity = ibmca
+module = ibmca-provider.so
+activate = 1
+
+[evp_properties]
+default_properties = ?provider=ibmca

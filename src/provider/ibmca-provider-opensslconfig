@@ -1,0 +1,135 @@
+#!/usr/bin/perl
+
+#
+# Copyright [2021-2022] International Business Machines Corp.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+#
+# Generate openssl.cnf from the system config file with added provider section
+# for ibmca provider.
+#
+# USE WITH CARE: No automation can replace human knowledge and understanding
+#                of the desired configuration!
+#
+
+use strict;
+use warnings;
+
+sub generate()
+{
+    my ($osslconfpath);
+    my ($ih, $line, $oh, $defaultcnfsect, $indefaultsect, $providersect);
+    my ($inalgsect, $algsection);
+
+    $osslconfpath = `openssl version -d` || die "Please install openssl binary";
+    $osslconfpath =~ s/OPENSSLDIR: \"([^\"]*)\"$/$1/ || die "Failed to extract OpenSSL configuration directory";
+    chomp $osslconfpath;
+
+    open($ih, "<", "$osslconfpath/openssl.cnf") or die "Cannot open $osslconfpath/openssl.cnf";
+    open($oh, ">", "openssl.cnf.ibmca-provider") or die "Cannot open openssl.cnf.ibmca-provider";
+
+    $defaultcnfsect = undef;
+    $indefaultsect = 0;
+    $providersect = undef;
+    while ($line = <$ih>) {
+        if ($line =~ /openssl_conf\s*=\s*(.*)/) {
+            $defaultcnfsect = $1;
+            chomp $defaultcnfsect;
+        }
+        if ($indefaultsect) {
+            if ($line =~ /\[\s*\w+\s*\]/) {
+                if (!$providersect) {
+                    print $oh "providers = provider_section\n";
+                }
+                if (!$algsection) {
+                    print $oh "alg_section = evp_properties_section\n";
+                }
+                $indefaultsect = 0;
+            } elsif ($line =~ /^\s*providers\s*=\s*(\w+)\s*/) {
+                $providersect = $1;
+                chomp $providersect;
+            } elsif ($line =~ /^\s*alg_section\s*=\s*(\w+)\s*/) {
+                $algsection = $1;
+                chomp $algsection;
+            }
+        } elsif ($inalgsect) {
+            if ($line =~ /\[\s*\w+\s*\]/) {
+                print $oh "default_properties = ?provider=ibmca\n";
+            } elsif ($line =~ /^\s*default_properties\s*=\s*(\w+)\s*/) {
+                print $oh "default_properties = ?provider=ibmca\n";
+                print $oh "# The following was commented out by ibmca-provider-opensslconfig script\n";
+                print "WARNING: The default_properties in $algsection was modified by this script.\n";
+                $line = "# $line";
+            }
+        }
+        print $oh "$line";
+        if ($defaultcnfsect && $line =~ /\[\s*$defaultcnfsect\s*\]/) {
+            $indefaultsect = 1;
+        }
+        if ($algsection && $line =~ /\[\s*$algsection\s*\]/) {
+            $inalgsect = 1;
+        }
+        if ($providersect && $line =~ /\[\s*$providersect\s*\]/) {
+            print $oh "ibmca_provider = ibmca_provider_section\n";
+            print $oh # Make sure that you have configured and activated at least one other provider!\n";
+            print "WARNING: The IBMCA provider was added to section [$providersect].\n"; 
+            print "Make sure that you have configured and activated at least one other provider, e.g. the default provider!\n";
+        }
+    }
+
+    if (!$defaultcnfsect) {
+        print $oh, qq|
+openssl_conf = openssl_init
+[openssl_init]
+providers = provider_section
+|;
+    }
+
+    if (!$providersect) {
+        print $oh qq|
+[provider_section]
+ibmca_provider = ibmca_provider_section
+default = default_sect
+
+[default_sect]
+activate = 1
+|;
+    }
+
+    print $oh qq|
+[ibmca_provider_section]
+identity = ibmca
+module = ibmca-provider.so
+activate = 1
+|;
+
+    if (!$algsection) {
+        print $oh qq|
+[evp_properties_section]
+default_properties = ?provider=ibmca
+|;
+    }
+
+    close($ih);
+    close($oh);
+    
+    print qq|
+Successfully generated openssl.cnf.ibmca-provider file.  Please review this configuration
+and, if you are happy with the changes, replace $osslconfpath/openssl.cnf with
+this file.
+|;
+}
+
+generate();

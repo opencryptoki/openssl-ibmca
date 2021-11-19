@@ -1,1 +1,4 @@
-SUBDIRS = engine
+SUBDIRS=
+if IBMCA_ENGINE
+SUBDIRS += engine
+endif
