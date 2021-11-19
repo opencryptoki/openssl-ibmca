@@ -3,7 +3,7 @@
 # See autoconf and autoscan online documentation for details.
 
 AC_INIT([openssl-ibmca], [2.2.3], [opencryptoki-users@lists.sf.net])
-AC_CONFIG_SRCDIR([src/e_ibmca.c]) # sanity check
+AC_CONFIG_SRCDIR([src/engine/e_ibmca.c]) # sanity check
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([foreign])
@@ -79,9 +79,11 @@ fi
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile
-	src/test/Makefile.linux
+	src/engine/Makefile
+	src/engine/test/Makefile.linux
 	test/Makefile
-	src/doc/Makefile])
+	test/engine/Makefile
+	src/engine/doc/Makefile])
 
 AC_OUTPUT
 
