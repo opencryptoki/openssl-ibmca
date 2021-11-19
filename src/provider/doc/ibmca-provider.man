@@ -1,0 +1,53 @@
+.\"
+.\" Copyright [2021-2022] International Business Machines Corp.
+.\"
+.\" Licensed under the Apache License, Version 2.0 (the "License");
+.\" you may not use this file except in compliance with the License.
+.\" You may obtain a copy of the License at
+.\"
+.\"     http://www.apache.org/licenses/LICENSE-2.0
+.\"
+.\" Unless required by applicable law or agreed to in writing, software
+.\" distributed under the License is distributed on an "AS IS" BASIS,
+.\" WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+.\" See the License for the specific language governing permissions and
+.\" limitations under the License.
+.\"
+.\" Process this file with
+.\" groff -man -Tascii ibmca-provider.5
+.TH IBMCA-PROVIDER 5 February 2022 IBM "IBMCA-PROVIDER user manual"
+.SH NAME
+IBMCA-PROVIDER \- IBMCA-PROVIDER is an OpenSSL provider that uses the libica
+library under s390x to accelerate cryptographic operations.
+
+.SH DESCRIPTION
+IBMCA-PROVIDER accelerates cryptographic operations of applications that use
+OpenSSL. The provider can be configured by the OpenSSL configuration file.
+.P
+The IBMCA-PROVIDER links the \fBlibica-cex\fP library that can accelerate
+RSA, EC operations. Other (e.g. symmetric or digest) operations are not
+supported by the IBMCA-PROVIDER. Those are provided by the OpenSSL default
+provider (or others). Operations such as the AES cipher, as well as digest
+oprations are accelerated by CPACF by the OpenSSL default provider already.
+There is no need to use another provider for accelerating those.
+
+.SS openssl.cnf
+The OpenSSL configuration file can have a section for the IBMCA provider.
+This section includes the identity (i.e. name) of the provider (i.e. ibmca),
+the module implementing the provider (ibmca-provider.so), provider parameters,
+and if it is to be actiavated automatically.
+.P
+Additionally, the OpenSSL configuration file can have a \fBalg_section\fP
+section. There, the default property query can be specified. To prefer using
+the IBMCA provider, but fall back to other providers (i.e. the default provider)
+specify:
+.P
+\fBdefault_properties = ?provider=ibmca\fP.
+
+.SH OPTIONS
+TBD
+
+
+.SH SEE ALSO
+.B provider(1)
+.B config(5)

@@ -1,23 +1,27 @@
-%global enginesdir %(pkg-config --variable=enginesdir libcrypto)
+%global modulesdir %(openssl version -m | grep -o '".*"' | tr -d '"')
+# Above can be replaced by the following once OpenSSL commit 
+# https://github.com/openssl/openssl/commit/7fde39de848f062d6db45bf9e69439db2100b9bb
+# has been included into the distribution:
+# %global modulesdir %(pkg-config --variable=modulesdir libcrypto)
 
 Name:       openssl-ibmca
 Version:    2.2.3
 Release:    1%{?dist}
-Summary:    An IBMCA OpenSSL dynamic engine
+Summary:    An IBMCA OpenSSL dynamic provider
 
 License:    ASL 2.0
 URL:        https://github.com/opencryptoki/openssl-ibmca
 Source0:    https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 
-Requires:       openssl >= 1.1.1 libica >= 3.6.0
-BuildRequires:  openssl-devel >= 1.1.1 libica-devel >= 3.6.0 openssl >= 1.1.1
+Requires:       openssl >= 3.0.0 libica >= 4.0.1
+BuildRequires:  openssl-devel >= 3.0.0 libica-devel >= 4.0.1 openssl >= 3.0.0
 BuildRequires:  autoconf automake libtool perl
 
 ExclusiveArch: s390 s390x
 
 %description
-This package contains a shared object OpenSSL dynamic engine which interfaces
-to libica, a library enabling the IBM s390/x CPACF crypto instructions.
+This package contains a shared object OpenSSL dynamic provider which interfaces 
+to libica-cex, a library enabling the IBM s390x crypto instructions.
 
 %prep
 %setup -q -n %{name}-%{version}
@@ -25,28 +29,26 @@ to libica, a library enabling the IBM s390/x CPACF crypto instructions.
 ./bootstrap.sh
 
 %build
-%configure --libdir=%{enginesdir} --disable-provider
+%configure --libdir=%{modulesdir} --disable-engine --enable-provider
 %make_build
 
 %install
 %make_install
-rm -f $RPM_BUILD_ROOT%{enginesdir}/ibmca.la
-
-pushd src/engine
-sed -e 's|/usr/local/lib|%{_libdir}/openssl/engines|' openssl.cnf.sample > openssl.cnf.sample.%{_arch}
-popd
-
+rm -f $RPM_BUILD_ROOT%{modulesdir}/ibmca-provider.la
+mv -f src/provider/openssl.cnf.sample src/provider/openssl.cnf.sample.%{_arch}
 
 %files
 %license LICENSE
-%doc ChangeLog README.md src/engine/openssl.cnf.sample.%{_arch} src/engine/ibmca-engine-opensslconfig
-%{enginesdir}/ibmca.so
-%{_mandir}/man5/ibmca.5*
+%doc ChangeLog README.md src/provider/openssl.cnf.sample.%{_arch} src/provider/ibmca-provider-opensslconfig
+%{modulesdir}/ibmca-provider.so
+%{_mandir}/man5/ibmca-provider.5*
 
 %changelog
+* Wed March 3 2022 Ingo Franzki <ifranzki@linux.ibm.com>
+- Add provider support
+
 * Thu Mar 10 2022 Juergen Christ <jchrist@linux.ibm.com> 2.2.3
 - Update Version
-
 * Thu Jan 27 2022 Juergen Christ <jchrist@linux.ibm.com> 2.2.2
 - Update Version
 
