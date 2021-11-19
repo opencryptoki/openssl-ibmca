@@ -32,14 +32,14 @@ to libica, a library enabling the IBM s390/x CPACF crypto instructions.
 %make_install
 rm -f $RPM_BUILD_ROOT%{enginesdir}/ibmca.la
 
-pushd src
+pushd src/engine
 sed -e 's|/usr/local/lib|%{_libdir}/openssl/engines|' openssl.cnf.sample > openssl.cnf.sample.%{_arch}
 popd
 
 
 %files
 %license LICENSE
-%doc ChangeLog README.md src/openssl.cnf.sample.%{_arch} src/ibmca-engine-opensslconfig
+%doc ChangeLog README.md src/engine/openssl.cnf.sample.%{_arch} src/engine/ibmca-engine-opensslconfig
 %{enginesdir}/ibmca.so
 %{_mandir}/man5/ibmca.5*
 
