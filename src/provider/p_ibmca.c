@@ -107,8 +107,23 @@ static const struct ibmca_mech_algorithm ibmca_rsa_algorithms[] = {
     { 0, NULL }
 };
 
+static const unsigned int ica_ec_mech[] = {
+    EC_DH,
+    EC_DSA_SIGN,
+    EC_DSA_VERIFY,
+    EC_KGEN,
+    0
+};
+
+static const  struct ibmca_mech_algorithm ibmca_ec_algorithms[] = {
+    { OSSL_OP_KEYMGMT, ibmca_ec_keymgmt },
+    { 0, NULL }
+};
+
 static const struct ibmca_ica_mech_info ica_mech_infos[] = {
     { IBMCA_CONFIG_ALGO_RSA, ica_rsa_mech, ibmca_rsa_algorithms, NULL },
+    { IBMCA_CONFIG_ALGO_EC, ica_ec_mech, ibmca_ec_algorithms,
+                                                    ibmca_ec_capabilities },
     { NULL, NULL, NULL, NULL }
 };
 
@@ -119,6 +134,7 @@ static const OSSL_ITEM ibmca_reason_strings[] = {
     { IBMCA_ERR_CONFIGURATION,  "Provider configuration error" },
     { IBMCA_ERR_LIBICA_FAILED,  "A libica function returned an error" },
     { IBMCA_ERR_SIGNATURE_BAD,  "Signature bad" },
+    { IBMCA_ERR_EC_CURVE_NOT_SUPPORTED, "EC curve not supported" },
     { 0, NULL }
 };
 

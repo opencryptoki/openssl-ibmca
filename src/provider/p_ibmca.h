@@ -23,6 +23,7 @@
 #include <ica_api.h>
 
 #include <openssl/provider.h>
+#include <openssl/ec.h>
 
 /* Environment variable name to enable debug */
 #define IBMCA_DEBUG_ENVVAR          "IBMCA_DEBUG"
@@ -108,6 +109,18 @@ struct ibmca_key {
             ica_rsa_key_mod_expo_t public;
             struct ibmca_pss_params pss; /* For type EVP_PKEY_RSA_PSS only */
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
+        struct {
+            int curve_nid;
+            point_conversion_form_t format;
+            bool include_pub;
+            size_t prime_size;
+            ICA_EC_KEY *key;
+            struct {
+                BIGNUM *x;
+                BIGNUM *y;
+                BIGNUM *d;
+            } fallback;
+        } ec; /* For type EVP_PKEY_EC */
     };
 };
 
@@ -177,6 +190,12 @@ struct ibmca_op_ctx {
                 EVP_MD_CTX *md_ctx;
             } signature; /* For operation EVP_PKEY_OP_SIGN/VERIFY */
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
+        union {
+            struct {
+                int curve_nid;
+                point_conversion_form_t format;
+            } gen; /* For operation EVP_PKEY_OP_KEYGEN */
+        } ec; /* For type EVP_PKEY_EC */
     };
 };
 
@@ -332,6 +351,7 @@ void ibmca_put_error(const struct ibmca_prov_ctx *provctx, int err,
 #define IBMCA_ERR_CONFIGURATION                 4
 #define IBMCA_ERR_LIBICA_FAILED                 5
 #define IBMCA_ERR_SIGNATURE_BAD                 6
+#define IBMCA_ERR_EC_CURVE_NOT_SUPPORTED        7
 
 #define UNUSED(var)                             ((void)(var))
 
@@ -422,4 +442,9 @@ int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                                      const EVP_MD *pss_md,
                                      const EVP_MD *mgf1_md,
                                      int saltlen);
+
+extern const OSSL_ALGORITHM ibmca_ec_keymgmt[];
+extern const struct ibmca_mech_capability ibmca_ec_capabilities[];
+
+#define IBMCA_EC_DEFAULT_DIGEST             NID_sha256
 
