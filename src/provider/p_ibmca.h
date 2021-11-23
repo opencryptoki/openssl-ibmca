@@ -79,6 +79,14 @@ struct ibmca_prov_ctx {
 
 /* IBMCA provider key */
 
+struct ibmca_pss_params {
+     int digest_nid;
+     int mgf_nid;
+     int mgf_digest_nid;
+     int saltlen;
+     bool restricted;
+};
+
 struct ibmca_key {
     const struct ibmca_prov_ctx *provctx;
     unsigned int ref_count;
@@ -93,6 +101,14 @@ struct ibmca_key {
     const char *algorithm;
     EVP_PKEY *fallback_pkey_cache;
     pthread_rwlock_t fallback_pkey_cache_lock;
+    union {
+        struct {
+            size_t bits;
+            ica_rsa_key_crt_t private;
+            ica_rsa_key_mod_expo_t public;
+            struct ibmca_pss_params pss; /* For type EVP_PKEY_RSA_PSS only */
+        } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
+    };
 };
 
 void ibmca_keymgmt_upref(struct ibmca_key *key);
@@ -135,6 +151,15 @@ struct ibmca_op_ctx {
     int (*dup_cb)(const struct ibmca_op_ctx *ctx, struct ibmca_op_ctx *new_ctx);
     unsigned char *tbuf;
     size_t tbuf_len;
+    union {
+        union {
+            struct {
+                size_t bits;
+                BIGNUM *pub_exp;
+                struct ibmca_pss_params pss; /* For EVP_PKEY_RSA_PSS only */
+            } gen; /* For operation EVP_PKEY_OP_KEYGEN */
+        } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
+    };
 };
 
 struct ibmca_op_ctx *ibmca_op_newctx(const struct ibmca_prov_ctx *provctx,
@@ -220,6 +245,26 @@ struct ibmca_keygen_cb_data {
 
 int ibmca_keygen_cb(EVP_PKEY_CTX *ctx);
 
+int ibmca_param_build_set_bn(const struct ibmca_prov_ctx *provctx,
+                             OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                             const char *key, const BIGNUM *bn);
+int ibmca_param_build_set_int(const struct ibmca_prov_ctx *provctx,
+                              OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                              const char *key, int val);
+int ibmca_param_build_set_utf8(const struct ibmca_prov_ctx *provctx,
+                               OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                               const char *key, const char *str);
+int ibmca_param_get_bn(const struct ibmca_prov_ctx *provctx,
+                       const OSSL_PARAM params[], const char *key, BIGNUM **bn);
+int ibmca_param_get_int(const struct ibmca_prov_ctx *provctx,
+                        const OSSL_PARAM params[], const char *key, int *val);
+int ibmca_param_get_size_t(const struct ibmca_prov_ctx *provctx,
+                           const OSSL_PARAM params[], const char *key,
+                           size_t *val);
+int ibmca_param_get_utf8(const struct ibmca_prov_ctx *provctx,
+                         const OSSL_PARAM params[], const char *key,
+                         const char **str);
+
 /* Debug and error handling functions and macros */
 void ibmca_debug_print(struct ibmca_prov_ctx *provctx, const char *func,
                        const char *fmt, ...);
@@ -264,4 +309,22 @@ struct ibmca_mech_capability {
     const char *capability;
     const OSSL_PARAM **details;
 };
+
+extern const OSSL_ALGORITHM ibmca_rsa_keymgmt[];
+
+#define IBMCA_RSA_DEFAULT_BITS              2048
+#define IBMCA_RSA_DEFAULT_PUB_EXP           65537L
+#define IBMCA_RSA_DEFAULT_DIGEST            NID_sha256
+#define IBMCA_RSA_PSS_DEFAULT_DIGEST        NID_sha1
+#define IBMCA_RSA_PSS_DEFAULT_MGF           NID_mgf1
+#define IBMCA_RSA_PSS_DEFAULT_MGF_DIGEST    NID_sha1
+#define IBMCA_RSA_PSS_DEFAULT_SALTLEN       20
+#define IBMCA_RSA_MIN_MODULUS_BITS          512
+
+#define IBMCA_RSA_PSS_DEFAULTS   { IBMCA_RSA_PSS_DEFAULT_DIGEST,        \
+                                   IBMCA_RSA_PSS_DEFAULT_MGF,           \
+                                   IBMCA_RSA_PSS_DEFAULT_MGF_DIGEST,    \
+                                   IBMCA_RSA_PSS_DEFAULT_SALTLEN,       \
+                                   false                                \
+                                 }
 
