@@ -26,10 +26,12 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include <openssl/evp.h>
 #include <openssl/core.h>
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
+#include <openssl/param_build.h>
 
 #include "p_ibmca.h"
 
@@ -91,7 +93,20 @@ struct ibmca_ica_mech_info {
     const struct ibmca_mech_capability *capabilities;
 };
 
+static const unsigned int ica_rsa_mech[] = {
+    RSA_ME,
+    RSA_CRT,
+    /* RSA_KEY_GEN_CRT is always supported, but only in SW */
+    0
+};
+
+static const struct ibmca_mech_algorithm ibmca_rsa_algorithms[] = {
+    { OSSL_OP_KEYMGMT, ibmca_rsa_keymgmt },
+    { 0, NULL }
+};
+
 static const struct ibmca_ica_mech_info ica_mech_infos[] = {
+    { IBMCA_CONFIG_ALGO_RSA, ica_rsa_mech, ibmca_rsa_algorithms, NULL },
     { NULL, NULL, NULL, NULL }
 };
 
@@ -216,6 +231,205 @@ void *ibmca_secure_memdup(const struct ibmca_prov_ctx *provctx,
         memcpy(ret, data, size);
 
     return ret;
+}
+
+int ibmca_param_build_set_bn(const struct ibmca_prov_ctx *provctx,
+                             OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                             const char *key, const BIGNUM *bn)
+{
+    char *str;
+
+    if (bn == NULL)
+        return 0;
+
+    if (bld != NULL) {
+        if (OSSL_PARAM_BLD_push_BN(bld, key, bn) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Failed to return param '%s'", key);
+            return 0;
+        }
+        goto out;
+    }
+
+    p = OSSL_PARAM_locate(p, key);
+    if (p == NULL)
+        return 1;
+
+    if (OSSL_PARAM_set_BN(p, bn) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to return param '%s'", key);
+        return 0;
+    }
+
+out:
+    if (provctx->debug) {
+        if (BN_get_flags(bn, BN_FLG_SECURE)) {
+            ibmca_debug_ctx(provctx,
+                            "param '%s': [sensitive value omitted] (%d bits)",
+                            key, BN_num_bits(bn));
+        } else {
+            str = BN_bn2hex(bn);
+            ibmca_debug_ctx(provctx, "param '%s': 0x%s (%d bits)", key, str,
+                            BN_num_bits(bn));
+            P_FREE(provctx, str);
+        }
+    }
+
+    return 1;
+}
+
+int ibmca_param_build_set_int(const struct ibmca_prov_ctx *provctx,
+                              OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                              const char *key, int val)
+{
+    if (bld != NULL) {
+        if (OSSL_PARAM_BLD_push_int(bld, key, val) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Failed to return param '%s'", key);
+            return 0;
+        }
+        goto out;
+    }
+
+    p = OSSL_PARAM_locate(p, key);
+    if (p == NULL)
+        return 1;
+
+    if (OSSL_PARAM_set_int(p, val) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to return param '%s'", key);
+        return 0;
+    }
+
+out:
+    ibmca_debug_ctx(provctx, "param '%s': %d", key, val);
+    return 1;
+}
+
+int ibmca_param_build_set_utf8(const struct ibmca_prov_ctx *provctx,
+                               OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                               const char *key, const char *str)
+{
+    if (str == NULL)
+        return 0;
+
+    if (bld != NULL) {
+        if (OSSL_PARAM_BLD_push_utf8_string(bld, key, str, 0) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Failed to return param '%s'", key);
+            return 0;
+        }
+        goto out;
+    }
+
+    p = OSSL_PARAM_locate(p, key);
+    if (p == NULL)
+        return 1;
+
+    if (OSSL_PARAM_set_utf8_string(p, str) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to return param '%s'", key);
+        return 0;
+    }
+
+out:
+    ibmca_debug_ctx(provctx, "param '%s': '%s'", key, str);
+    return 1;
+}
+
+int ibmca_param_get_bn(const struct ibmca_prov_ctx *provctx,
+                       const OSSL_PARAM params[], const char *key, BIGNUM **bn)
+{
+    const OSSL_PARAM *p;
+
+    if (bn == NULL)
+        return 0;
+
+    p = OSSL_PARAM_locate_const(params, key);
+    if (p == NULL)
+        return -1;
+
+    if (OSSL_PARAM_get_BN(p, bn) == 0 || *bn == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Failed to get param '%s'", key);
+        return 0;
+    }
+
+    if (provctx->debug) {
+        if (BN_get_flags(*bn, BN_FLG_SECURE)) {
+            ibmca_debug_ctx(provctx,
+                            "param '%s': [sensitive value omitted] (%d bits)",
+                            key, BN_num_bits(*bn));
+        } else {
+            char *str = BN_bn2hex(*bn);
+            ibmca_debug_ctx(provctx, "param '%s': 0x%s (%d bits)", key,
+                            str != NULL ? str : "", BN_num_bits(*bn));
+            P_FREE(provctx, str);
+        }
+    }
+
+    return 1;
+}
+
+int ibmca_param_get_int(const struct ibmca_prov_ctx *provctx,
+                        const OSSL_PARAM params[], const char *key, int *val)
+{
+    const OSSL_PARAM *p;
+
+    p = OSSL_PARAM_locate_const(params, key);
+    if (p == NULL)
+        return -1;
+
+    if (OSSL_PARAM_get_int(p, val) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Failed to get param '%s'", key);
+        return 0;
+    }
+
+    ibmca_debug_ctx(provctx, "param '%s': %d", key, *val);
+    return 1;
+}
+
+int ibmca_param_get_size_t(const struct ibmca_prov_ctx *provctx,
+                           const OSSL_PARAM params[], const char *key,
+                           size_t *val)
+{
+    const OSSL_PARAM *p;
+
+    p = OSSL_PARAM_locate_const(params, key);
+    if (p == NULL)
+        return -1;
+
+    if (OSSL_PARAM_get_size_t(p, val) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Failed to get param '%s'", key);
+        return 0;
+    }
+
+    ibmca_debug_ctx(provctx, "param '%s': %lu", key, *val);
+    return 1;
+}
+
+int ibmca_param_get_utf8(const struct ibmca_prov_ctx *provctx,
+                         const OSSL_PARAM params[], const char *key,
+                         const char **str)
+{
+    const OSSL_PARAM *p;
+
+    p = OSSL_PARAM_locate_const(params, key);
+    if (p == NULL)
+        return -1;
+
+    if (p->data_type == OSSL_PARAM_UTF8_STRING) {
+        *str = p->data;
+    } else if (OSSL_PARAM_get_utf8_ptr(p, str) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Failed to get param '%s'", key);
+        return 0;
+    }
+
+    ibmca_debug_ctx(provctx, "param '%s': '%s'", key, *str);
+    return 1;
 }
 
 static void ibmca_teardown(void *vprovctx)
