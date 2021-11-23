@@ -24,6 +24,11 @@ activate = 1
 identity = ibmca
 module = ibmca-provider.so
 activate = 1
+#debug = yes
+#fips = yes
+#algorithms = RSA,EC,DH
+algorithms = ALL
+#fallback-properties = provider=default
 
 [evp_properties]
 default_properties = ?provider=ibmca
