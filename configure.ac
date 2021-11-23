@@ -10,6 +10,9 @@ AM_INIT_AUTOMAKE([foreign])
 
 AC_PATH_PROG([CHMOD], [chmod], [/bin/chmod])
 
+logdir=$localstatedir/log/ibmca
+AC_SUBST(logdir)
+
 # Cmdline arguments.
 AC_ARG_ENABLE([debug],
 		[AS_HELP_STRING([--enable-debug], [turn on debugging flags (default is off)])],

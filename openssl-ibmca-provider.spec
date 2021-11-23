@@ -42,6 +42,7 @@ mv -f src/provider/openssl.cnf.sample src/provider/openssl.cnf.sample.%{_arch}
 %doc ChangeLog README.md src/provider/openssl.cnf.sample.%{_arch} src/provider/ibmca-provider-opensslconfig
 %{modulesdir}/ibmca-provider.so
 %{_mandir}/man5/ibmca-provider.5*
+%dir %attr(777,root,root) %{_localstatedir}/log/ibmca
 
 %changelog
 * Wed March 3 2022 Ingo Franzki <ifranzki@linux.ibm.com>

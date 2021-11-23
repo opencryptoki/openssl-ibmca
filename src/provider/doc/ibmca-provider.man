@@ -25,7 +25,7 @@ IBMCA-PROVIDER accelerates cryptographic operations of applications that use
 OpenSSL. The provider can be configured by the OpenSSL configuration file.
 .P
 The IBMCA-PROVIDER links the \fBlibica-cex\fP library that can accelerate
-RSA, EC operations. Other (e.g. symmetric or digest) operations are not
+RSA, EC, and DH operations. Other (e.g. symmetric or digest) operations are not
 supported by the IBMCA-PROVIDER. Those are provided by the OpenSSL default
 provider (or others). Operations such as the AES cipher, as well as digest
 oprations are accelerated by CPACF by the OpenSSL default provider already.
@@ -35,7 +35,8 @@ There is no need to use another provider for accelerating those.
 The OpenSSL configuration file can have a section for the IBMCA provider.
 This section includes the identity (i.e. name) of the provider (i.e. ibmca),
 the module implementing the provider (ibmca-provider.so), provider parameters,
-and if it is to be actiavated automatically.
+and if it is to be activated automatically. For a description of the
+provider parameter, see below.
 .P
 Additionally, the OpenSSL configuration file can have a \fBalg_section\fP
 section. There, the default property query can be specified. To prefer using
@@ -45,9 +46,111 @@ specify:
 \fBdefault_properties = ?provider=ibmca\fP.
 
 .SH OPTIONS
-TBD
-
-
+.SS openssl.cnf
+Options for the IBMCA provider section in openssl.cnf:
+.PP
+identity =
+.I ibmca
+.RS
+Set the name of the IBMCA provider. The name of the provider is used in the
+property query string used to fetch the provider for an operation. If no
+identity is specified, the name from the provider section of the OpenSSL config
+file is used, e.g. for an entry like \fBibmca_provider = ibmca_sect\fP in the
+provider section, the name would be \fBibmca_provider\fP.
+.RE
+.PP
+module =
+.I ibmca-provider.so
+.RS
+Set the name and optionally the path to the IBMCA provider shared object file
+allowing OpenSSL to find the file. Usually, providers are loaded from the
+OpenSSL \fBMODULESDIR\fP. Use \fBopenssl version -m\fP to display the
+MODULESDIR used by OpenSSL. Set environment variable \fBOPENSSL_MODULES\fP to
+override the OpenSSL modules directory (ignored in set-user-ID and set-group-ID
+programs).
+.RE
+.IP "activate = 1"
+.RS
+OpenSSL will activate the provider if this option is set to 1.
+.RE
+.PP
+algorithms = ALL |
+.I mechanisms
+.RS
+Redirect all cryptographic operations through the provider or disable types of
+mechanisms that the provider supports.
+If ALL is not used, the algorithms consist of a comma separated list
+of
+.I mechanisms
+: \fBRSA\fP | \fBEC\fP | \fBDH\fP.
+If this option is not specified, \fBALL\fP is the default.
+.RE
+.PP
+.IP "debug = yes | no | stderr"
+.RS
+Enables debug output for the IBMCA provider. If this option is not specified,
+no debuging output is produced. If \fBdebug = stderr\fP is specified,
+debugging messages are printed to stderr. Otherwise the debug output is written
+into a trace file in \fB[/usr/local]/var/log/ibmca/trace-<provider-name>.<pid>\fP,
+where <provider-name> is the name of the IBMCA provider from the identity
+option, and <pid> is the process ID of the current process. You can also
+enable debugging by setting the environment variable \fBIBMCA_DEBUG\fP to
+\fBon\fP or \fBstderr\fP.
+.RE
+.PP
+.IP "fips = yes | no"
+.RS
+Enables FIPS mode for the IBMCA provider. If FIPS is enabled, it is ensured that
+the \fBlibica-cex\fP library is built with FIPS enabled, and the system is
+running in FIPS mode. If that's not the case, the IBMCA provider initialization
+fails, and a syslog message is issued. If the fips option is not specified, it
+is auto-detected if the \fBlibica-cex\fP library is built with FIPS enabled,
+and the system is running in FIPS mode. If both is true, then the FIPS mode is
+enabled for the IBMCA provider. If FIPS is enabled (either explicitly
+configured or due to auto-detection), the IBMCA provider registers its
+algorithm with \fBfips=yes\fP, thus the IBMCA algorithms may be fetched using
+a property query string containing \fBfips=yes\fP.
+.PP
+.B Note:
+The IBMCA provider is currently not FIPS certified. It does not itself perform
+any FIPS self tests nor an integrity check which would be required to be FIPS
+certifiable. It is only ensured that \fBlibica-cex\fP library has successfully
+performed its self tests and integrity checks when FIPS mode is enabled.
+If you do not want that the IBMCA provider is used for property queries that
+include \fBfips=yes\fP, then disable FIPS mode of the IBMCA provider by setting
+\fBfips = no\fP in the provider configuration.
+.RE
+.PP
+fallback-properties = 
+.I property-query-string
+.RS
+A property query string that is used to fetch algorithms for fallback purposes.
+Fallbacks take place when the \fBlibica-cex\fP library does not support a
+certain key size or EC curve, or if the \fBlibica-cex\fP library fails to
+perform a crypto operation for whatever reason. If this option is not specified,
+a fallback property query string is built automatically as follows:
+\fBprovider!=<ibmca-provider-name>[,fips=yes]\fP. Clause \fBfips=yes\fP is
+included if FIPS mode is enabled for the IBMCA provider (either explicitly
+configured or due to auto-detection).
+Note that the IBMCA provider itself can not be used as fallback provider.
+Thus, the fallback property query string must either select a certain provider
+explicitly (e.g. \fBprovider=default\fP), or must exclude the IBMCA provider
+(\fBprovider!=<ibmca-provider-name>\fP). If FIPS mode is enabled for the
+IBMCA provider, the fallback provider should also be FIPS-enabled. Include
+\fBfips=yes\fP into the fallback property query string, or explicitly select
+the FIPS provider (\fBprovider=fips\fP).
+.RE
+.PP
+.SH ENVIRONMENT
+.TP
+.BR IBMCA_DEBUG
+If
+.B $IBMCA_DEBUG
+is set to \fBstderr\fP debug output to stderr for the IBMCA provider is enabled.
+If it is set to \fBon\fP the debug output is written into a trace file in
+\fB[/usr/local]/var/log/ibmca/trace-<provider-name>.<pid>\fP, where <pid> is
+the process ID of the current process.
+.PP
 .SH SEE ALSO
 .B provider(1)
 .B config(5)
