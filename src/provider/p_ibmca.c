@@ -242,6 +242,10 @@ static void ibmca_teardown(void *vprovctx)
     if (provctx->property_def != NULL)
         P_FREE(provctx, provctx->property_def);
 
+    if (provctx->fallback_property_query != NULL &&
+        provctx->fallback_property_query != provctx->fallback_props_conf)
+        P_FREE(provctx, provctx->fallback_property_query);
+
     if (provctx->libctx != NULL)
         OSSL_LIB_CTX_free(provctx->libctx);
 
@@ -792,6 +796,30 @@ static int ibmca_setup_algorithms(struct ibmca_prov_ctx *provctx)
             provctx->fips ? ",fips=yes" : "");
 
     ibmca_debug_ctx(provctx, "property_def: '%s'", provctx->property_def);
+
+    if (provctx->fallback_props_conf != NULL) {
+        provctx->fallback_property_query =
+                                    (char *)provctx->fallback_props_conf;
+    } else {
+        /*
+         * Build a property query string for fall-back operations that excludes
+         * the IBMCA provider, since this would produce an endless loop.
+         */
+        len = strlen("provider!=") + strlen(provctx->name) + 1;
+        if (provctx->fips)
+            len += strlen(",fips=yes");
+        provctx->fallback_property_query = P_ZALLOC(provctx, len);
+        if (provctx->fallback_property_query == NULL) {
+            put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
+                          "Failed to allocate property fallback query string");
+            return 0;
+        }
+        sprintf(provctx->fallback_property_query, "provider!=%s%s",
+                provctx->name, provctx->fips ? ",fips=yes" : "");
+    }
+
+    ibmca_debug_ctx(provctx, "fallback_property_query: '%s'",
+                    provctx->fallback_property_query);
 
     for (i = 0; ica_mech_infos[i].algo != NULL; i++) {
         ibmca_debug_ctx(provctx, "algorithm '%s' enabled: %d",

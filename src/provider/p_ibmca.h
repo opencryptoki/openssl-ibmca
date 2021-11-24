@@ -22,6 +22,8 @@
 
 #include <ica_api.h>
 
+#include <openssl/provider.h>
+
 /* Environment variable name to enable debug */
 #define IBMCA_DEBUG_ENVVAR          "IBMCA_DEBUG"
 
@@ -69,10 +71,101 @@ struct ibmca_prov_ctx {
     bool *algo_enabled;
     char *property_def;
     const char *fallback_props_conf;
+    char *fallback_property_query;
     ica_adapter_handle_t ica_adapter;
     int ica_fips_status;
     OSSL_ALGORITHM *algorithms[OSSL_OP__HIGHEST + 1];
 };
+
+/* IBMCA provider key */
+
+struct ibmca_key {
+    const struct ibmca_prov_ctx *provctx;
+    unsigned int ref_count;
+    int type; /* EVP_PKEY_xxx types */
+    void (*free_cb)(struct ibmca_key *key);
+    int (*dup_cb)(const struct ibmca_key *key, struct ibmca_key *new_key);
+    size_t (*get_max_param_size)(const struct ibmca_key *key);
+    OSSL_FUNC_keymgmt_export_fn *export;
+    OSSL_FUNC_keymgmt_import_fn *import;
+    OSSL_FUNC_keymgmt_has_fn *has;
+    OSSL_FUNC_keymgmt_match_fn *match;
+    const char *algorithm;
+    EVP_PKEY *fallback_pkey_cache;
+    pthread_rwlock_t fallback_pkey_cache_lock;
+};
+
+void ibmca_keymgmt_upref(struct ibmca_key *key);
+unsigned int ibmca_keymgmt_downref(struct ibmca_key *key);
+struct ibmca_key *ibmca_keymgmt_new(const struct ibmca_prov_ctx *provctx,
+                                    int type, const char *algorithm,
+                                    void (*free_cb)(struct ibmca_key *key),
+                                    int (*dup_cb)(const struct ibmca_key *key,
+                                                  struct ibmca_key *new_key),
+                                    size_t (*get_max_param_size)(
+                                                const struct ibmca_key *key),
+                                    OSSL_FUNC_keymgmt_export_fn *export,
+                                    OSSL_FUNC_keymgmt_import_fn *import,
+                                    OSSL_FUNC_keymgmt_has_fn *has,
+                                    OSSL_FUNC_keymgmt_match_fn *match);
+int ibmca_keymgmt_match(const struct ibmca_key *key1,
+                        const struct ibmca_key *key2);
+struct ibmca_op_ctx *ibmca_keymgmt_gen_init(
+                                    const struct ibmca_prov_ctx *provctx,
+                                    int type,
+                                    void (*free_cb)
+                                        (struct ibmca_op_ctx *ctx),
+                                    int (*dup_cb)
+                                        (const struct ibmca_op_ctx *ctx,
+                                         struct ibmca_op_ctx *new_ctx));
+
+OSSL_FUNC_keymgmt_free_fn ibmca_keymgmt_free;
+OSSL_FUNC_keymgmt_dup_fn ibmca_keymgmt_dup;
+OSSL_FUNC_keymgmt_gen_cleanup_fn ibmca_keymgmt_gen_cleanup;
+OSSL_FUNC_keymgmt_load_fn ibmca_keymgmt_load;
+
+/* IBMCA provider operation context */
+struct ibmca_op_ctx {
+    const struct ibmca_prov_ctx *provctx;
+    int type; /* EVP_PKEY_xxx types */
+    const char *propq;
+    struct ibmca_key *key;
+    int operation;
+    void (*free_cb)(struct ibmca_op_ctx *ctx);
+    int (*dup_cb)(const struct ibmca_op_ctx *ctx, struct ibmca_op_ctx *new_ctx);
+    unsigned char *tbuf;
+    size_t tbuf_len;
+};
+
+struct ibmca_op_ctx *ibmca_op_newctx(const struct ibmca_prov_ctx *provctx,
+                                     const char *propq, int type,
+                                     void (*free_cb)(struct ibmca_op_ctx *ctx),
+                                     int (*dup_cb)
+                                               (const struct ibmca_op_ctx *ctx,
+                                                struct ibmca_op_ctx *new_ctx));
+int ibmca_op_init(struct ibmca_op_ctx *ctx, struct ibmca_key *key,
+                  int operation);
+int ibmca_op_alloc_tbuf(struct ibmca_op_ctx *ctx, size_t tbuf_len);
+
+int ibmca_digest_signverify_update(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
+                                   const unsigned char *data, size_t datalen);
+int ibmca_digest_sign_final(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
+                            OSSL_FUNC_signature_sign_fn *sign_func,
+                            unsigned char *sig, size_t *siglen, size_t sigsize);
+int ibmca_digest_verify_final(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
+                              OSSL_FUNC_signature_verify_fn *verify_func,
+                              const unsigned char *sig, size_t siglen);
+int ibmca_get_ctx_md_params(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
+                            OSSL_PARAM *params);
+int ibmca_set_ctx_md_params(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
+                            const OSSL_PARAM params[]);
+const OSSL_PARAM *ibmca_gettable_ctx_md_params(const struct ibmca_op_ctx *ctx,
+                                               const EVP_MD *md);
+const OSSL_PARAM *ibmca_settable_ctx_md_params(const struct ibmca_op_ctx *ctx,
+                                               const EVP_MD *md);
+
+OSSL_FUNC_asym_cipher_freectx_fn ibmca_op_freectx;
+OSSL_FUNC_asym_cipher_dupctx_fn ibmca_op_dupctx;
 
 /* Macros for calling core functions */
 #define P_ZALLOC(prov_ctx, size)                    \
@@ -110,6 +203,23 @@ void *ibmca_secure_memdup(const struct ibmca_prov_ctx *provctx,
                           const void *data, size_t size,
                           const char* file, int line);
 
+EVP_PKEY_CTX *ibmca_new_fallback_pkey_ctx(const struct ibmca_prov_ctx *provctx,
+                                          EVP_PKEY *pkey,
+                                          const char *algorithm);
+EVP_PKEY *ibmca_new_fallback_pkey(struct ibmca_key *key);
+void ibmca_clean_fallback_pkey_cache(struct ibmca_key *key);
+int ibmca_import_from_fallback_pkey(struct ibmca_key *key, const EVP_PKEY *pkey,
+                                    int selection);
+int ibmca_check_fallback_provider(const struct ibmca_prov_ctx *provctx,
+                                  EVP_PKEY_CTX *pctx);
+
+struct ibmca_keygen_cb_data {
+    OSSL_CALLBACK *osslcb;
+    void *cbarg;
+};
+
+int ibmca_keygen_cb(EVP_PKEY_CTX *ctx);
+
 /* Debug and error handling functions and macros */
 void ibmca_debug_print(struct ibmca_prov_ctx *provctx, const char *func,
                        const char *fmt, ...);
@@ -122,6 +232,8 @@ void ibmca_debug_print(struct ibmca_prov_ctx *provctx, const char *func,
         } while (0)
 
 #define ibmca_debug_ctx(ctx, fmt...)    ibmca_debug((ctx), fmt)
+#define ibmca_debug_key(key, fmt...)    ibmca_debug((key)->provctx, fmt)
+#define ibmca_debug_op_ctx(ctx, fmt...) ibmca_debug((ctx)->provctx, fmt)
 
 void ibmca_put_error(const struct ibmca_prov_ctx *provctx, int err,
                      const char *file, int line, const char *func,
@@ -133,6 +245,10 @@ void ibmca_put_error(const struct ibmca_prov_ctx *provctx, int err,
             ibmca_put_error((ctx), (err), __FILE__, \
                 __LINE__, __func__, fmt);           \
         } while (0)
+#define put_error_key(key, err, fmt...)             \
+        put_error_ctx((key)->provctx, (err), fmt)
+#define put_error_op_ctx(ctx, err, fmt...)          \
+        put_error_ctx((ctx)->provctx, (err), fmt)
 
 #define IBMCA_ERR_INTERNAL_ERROR                1
 #define IBMCA_ERR_MALLOC_FAILED                 2
