@@ -3,7 +3,7 @@ VERSION_STR = 1.1.0
 
 lib_LTLIBRARIES=ibmca-provider.la
 
-ibmca_provider_la_SOURCES=p_ibmca.c
+ibmca_provider_la_SOURCES=p_ibmca.c p_key.c p_context.c
 
 ibmca_provider_la_CFLAGS=-DIBMCA_VERSION=\"${VERSION_STR}\" -DIBMCA_LOGDIR=\"$(logdir)\"
 
