@@ -195,6 +195,12 @@ struct ibmca_op_ctx {
                 int curve_nid;
                 point_conversion_form_t format;
             } gen; /* For operation EVP_PKEY_OP_KEYGEN */
+            struct {
+                EVP_MD *md;
+                bool set_md_allowed;
+                size_t md_size;
+                EVP_MD_CTX *md_ctx;
+            } signature; /* For operation EVP_PKEY_OP_SIGN/VERIFY */
         } ec; /* For type EVP_PKEY_EC */
     };
 };
@@ -298,6 +304,9 @@ int ibmca_param_build_set_octet_ptr(const struct ibmca_prov_ctx *provctx,
                                     OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
                                     const char *key, const void *val,
                                     size_t len);
+int ibmca_param_build_set_size_t(const struct ibmca_prov_ctx *provctx,
+                                 OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                                 const char *key, size_t val);
 int ibmca_param_get_bn(const struct ibmca_prov_ctx *provctx,
                        const OSSL_PARAM params[], const char *key, BIGNUM **bn);
 int ibmca_param_get_int(const struct ibmca_prov_ctx *provctx,
@@ -444,6 +453,7 @@ int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                                      int saltlen);
 
 extern const OSSL_ALGORITHM ibmca_ec_keymgmt[];
+extern const OSSL_ALGORITHM ibmca_ec_signature[];
 extern const struct ibmca_mech_capability ibmca_ec_capabilities[];
 
 #define IBMCA_EC_DEFAULT_DIGEST             NID_sha256

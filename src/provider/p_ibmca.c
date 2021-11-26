@@ -117,6 +117,7 @@ static const unsigned int ica_ec_mech[] = {
 
 static const  struct ibmca_mech_algorithm ibmca_ec_algorithms[] = {
     { OSSL_OP_KEYMGMT, ibmca_ec_keymgmt },
+    { OSSL_OP_SIGNATURE, ibmca_ec_signature },
     { 0, NULL }
 };
 
@@ -414,6 +415,34 @@ int ibmca_param_build_set_octet_ptr(const struct ibmca_prov_ctx *provctx,
 out:
     ibmca_debug_ctx(provctx, "param '%s': [octet string] (%lu bytes)", key,
                     len);
+    return 1;
+}
+
+int ibmca_param_build_set_size_t(const struct ibmca_prov_ctx *provctx,
+                                 OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                                 const char *key, size_t val)
+{
+    if (bld != NULL) {
+        if (OSSL_PARAM_BLD_push_size_t(bld, key, val) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Failed to return param '%s'", key);
+            return 0;
+        }
+        goto out;
+    }
+
+    p = OSSL_PARAM_locate(p, key);
+    if (p == NULL)
+        return 1;
+
+    if (OSSL_PARAM_set_size_t(p, val) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to return param '%s'", key);
+        return 0;
+    }
+
+out:
+    ibmca_debug_ctx(provctx, "param '%s': %lu", key, val);
     return 1;
 }
 
