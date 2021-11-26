@@ -103,6 +103,7 @@ static const unsigned int ica_rsa_mech[] = {
 static const struct ibmca_mech_algorithm ibmca_rsa_algorithms[] = {
     { OSSL_OP_KEYMGMT, ibmca_rsa_keymgmt },
     { OSSL_OP_ASYM_CIPHER, ibmca_rsa_asym_cipher },
+    { OSSL_OP_SIGNATURE, ibmca_rsa_signature },
     { 0, NULL }
 };
 
@@ -117,6 +118,7 @@ static const OSSL_ITEM ibmca_reason_strings[] = {
     { IBMCA_ERR_INVALID_PARAM,  "Invalid parameter encountered" },
     { IBMCA_ERR_CONFIGURATION,  "Provider configuration error" },
     { IBMCA_ERR_LIBICA_FAILED,  "A libica function returned an error" },
+    { IBMCA_ERR_SIGNATURE_BAD,  "Signature bad" },
     { 0, NULL }
 };
 

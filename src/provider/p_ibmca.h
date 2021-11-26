@@ -167,6 +167,15 @@ struct ibmca_op_ctx {
                 unsigned int tls_clnt_version;
                 unsigned int tls_alt_version;
             } cipher; /* For operation EVP_PKEY_OP_ENCRYPT/DECRYPT */
+            struct {
+                int pad_mode;
+                EVP_MD *md;
+                bool set_md_allowed;
+                EVP_MD *mgf1_md;
+                int saltlen;
+                struct ibmca_pss_params pss;
+                EVP_MD_CTX *md_ctx;
+            } signature; /* For operation EVP_PKEY_OP_SIGN/VERIFY */
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
     };
 };
@@ -322,6 +331,7 @@ void ibmca_put_error(const struct ibmca_prov_ctx *provctx, int err,
 #define IBMCA_ERR_INVALID_PARAM                 3
 #define IBMCA_ERR_CONFIGURATION                 4
 #define IBMCA_ERR_LIBICA_FAILED                 5
+#define IBMCA_ERR_SIGNATURE_BAD                 6
 
 #define UNUSED(var)                             ((void)(var))
 
@@ -334,6 +344,7 @@ struct ibmca_mech_capability {
 
 extern const OSSL_ALGORITHM ibmca_rsa_keymgmt[];
 extern const OSSL_ALGORITHM ibmca_rsa_asym_cipher[];
+extern const OSSL_ALGORITHM ibmca_rsa_signature[];
 
 #define IBMCA_RSA_DEFAULT_BITS              2048
 #define IBMCA_RSA_DEFAULT_PUB_EXP           65537L
@@ -354,8 +365,14 @@ extern const OSSL_ALGORITHM ibmca_rsa_asym_cipher[];
                                    false                                \
                                  }
 
+#define MAX_DIGINFO_SIZE                    128
+
 extern const OSSL_ITEM ibmca_rsa_padding_table[];
 
+int ibmca_rsa_build_digest_info(const struct ibmca_prov_ctx *provctx,
+                                const EVP_MD *md, const unsigned char *data,
+                                size_t data_len, unsigned char *out,
+                                size_t outsize, size_t *outlen);
 int ibmca_rsa_add_pkcs1_padding(const struct ibmca_prov_ctx *provctx, int type,
                                 const unsigned char *in, size_t inlen,
                                 unsigned char *out, size_t outlen);
@@ -385,4 +402,24 @@ int ibmca_rsa_check_pkcs1_tls_padding(const struct ibmca_prov_ctx *provctx,
                                       const unsigned char *in, size_t inlen,
                                       unsigned char *out, size_t outsize,
                                       size_t *outlen);
+int ibmca_rsa_add_x931_padding(const struct ibmca_prov_ctx *provctx,
+                               const unsigned char *in, size_t inlen,
+                               unsigned char *out, size_t outlen,
+                               int digest_nid);
+int ibmca_rsa_check_X931_padding(const struct ibmca_prov_ctx *provctx,
+                                 const unsigned char *in, int inlen,
+                                 unsigned char *out, size_t outsize,
+                                 unsigned char **outptr, size_t *outlen,
+                                 int digest_nid);
+int ibmca_rsa_add_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
+                                   const unsigned char *in, size_t inlen,
+                                   unsigned char *out, size_t outlen,
+                                   const EVP_MD *pss_md, const EVP_MD *mgf1_md,
+                                   int saltlen);
+int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
+                                     const unsigned char *in, size_t inlen,
+                                     const unsigned char *data, size_t datalen,
+                                     const EVP_MD *pss_md,
+                                     const EVP_MD *mgf1_md,
+                                     int saltlen);
 

@@ -25,6 +25,7 @@
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
+#include <openssl/x509.h>
 #include <openssl/core_names.h>
 
 #include "p_ibmca.h"
@@ -39,6 +40,101 @@ const OSSL_ITEM ibmca_rsa_padding_table[] = {
     { RSA_PKCS1_WITH_TLS_PADDING, "" }, /* Will only be set as integer param */
     { 0,                        NULL     }
 };
+
+#define ASN1_SEQUENCE        0x30
+#define ASN1_OCTET_STRING    0x04
+
+int ibmca_rsa_build_digest_info(const struct ibmca_prov_ctx *provctx,
+                                const EVP_MD *md, const unsigned char *data,
+                                size_t data_len, unsigned char *out,
+                                size_t outsize, size_t *outlen)
+{
+    X509_ALGOR *algid;
+    int aid_len, md_len, seq_len, rc = 0;
+    unsigned char *p;
+
+    ibmca_debug_ctx(provctx, "md: '%s' data_len: %lu outsize: %lu",
+                    EVP_MD_get0_name(md), data_len, outsize);
+
+    /*
+     DigestInfo ::= SEQUENCE {
+           digestAlgorithm AlgorithmIdentifier,
+           digest OCTET STRING
+     }
+     */
+
+    md_len = EVP_MD_get_size(md);
+    if (md_len <= 0 || md_len > 0x7F) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MD_get_size failed or invalid digest size");
+        return 0;
+    }
+
+    if (data_len != (size_t)md_len) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Input data size is incorrect, it must match the digest size: data size: %lu expected: %d",
+                      data_len, md_len);
+        return 0;
+    }
+
+    algid = X509_ALGOR_new();
+    if (algid == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
+                       "X509_ALGOR_new failed");
+        goto out;
+    }
+
+    X509_ALGOR_set0(algid, OBJ_nid2obj(EVP_MD_get_type(md)),
+                    V_ASN1_NULL, NULL);
+    aid_len = i2d_X509_ALGOR(algid, NULL);
+    if (aid_len <= 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "i2d_X509_ALGOR failed");
+        goto out;
+    }
+
+    seq_len = aid_len + 2 + md_len;
+    if (seq_len > 0x7F)
+        *outlen = 4 + seq_len;
+    else
+        *outlen = 2 + seq_len;
+
+    if (outsize < *outlen) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Output buffer size too small");
+        goto out;
+    }
+
+    p = out;
+    *(p++) = ASN1_SEQUENCE;
+    if (seq_len > 0x7F) {
+        *(p++) = 0x82;
+        *(p++) = (seq_len >> 8);
+        *(p++) = (seq_len & 0xff);
+    } else {
+        *(p++) = seq_len;
+    }
+
+    if (i2d_X509_ALGOR(algid, &p) != aid_len) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "i2d_X509_ALGOR failed");
+        goto out;
+    }
+
+    *(p++) = ASN1_OCTET_STRING;
+    *(p++) = md_len;
+    memcpy(p, data, md_len);
+
+    ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
+
+    rc = 1;
+
+out:
+    if (algid != NULL)
+        X509_ALGOR_free(algid);
+
+    return rc;
+}
 
 int ibmca_rsa_add_pkcs1_padding(const struct ibmca_prov_ctx *provctx, int type,
                                 const unsigned char *in, size_t inlen,
@@ -638,4 +734,440 @@ error:
     ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
 
     return 1;
+}
+
+static int ibmca_rsa_x931_padding_hash_id(int nid)
+{
+    switch (nid) {
+    case NID_sha1:
+        return 0x33;
+    case NID_sha256:
+        return 0x34;
+    case NID_sha384:
+        return 0x36;
+    case NID_sha512:
+        return 0x35;
+    }
+    return -1;
+}
+
+int ibmca_rsa_add_x931_padding(const struct ibmca_prov_ctx *provctx,
+                               const unsigned char *in, size_t inlen,
+                               unsigned char *out, size_t outlen,
+                               int digest_nid)
+{
+    int j, hash_id;
+    unsigned char *p;
+
+    ibmca_debug_ctx(provctx, "inlen: %lu outlen: %lu digest_nid: %d",
+                    inlen, outlen, digest_nid);
+
+    hash_id = ibmca_rsa_x931_padding_hash_id(digest_nid);
+    if (hash_id == -1) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Unsupported signature digest: %d", digest_nid);
+        return 0;
+    }
+
+    /*
+     * Absolute minimum amount of padding is 1 header nibble, 1 padding
+     * nibble and 2 trailer bytes.
+     */
+    j = outlen - inlen - 3;
+
+    if (j < 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Data too large for the key type");
+        return 0;
+    }
+
+    p = out;
+
+    /* If no padding start and end nibbles are in one byte */
+    if (j == 0) {
+        *p++ = 0x6A;
+    } else {
+        *p++ = 0x6B;
+        if (j > 1) {
+            memset(p, 0xBB, j - 1);
+            p += j - 1;
+        }
+        *p++ = 0xBA;
+    }
+    memcpy(p, in, inlen);
+    p += inlen;
+    *p++ = hash_id;
+    *p = 0xCC;
+    return 1;
+}
+
+int ibmca_rsa_check_X931_padding(const struct ibmca_prov_ctx *provctx,
+                                 const unsigned char *in, int inlen,
+                                 unsigned char *out, size_t outsize,
+                                 unsigned char **outptr, size_t *outlen,
+                                 int digest_nid)
+{
+    int i = 0, j, hash_id;
+    const unsigned char *p;
+
+    ibmca_debug_ctx(provctx, "inlen: %lu outsize: %lu digest_nid: %d",
+                    inlen, outsize, digest_nid);
+
+    hash_id = ibmca_rsa_x931_padding_hash_id(digest_nid);
+    if (hash_id == -1) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Unsupported signature digest: %d", digest_nid);
+        return 0;
+    }
+
+    p = in;
+    if (((*p != 0x6A) && (*p != 0x6B))) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR, "Invalid X931 padding");
+        return 0;
+    }
+
+    if (*p++ == 0x6B) {
+        j = inlen - 3;
+        for (i = 0; i < j; i++) {
+            unsigned char c = *p++;
+            if (c == 0xBA)
+                break;
+            if (c != 0xBB) {
+                put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                              "Invalid X931 padding");
+                return 0;
+            }
+        }
+
+        j -= i;
+
+        if (i == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Invalid X931 padding");
+            return 0;
+        }
+
+    } else {
+        j = inlen - 2;
+    }
+
+    if (p[j - 1] != hash_id || p[j] != 0xCC) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR, "Invalid X931 trailer");
+        return 0;
+    }
+
+    *outlen = j - 1;
+
+    if (outsize < *outlen) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Output buffer size too small");
+        return 0;
+    }
+
+    if (out != NULL)
+        memcpy(out, p, *outlen);
+    if (outptr != NULL)
+        *outptr = (unsigned char *)p;
+
+    ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
+
+    return 1;
+}
+
+int ibmca_rsa_add_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
+                                   const unsigned char *in, size_t inlen,
+                                   unsigned char *out, size_t outlen,
+                                   const EVP_MD *pss_md, const EVP_MD *mgf1_md,
+                                   int saltlen)
+{
+    int i, rc = 0, maskeddb_len, msbits;
+    unsigned char *h, *salt = NULL, *p;
+    EVP_MD_CTX *ctx = NULL;
+    static const unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    if (pss_md == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "No PSS digest available");
+        return 0;
+    }
+
+    if (mgf1_md == NULL)
+        mgf1_md = pss_md;
+
+    ibmca_debug_ctx(provctx,
+                    "inlen: %lu outlen: %lu pss_md: '%s' mgf1_md: '%s' saltlen: %d",
+                    inlen, outlen, EVP_MD_get0_name(pss_md),
+                    EVP_MD_get0_name(mgf1_md), saltlen);
+
+    msbits = ((outlen * 8) - 1) & 0x7;
+    if (msbits == 0) {
+        *out++ = 0;
+        outlen--;
+    }
+
+    if (outlen < inlen + 2) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                              "Data too large for the key type");
+        goto err;
+    }
+
+    if (inlen != (size_t)EVP_MD_get_size(pss_md)) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                       "Data size is not the size of the digest");
+        goto err;
+    }
+
+    switch (saltlen) {
+    case RSA_PSS_SALTLEN_DIGEST:
+        saltlen = EVP_MD_get_size(pss_md);
+        break;
+    case RSA_PSS_SALTLEN_MAX_SIGN:
+    case RSA_PSS_SALTLEN_MAX:
+        saltlen = outlen - inlen - 2;
+        break;
+    default:
+        if (saltlen < 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                          "Invalid salt len: %d", saltlen);
+            goto err;
+        }
+    }
+    if ((size_t)saltlen > outlen - inlen - 2) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Data too large for the key type");
+        goto err;
+    }
+
+    ibmca_debug_ctx(provctx,"saltlen: %d", saltlen);
+
+    if (saltlen > 0) {
+        salt = P_MALLOC(provctx, saltlen);
+        if (salt == NULL) {
+            put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
+                          "Failed to allocate salt buffer");
+            goto err;
+        }
+        if (RAND_bytes_ex(provctx->libctx, salt, saltlen, 0) <= 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "RAND_bytes_ex failed");
+            goto err;
+        }
+    }
+
+    maskeddb_len = outlen - inlen - 1;
+    h = out + maskeddb_len;
+
+    ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MD_CTX_new failed");
+        goto err;
+    }
+
+    if (EVP_DigestInit_ex(ctx, pss_md, NULL) == 0 ||
+        EVP_DigestUpdate(ctx, zeroes, sizeof(zeroes)) == 0 ||
+        EVP_DigestUpdate(ctx, in, inlen) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_DigestInit_ex/EVP_DigestUpdate failed");
+        goto err;
+    }
+
+    if (saltlen != 0 && EVP_DigestUpdate(ctx, salt, saltlen) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_DigestUpdate failed");
+        goto err;
+    }
+    if (EVP_DigestFinal_ex(ctx, h, NULL) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_DigestFinal_ex failed");
+        goto err;
+    }
+
+    /* Generate dbMask in place then perform XOR on it */
+    if (ibmca_rsa_pkcs1_mgf1(provctx, out, maskeddb_len, h, inlen,
+                             mgf1_md) == 0)
+        goto err;
+
+    p = out;
+    p += outlen - saltlen - inlen - 2;
+
+    *p++ ^= 0x1;
+
+    if (saltlen > 0) {
+        for (i = 0; i < saltlen; i++)
+            *p++ ^= salt[i];
+    }
+
+    if (msbits != 0)
+        out[0] &= 0xFF >> (8 - msbits);
+
+    out[outlen - 1] = 0xbc;
+
+    rc = 1;
+
+err:
+    if (ctx != NULL)
+        EVP_MD_CTX_free(ctx);
+    if (salt != NULL)
+        P_CLEAR_FREE(provctx, salt, (size_t)saltlen);
+
+    return rc;
+}
+
+int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
+                                     const unsigned char *in, size_t inlen,
+                                     const unsigned char *data, size_t datalen,
+                                     const EVP_MD *pss_md,
+                                     const EVP_MD *mgf1_md,
+                                     int saltlen)
+{
+    int i, rc = 0, maskeddb_len, msbits;
+    const unsigned char *h;
+    unsigned char *db = NULL;
+    EVP_MD_CTX *ctx = NULL;
+    unsigned char h_[EVP_MAX_MD_SIZE];
+    static const unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    if (pss_md == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "No PSS digest available");
+        return 0;
+    }
+
+    if (mgf1_md == NULL)
+        mgf1_md = pss_md;
+
+    ibmca_debug_ctx(provctx,
+                    "inlen: %lu datalen: %lu pss_md: '%s' mgf1_md: '%s' saltlen: %d",
+                    inlen, datalen, EVP_MD_get0_name(pss_md),
+                    EVP_MD_get0_name(mgf1_md), saltlen);
+
+    if (datalen != (size_t)EVP_MD_get_size(pss_md)) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                       "Data size is not the size of the digest");
+        goto err;
+    }
+
+    msbits = ((inlen * 8) - 1) & 0x7;
+    if (in[0] & (0xFF << msbits)) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Invalid PSS encoding");
+        goto err;
+    }
+    if (msbits == 0) {
+        in++;
+        inlen--;
+    }
+
+    switch (saltlen) {
+    case RSA_PSS_SALTLEN_DIGEST:
+        saltlen = EVP_MD_get_size(pss_md);
+        break;
+    case RSA_PSS_SALTLEN_MAX:
+        saltlen = inlen - datalen - 2;
+        break;
+    case RSA_PSS_SALTLEN_AUTO:
+        break;
+    default:
+        if (saltlen < 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                          "Invalid salt len: %d", saltlen);
+            goto err;
+        }
+    }
+    ibmca_debug_ctx(provctx,"saltlen: %d", saltlen);
+
+    if (saltlen > (int)(inlen - datalen - 2)) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Data too large for the key type");
+        goto err;
+    }
+
+    if (in[inlen - 1] != 0xbc) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Invalid PSS encoding");
+        goto err;
+    }
+
+    maskeddb_len = inlen - datalen - 1;
+    h = in + maskeddb_len;
+
+    db = P_MALLOC(provctx, maskeddb_len);
+    if (db == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
+                      "Failed to allocate DB buffer");
+        goto err;
+    }
+
+    if (ibmca_rsa_pkcs1_mgf1(provctx, db, maskeddb_len, h, datalen,
+                             mgf1_md) < 0)
+        goto err;
+
+    for (i = 0; i < maskeddb_len; i++)
+        db[i] ^= in[i];
+
+    if (msbits != 0)
+        db[0] &= 0xFF >> (8 - msbits);
+
+    for (i = 0; db[i] == 0 && i < (maskeddb_len - 1); i++)
+        ;
+
+    if (db[i++] != 0x1) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                              "Saltlen recovery failed");
+        goto err;
+    }
+
+    if (saltlen != RSA_PSS_SALTLEN_AUTO && (maskeddb_len - i) != saltlen) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Saltlen check failed. Expected: %d retrieved: %d",
+                      saltlen, maskeddb_len - i);
+        goto err;
+    }
+
+    ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MD_CTX_new failed");
+        goto err;
+    }
+
+    if (EVP_DigestInit_ex(ctx, pss_md, NULL) == 0 ||
+        EVP_DigestUpdate(ctx, zeroes, sizeof(zeroes)) == 0 ||
+        EVP_DigestUpdate(ctx, data, datalen) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_DigestInit_ex/EVP_DigestUpdate failed");
+        goto err;
+    }
+
+    if (maskeddb_len - i > 0) {
+        if (EVP_DigestUpdate(ctx, db + i, maskeddb_len - i) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "EVP_DigestUpdate failed");
+            goto err;
+        }
+    }
+
+    if (EVP_DigestFinal_ex(ctx, h_, NULL) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_DigestFinal_exe failed");
+        goto err;
+    }
+
+    if (memcmp(h_, h, datalen)) {
+        put_error_ctx(provctx, IBMCA_ERR_SIGNATURE_BAD, "Bad signature");
+        rc = 0;
+    } else {
+        rc = 1;
+    }
+
+    ibmca_debug_ctx(provctx, "rc: %d", rc);
+
+err:
+    if (db != NULL)
+        P_CLEAR_FREE(provctx, db, maskeddb_len);
+    if (ctx != NULL)
+        EVP_MD_CTX_free(ctx);
+
+    return rc;
 }
