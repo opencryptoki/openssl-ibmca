@@ -118,6 +118,7 @@ static const unsigned int ica_ec_mech[] = {
 static const  struct ibmca_mech_algorithm ibmca_ec_algorithms[] = {
     { OSSL_OP_KEYMGMT, ibmca_ec_keymgmt },
     { OSSL_OP_SIGNATURE, ibmca_ec_signature },
+    { OSSL_OP_KEYEXCH, ibmca_ec_keyexch },
     { 0, NULL }
 };
 

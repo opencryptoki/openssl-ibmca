@@ -201,6 +201,14 @@ struct ibmca_op_ctx {
                 size_t md_size;
                 EVP_MD_CTX *md_ctx;
             } signature; /* For operation EVP_PKEY_OP_SIGN/VERIFY */
+            struct {
+                struct ibmca_key *peer_key;
+                int kdf_type; /* EVP_PKEY_ECDH_KDF_xxx */
+                EVP_MD *kdf_md;
+                size_t kdf_outlen;
+                unsigned char *kdf_ukm;
+                size_t kdf_ukmlen;
+            } derive;/* For operation EVP_PKEY_OP_DERIVE */
         } ec; /* For type EVP_PKEY_EC */
     };
 };
@@ -454,6 +462,7 @@ int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
 
 extern const OSSL_ALGORITHM ibmca_ec_keymgmt[];
 extern const OSSL_ALGORITHM ibmca_ec_signature[];
+extern const OSSL_ALGORITHM ibmca_ec_keyexch[];
 extern const struct ibmca_mech_capability ibmca_ec_capabilities[];
 
 #define IBMCA_EC_DEFAULT_DIGEST             NID_sha256
