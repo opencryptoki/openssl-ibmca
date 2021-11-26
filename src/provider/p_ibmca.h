@@ -158,6 +158,15 @@ struct ibmca_op_ctx {
                 BIGNUM *pub_exp;
                 struct ibmca_pss_params pss; /* For EVP_PKEY_RSA_PSS only */
             } gen; /* For operation EVP_PKEY_OP_KEYGEN */
+            struct {
+                int pad_mode;
+                EVP_MD *mgf1_md;
+                EVP_MD *oaep_md;
+                unsigned char *oaep_label;
+                size_t oaep_labellen;
+                unsigned int tls_clnt_version;
+                unsigned int tls_alt_version;
+            } cipher; /* For operation EVP_PKEY_OP_ENCRYPT/DECRYPT */
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
     };
 };
@@ -251,19 +260,32 @@ int ibmca_param_build_set_bn(const struct ibmca_prov_ctx *provctx,
 int ibmca_param_build_set_int(const struct ibmca_prov_ctx *provctx,
                               OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
                               const char *key, int val);
+int ibmca_param_build_set_uint(const struct ibmca_prov_ctx *provctx,
+                               OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                               const char *key, unsigned int val);
 int ibmca_param_build_set_utf8(const struct ibmca_prov_ctx *provctx,
                                OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
                                const char *key, const char *str);
+int ibmca_param_build_set_octet_ptr(const struct ibmca_prov_ctx *provctx,
+                                    OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                                    const char *key, const void *val,
+                                    size_t len);
 int ibmca_param_get_bn(const struct ibmca_prov_ctx *provctx,
                        const OSSL_PARAM params[], const char *key, BIGNUM **bn);
 int ibmca_param_get_int(const struct ibmca_prov_ctx *provctx,
                         const OSSL_PARAM params[], const char *key, int *val);
+int ibmca_param_get_uint(const struct ibmca_prov_ctx *provctx,
+                         const OSSL_PARAM params[], const char *key,
+                         unsigned int *val);
 int ibmca_param_get_size_t(const struct ibmca_prov_ctx *provctx,
                            const OSSL_PARAM params[], const char *key,
                            size_t *val);
 int ibmca_param_get_utf8(const struct ibmca_prov_ctx *provctx,
                          const OSSL_PARAM params[], const char *key,
                          const char **str);
+int ibmca_param_get_octet_string(const struct ibmca_prov_ctx *provctx,
+                                 const OSSL_PARAM params[], const char *key,
+                                 void **val, size_t *len);
 
 /* Debug and error handling functions and macros */
 void ibmca_debug_print(struct ibmca_prov_ctx *provctx, const char *func,
@@ -311,6 +333,7 @@ struct ibmca_mech_capability {
 };
 
 extern const OSSL_ALGORITHM ibmca_rsa_keymgmt[];
+extern const OSSL_ALGORITHM ibmca_rsa_asym_cipher[];
 
 #define IBMCA_RSA_DEFAULT_BITS              2048
 #define IBMCA_RSA_DEFAULT_PUB_EXP           65537L
@@ -319,7 +342,10 @@ extern const OSSL_ALGORITHM ibmca_rsa_keymgmt[];
 #define IBMCA_RSA_PSS_DEFAULT_MGF           NID_mgf1
 #define IBMCA_RSA_PSS_DEFAULT_MGF_DIGEST    NID_sha1
 #define IBMCA_RSA_PSS_DEFAULT_SALTLEN       20
+#define IBMCA_RSA_OAEP_DEFAULT_DIGEST       NID_sha1
+#define IBMCA_RSA_DEFAULT_PADDING           RSA_PKCS1_PADDING
 #define IBMCA_RSA_MIN_MODULUS_BITS          512
+#define IBMCA_SSL_MAX_MASTER_KEY_LENGTH     48
 
 #define IBMCA_RSA_PSS_DEFAULTS   { IBMCA_RSA_PSS_DEFAULT_DIGEST,        \
                                    IBMCA_RSA_PSS_DEFAULT_MGF,           \
@@ -327,4 +353,36 @@ extern const OSSL_ALGORITHM ibmca_rsa_keymgmt[];
                                    IBMCA_RSA_PSS_DEFAULT_SALTLEN,       \
                                    false                                \
                                  }
+
+extern const OSSL_ITEM ibmca_rsa_padding_table[];
+
+int ibmca_rsa_add_pkcs1_padding(const struct ibmca_prov_ctx *provctx, int type,
+                                const unsigned char *in, size_t inlen,
+                                unsigned char *out, size_t outlen);
+int ibmca_rsa_check_pkcs1_padding(const struct ibmca_prov_ctx *provctx,
+                                  int type,
+                                  const unsigned char *in, size_t inlen,
+                                  unsigned char *out, size_t outsize,
+                                  unsigned char ** outptr, size_t *outlen);
+int ibmca_rsa_add_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
+                                    const unsigned char *in, size_t inlen,
+                                    unsigned char *out, size_t outlen,
+                                    const EVP_MD *oaep_md,
+                                    const EVP_MD *mgf1_md,
+                                    const unsigned char *label,
+                                    size_t label_len);
+int ibmca_rsa_check_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
+                                      const unsigned char *in, size_t inlen,
+                                      unsigned char *out, size_t outsize,
+                                      unsigned char **outptr, size_t *outlen,
+                                      const EVP_MD *oaep_md,
+                                      const EVP_MD *mgf1_md,
+                                      const unsigned char *label,
+                                      size_t label_len);
+int ibmca_rsa_check_pkcs1_tls_padding(const struct ibmca_prov_ctx *provctx,
+                                      unsigned int client_version,
+                                      unsigned int alt_version,
+                                      const unsigned char *in, size_t inlen,
+                                      unsigned char *out, size_t outsize,
+                                      size_t *outlen);
 
