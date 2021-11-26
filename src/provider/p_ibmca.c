@@ -102,6 +102,7 @@ static const unsigned int ica_rsa_mech[] = {
 
 static const struct ibmca_mech_algorithm ibmca_rsa_algorithms[] = {
     { OSSL_OP_KEYMGMT, ibmca_rsa_keymgmt },
+    { OSSL_OP_ASYM_CIPHER, ibmca_rsa_asym_cipher },
     { 0, NULL }
 };
 
@@ -306,6 +307,34 @@ out:
     return 1;
 }
 
+int ibmca_param_build_set_uint(const struct ibmca_prov_ctx *provctx,
+                               OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                               const char *key, unsigned int val)
+{
+    if (bld != NULL) {
+        if (OSSL_PARAM_BLD_push_uint(bld, key, val) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Failed to return param '%s'", key);
+            return 0;
+        }
+        goto out;
+    }
+
+    p = OSSL_PARAM_locate(p, key);
+    if (p == NULL)
+        return 1;
+
+    if (OSSL_PARAM_set_uint(p, val) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to return param '%s'", key);
+        return 0;
+    }
+
+out:
+    ibmca_debug_ctx(provctx, "param '%s': %u", key, val);
+    return 1;
+}
+
 int ibmca_param_build_set_utf8(const struct ibmca_prov_ctx *provctx,
                                OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
                                const char *key, const char *str)
@@ -334,6 +363,39 @@ int ibmca_param_build_set_utf8(const struct ibmca_prov_ctx *provctx,
 
 out:
     ibmca_debug_ctx(provctx, "param '%s': '%s'", key, str);
+    return 1;
+}
+
+int ibmca_param_build_set_octet_ptr(const struct ibmca_prov_ctx *provctx,
+                                    OSSL_PARAM_BLD *bld, OSSL_PARAM *p,
+                                    const char *key, const void *val,
+                                    size_t len)
+{
+    if (val == NULL)
+        return 0;
+
+    if (bld != NULL) {
+        if (OSSL_PARAM_BLD_push_octet_string(bld, key, val, len) == 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "Failed to return param '%s'", key);
+            return 0;
+        }
+        goto out;
+    }
+
+    p = OSSL_PARAM_locate(p, key);
+    if (p == NULL)
+        return 1;
+
+    if (OSSL_PARAM_set_octet_string(p, val, len) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to return param '%s'", key);
+        return 0;
+    }
+
+out:
+    ibmca_debug_ctx(provctx, "param '%s': [octet string] (%lu bytes)", key,
+                    len);
     return 1;
 }
 
@@ -390,6 +452,26 @@ int ibmca_param_get_int(const struct ibmca_prov_ctx *provctx,
     return 1;
 }
 
+int ibmca_param_get_uint(const struct ibmca_prov_ctx *provctx,
+                         const OSSL_PARAM params[], const char *key,
+                         unsigned int *val)
+{
+    const OSSL_PARAM *p;
+
+    p = OSSL_PARAM_locate_const(params, key);
+    if (p == NULL)
+        return -1;
+
+    if (OSSL_PARAM_get_uint(p, val) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Failed to get param '%s'", key);
+        return 0;
+    }
+
+    ibmca_debug_ctx(provctx, "param '%s': %u", key, *val);
+    return 1;
+}
+
 int ibmca_param_get_size_t(const struct ibmca_prov_ctx *provctx,
                            const OSSL_PARAM params[], const char *key,
                            size_t *val)
@@ -429,6 +511,27 @@ int ibmca_param_get_utf8(const struct ibmca_prov_ctx *provctx,
     }
 
     ibmca_debug_ctx(provctx, "param '%s': '%s'", key, *str);
+    return 1;
+}
+
+int ibmca_param_get_octet_string(const struct ibmca_prov_ctx *provctx,
+                                 const OSSL_PARAM params[], const char *key,
+                                 void **val, size_t *len)
+{
+    const OSSL_PARAM *p;
+
+    p = OSSL_PARAM_locate_const(params, key);
+    if (p == NULL)
+        return -1;
+
+    if (OSSL_PARAM_get_octet_string(p, val, 0, len) == 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                      "Failed to get param '%s'", key);
+        return 0;
+    }
+
+    ibmca_debug_ctx(provctx, "param '%s': [octet string] (%lu bytes)",
+                    key, *len);
     return 1;
 }
 
