@@ -92,6 +92,12 @@ fi
 # tests from that build.
 AM_CONDITIONAL([FULL_LIBICA], [test "x$usecexonly" != xyes])
 
+AC_ARG_WITH([provider-libica-full],
+	[AS_HELP_STRING([--with-provider-libica-full],[Use the full libica as library for the IBMCA provider])],
+	[useproviderfulllibica=${withval}],
+	[])
+AM_CONDITIONAL([PROVIDER_FULL_LIBICA], [test "x$useproviderfulllibica" = xyes])
+
 # If compiled against OpenSSL 3.0 or later, build the provider unless
 # explicitely disabled. 
 # If build against OpenSSL 1.1.1, we can not build the provider.
@@ -142,3 +148,8 @@ echo "CFLAGS=$CFLAGS"
 echo "IBMCA engine:      $enable_engine"
 echo "  default library: $defaultlib"
 echo "IBMCA provider:    $enable_provider"
+if test "x$useproviderfulllibica" = xyes; then
+	echo "  libica library:  libica"
+else
+	echo "  libica library:  libica-cex"
+fi

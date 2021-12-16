@@ -7,7 +7,11 @@ ibmca_provider_la_SOURCES=p_ibmca.c
 
 ibmca_provider_la_CFLAGS=-DIBMCA_VERSION=\"${VERSION_STR}\" -DIBMCA_LOGDIR=\"$(logdir)\"
 
+if PROVIDER_FULL_LIBICA
+ibmca_provider_la_LIBADD=-ldl -lica
+else
 ibmca_provider_la_LIBADD=-ldl -lica-cex
+endif
 ibmca_provider_la_LDFLAGS=-module -version-number ${VERSION} -shared -no-undefined \
 		  -avoid-version -Wl,--version-script=${srcdir}/ibmca-provider.map
 
