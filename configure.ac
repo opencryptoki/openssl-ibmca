@@ -130,7 +130,8 @@ AC_CONFIG_FILES([
 	src/provider/Makefile
 	src/provider/doc/Makefile
 	test/Makefile
-	test/engine/Makefile])
+	test/engine/Makefile
+	test/provider/Makefile])
 
 AC_OUTPUT
 
