@@ -240,6 +240,16 @@ struct ibmca_op_ctx {
                 int selection;
                 int priv_len;
             } gen; /* For operation EVP_PKEY_OP_KEYGEN */
+            struct {
+                struct ibmca_key *peer_key;
+                bool pad;
+                int kdf_type; /* EVP_PKEY_DH_KDF_xxx */
+                EVP_MD *kdf_md;
+                size_t kdf_outlen;
+                unsigned char *kdf_ukm;
+                size_t kdf_ukmlen;
+                char *kdf_cekalg;
+            } derive;/* For operation EVP_PKEY_OP_DERIVE */
         } dh; /* For type EVP_PKEY_DH and EVP_PKEY_DHX */
     };
 };
@@ -499,4 +509,5 @@ extern const struct ibmca_mech_capability ibmca_ec_capabilities[];
 #define IBMCA_EC_DEFAULT_DIGEST             NID_sha256
 
 extern const OSSL_ALGORITHM ibmca_dh_keymgmt[];
+extern const OSSL_ALGORITHM ibmca_dh_keyexch[];
 extern const struct ibmca_mech_capability ibmca_dh_capabilities[];
