@@ -124,6 +124,7 @@ static const  struct ibmca_mech_algorithm ibmca_ec_algorithms[] = {
 
 static const  struct ibmca_mech_algorithm ibmca_dh_algorithms[] = {
     { OSSL_OP_KEYMGMT, ibmca_dh_keymgmt },
+    { OSSL_OP_KEYEXCH, ibmca_dh_keyexch },
     { 0, NULL }
 };
 
