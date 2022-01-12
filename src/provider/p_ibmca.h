@@ -88,6 +88,25 @@ struct ibmca_pss_params {
      bool restricted;
 };
 
+struct ibmca_ffc_params {
+    int group_nid;
+    BIGNUM *p;
+    BIGNUM *q;
+    BIGNUM *g; /* DHX only */
+    BIGNUM *cofactor; /* DHX only */
+    int length;
+    unsigned char *seed;
+    size_t seed_len;
+    int gindex;
+    int pcounter;
+    int hindex;
+    unsigned int validate_pq : 1;
+    unsigned int validate_g : 1;
+    unsigned int validate_legacy : 1;
+    const char *mdname;
+    const char *mdprops;
+};
+
 struct ibmca_key {
     const struct ibmca_prov_ctx *provctx;
     unsigned int ref_count;
@@ -121,6 +140,11 @@ struct ibmca_key {
                 BIGNUM *d;
             } fallback;
         } ec; /* For type EVP_PKEY_EC */
+        struct {
+            BIGNUM *pub;
+            BIGNUM *priv;
+            struct ibmca_ffc_params ffc_params;
+        } dh; /* For type EVP_PKEY_DH and EVP_PKEY_DHX */
     };
 };
 
@@ -210,6 +234,13 @@ struct ibmca_op_ctx {
                 size_t kdf_ukmlen;
             } derive;/* For operation EVP_PKEY_OP_DERIVE */
         } ec; /* For type EVP_PKEY_EC */
+        union {
+            struct {
+                EVP_PKEY_CTX *pctx;
+                int selection;
+                int priv_len;
+            } gen; /* For operation EVP_PKEY_OP_KEYGEN */
+        } dh; /* For type EVP_PKEY_DH and EVP_PKEY_DHX */
     };
 };
 
@@ -467,3 +498,5 @@ extern const struct ibmca_mech_capability ibmca_ec_capabilities[];
 
 #define IBMCA_EC_DEFAULT_DIGEST             NID_sha256
 
+extern const OSSL_ALGORITHM ibmca_dh_keymgmt[];
+extern const struct ibmca_mech_capability ibmca_dh_capabilities[];

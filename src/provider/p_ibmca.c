@@ -122,10 +122,22 @@ static const  struct ibmca_mech_algorithm ibmca_ec_algorithms[] = {
     { 0, NULL }
 };
 
+static const  struct ibmca_mech_algorithm ibmca_dh_algorithms[] = {
+    { OSSL_OP_KEYMGMT, ibmca_dh_keymgmt },
+    { 0, NULL }
+};
+
+static const unsigned int ica_dh_mech[] = {
+    RSA_ME, /* DH uses RSA mod-expo for derive */
+    0
+};
+
 static const struct ibmca_ica_mech_info ica_mech_infos[] = {
     { IBMCA_CONFIG_ALGO_RSA, ica_rsa_mech, ibmca_rsa_algorithms, NULL },
     { IBMCA_CONFIG_ALGO_EC, ica_ec_mech, ibmca_ec_algorithms,
                                                     ibmca_ec_capabilities },
+    { IBMCA_CONFIG_ALGO_DH, ica_dh_mech, ibmca_dh_algorithms,
+                                                    ibmca_dh_capabilities },
     { NULL, NULL, NULL, NULL }
 };
 
