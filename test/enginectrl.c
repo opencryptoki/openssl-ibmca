@@ -65,8 +65,8 @@ int testctrl(void)
         int expectedinitval;
     } params[] = {
                   {"doesnotexist",    0, 0},
-                  {"libica.so.3",     1, 1},
-                  {"libica-cex.so.3", 1, 1}
+                  {"libica.so.4",     1, 1},
+                  {"libica-cex.so.4", 1, 1}
     };
 
     engine = ENGINE_by_id("ibmca");

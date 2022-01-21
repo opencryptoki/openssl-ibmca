@@ -52,9 +52,9 @@ AC_ARG_WITH([libica-cex],
 	[])
 
 if test "x$usecexonly" = xyes; then
-	defaultlib="libica-cex.so.3"
+	defaultlib="libica-cex.so.4"
 else
-	defaultlib="libica.so.3"
+	defaultlib="libica.so.4"
 fi
 # In cex-only mode, testing the ciphers does not make any sense since
 # they will fall back to OpenSSL without the engine.  So remove these

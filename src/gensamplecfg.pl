@@ -62,8 +62,8 @@ dynamic_path = $libdir/ibmca.so
 engine_id = ibmca
 |);
     
-    print $oh2 "libica = libica.so.3";
-    print $oh3 "libica = libica-cex.so.3";
+    print $oh2 "libica = libica.so.4";
+    print $oh3 "libica = libica-cex.so.4";
     printall($oh1, $oh2, $oh3, qq|
 init = 1
 
