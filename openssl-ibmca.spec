@@ -39,7 +39,7 @@ popd
 
 %files
 %license LICENSE
-%doc ChangeLog README.md src/openssl.cnf.sample.%{_arch} src/openssl.cnf.defaultlibica src/openssl.cnf.libica src/openssl.cnf.libica-cex
+%doc ChangeLog README.md src/openssl.cnf.sample.%{_arch} src/ibmca-engine-opensslconfig
 %{enginesdir}/ibmca.so
 %{_mandir}/man5/ibmca.5*
 
