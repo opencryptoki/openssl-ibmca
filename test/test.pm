@@ -5,6 +5,18 @@ use warnings;
 
 package test;
 
+sub osslversion1 {
+    my $vstr = `openssl version -v`;
+
+    return $vstr =~ /OpenSSL 1\..*/;
+}
+
+sub osslversion3 {
+    my $vstr = `openssl version -v`;
+
+    return $vstr =~ /OpenSSL 3\..*/;
+}
+
 sub cipher {
 	my $tests = 50;
 	my $max_file_size = 1024;

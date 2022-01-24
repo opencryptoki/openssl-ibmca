@@ -4,4 +4,5 @@ use strict;
 use warnings;
 use test;
 
-test::cipher("des-ede3", 24, 0);
+# No iv needed, but openssl app version 3 somehow requires one...
+test::cipher("des-ede3", 24, test::osslversion3 ? 8 : 0);
