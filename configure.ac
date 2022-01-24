@@ -51,10 +51,15 @@ AC_ARG_WITH([libica-cex],
 	[usecexonly=${withval}],
 	[])
 
+AC_ARG_WITH([libica-version],
+	[AS_HELP_STRING([--with-libica-version],[Use specified libica major version (defaults to 4)])],
+	[libicaversion=${withval}],
+	[libicaversion=4])
+
 if test "x$usecexonly" = xyes; then
-	defaultlib="libica-cex.so.3"
+	defaultlib="libica-cex.so.$libicaversion"
 else
-	defaultlib="libica.so.3"
+	defaultlib="libica.so.$libicaversion"
 fi
 # In cex-only mode, testing the ciphers does not make any sense since
 # they will fall back to OpenSSL without the engine.  So remove these
