@@ -71,11 +71,11 @@ OpenSSL configuration file in the engine section before `init = 1`.
 Similarly, to use `libica-cex.so.3`, add the line 
 `libica = libica-cex.so.3`.
 
-The build process of OpenSSL-ibmca will produce sample configuration
-files for use of the system default (`openssl.cnf.defaultlibica`),
-libica.so.3 (`openssl.cnf.libica`), and libica-cex.so.3
-(`openssl.cnf.libica-cex`) based on the openssl configuration of the
-build system.
+The build process of OpenSSL-ibmca will produce the script
+`ibmca-engine-opensslconfig` which can be used to update an existing
+OpenSSL configuration to enable the OpenSSL-ibmca engine.  By default,
+this script is not installed.  We leave it to the distributions to
+find the correct place for this script (or not use it at all).
 
 ## Support
 
