@@ -38,6 +38,16 @@ example:
 $ ./configure --prefix=/usr --libdir=/usr/lib64/openssl/engines
 ```
 
+Additionally, at configure time, you can specify to build against the
+libica-cex version via the `--with-libica-cex` feature switch.  If
+this switch is not specified, the engine will use the full version of
+libica by default.
+
+To specify the version of libica, use
+`--with-libica-version=<version>`.  The default version is version 4
+of libica.  To build the engine against version 3 of libica, specify
+`--with-libica-version=3` at configure time.
+
 ## Enabling IBMCA
 
 Apps with compiled-in OpenSSL config support can enable the engine via
@@ -63,13 +73,13 @@ $
 Since libica 3.8.0, libica provides two libraries.  The basic
 libica.so.3 contains all the features listed above and is the default
 library unless the `configure` switch `--with-libica-cex` is provided.
-In that case, libica-cex.so.3 becomes the default library.  If both
+In that case, libica-cex.so.4 becomes the default library.  If both
 versions of the library are installed on a system, OpenSSL-ibmca can
-be configured to use either of these two.  To use `libica.so.3`, with
-OpenSSL-ibmca, simply add the directive `libica = libica.so.3` to your
+be configured to use either of these two.  To use `libica.so.4`, with
+OpenSSL-ibmca, simply add the directive `libica = libica.so.4` to your
 OpenSSL configuration file in the engine section before `init = 1`.
-Similarly, to use `libica-cex.so.3`, add the line 
-`libica = libica-cex.so.3`.
+Similarly, to use `libica-cex.so.4`, add the line 
+`libica = libica-cex.so.4`.
 
 The build process of OpenSSL-ibmca will produce the script
 `ibmca-engine-opensslconfig` which can be used to update an existing
