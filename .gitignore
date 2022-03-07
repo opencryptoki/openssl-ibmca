@@ -7,8 +7,11 @@ autom4te.cache
 *.la
 *.o
 *.tar.gz
+ibmca-engine-opensslconfig
+ibmca_mechaList_test
 Makefile
 Makefile.in
+Makefile.linux
 config.status
 config.log
 configure
