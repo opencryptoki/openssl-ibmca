@@ -8,7 +8,7 @@ all: $(TARGETS)
 
 # Every target is created from a single .c file.
 %: %.c
-	gcc $(OPTS) -o $@ $^ -lica -lcrypto
+	gcc $(OPTS) -o $@ $^ -l@ICA@ -lcrypto
 
 clean:
 	rm -f $(TARGETS)

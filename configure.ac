@@ -58,8 +58,10 @@ AC_ARG_WITH([libica-version],
 
 if test "x$usecexonly" = xyes; then
 	defaultlib="libica-cex.so.$libicaversion"
+	ica="ica-cex"
 else
 	defaultlib="libica.so.$libicaversion"
+	ica="ica"
 fi
 # In cex-only mode, testing the ciphers does not make any sense since
 # they will fall back to OpenSSL without the engine.  So remove these
@@ -67,6 +69,7 @@ fi
 AM_CONDITIONAL([FULL_LIBICA], [test "x$usecexonly" != xyes])
 
 AC_DEFINE_UNQUOTED([LIBICA_SHARED_LIB],["$defaultlib"])
+AC_SUBST([ICA],["$ica"])
 
 AC_CHECK_PROG([openssl_var],[openssl],[yes],[no])
 if test "x$openssl_var" != xyes; then
@@ -76,6 +79,7 @@ fi
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile
+	src/test/Makefile.linux
 	test/Makefile
 	src/doc/Makefile])
 
