@@ -22,65 +22,7 @@
 #include "ibmca.h"
 #include "e_ibmca_err.h"
 
-/*
- * copied from evp_int.h:
- * missing set/get methods for opaque types.
- */
-
-typedef struct {
-    unsigned char pub[57];
-    unsigned char *priv;
-} ECX_KEY;
-
-typedef struct evp_pkey_method_st {
-    int pkey_id;
-    int flags;
-    int (*init) (EVP_PKEY_CTX *ctx);
-    int (*copy) (EVP_PKEY_CTX *dst, const EVP_PKEY_CTX *src);
-    void (*cleanup) (EVP_PKEY_CTX *ctx);
-    int (*paramgen_init) (EVP_PKEY_CTX *ctx);
-    int (*paramgen) (EVP_PKEY_CTX *ctx, EVP_PKEY *pkey);
-    int (*keygen_init) (EVP_PKEY_CTX *ctx);
-    int (*keygen) (EVP_PKEY_CTX *ctx, EVP_PKEY *pkey);
-    int (*sign_init) (EVP_PKEY_CTX *ctx);
-    int (*sign) (EVP_PKEY_CTX *ctx, unsigned char *sig, size_t *siglen,
-                 const unsigned char *tbs, size_t tbslen);
-    int (*verify_init) (EVP_PKEY_CTX *ctx);
-    int (*verify) (EVP_PKEY_CTX *ctx,
-                   const unsigned char *sig, size_t siglen,
-                   const unsigned char *tbs, size_t tbslen);
-    int (*verify_recover_init) (EVP_PKEY_CTX *ctx);
-    int (*verify_recover) (EVP_PKEY_CTX *ctx,
-                           unsigned char *rout, size_t *routlen,
-                           const unsigned char *sig, size_t siglen);
-    int (*signctx_init) (EVP_PKEY_CTX *ctx, EVP_MD_CTX *mctx);
-    int (*signctx) (EVP_PKEY_CTX *ctx, unsigned char *sig, size_t *siglen,
-                    EVP_MD_CTX *mctx);
-    int (*verifyctx_init) (EVP_PKEY_CTX *ctx, EVP_MD_CTX *mctx);
-    int (*verifyctx) (EVP_PKEY_CTX *ctx, const unsigned char *sig, int siglen,
-                      EVP_MD_CTX *mctx);
-    int (*encrypt_init) (EVP_PKEY_CTX *ctx);
-    int (*encrypt) (EVP_PKEY_CTX *ctx, unsigned char *out, size_t *outlen,
-                    const unsigned char *in, size_t inlen);
-    int (*decrypt_init) (EVP_PKEY_CTX *ctx);                                                   
-    int (*decrypt) (EVP_PKEY_CTX *ctx, unsigned char *out, size_t *outlen,                     
-                    const unsigned char *in, size_t inlen);                                    
-    int (*derive_init) (EVP_PKEY_CTX *ctx);                                                    
-    int (*derive) (EVP_PKEY_CTX *ctx, unsigned char *key, size_t *keylen);                     
-    int (*ctrl) (EVP_PKEY_CTX *ctx, int type, int p1, void *p2);                               
-    int (*ctrl_str) (EVP_PKEY_CTX *ctx, const char *type, const char *value);                  
-    int (*digestsign) (EVP_MD_CTX *ctx, unsigned char *sig, size_t *siglen,                    
-                       const unsigned char *tbs, size_t tbslen);
-    int (*digestverify) (EVP_MD_CTX *ctx, const unsigned char *sig, 
-                         size_t siglen, const unsigned char *tbs,                              
-                         size_t tbslen);                                                       
-    int (*check) (EVP_PKEY *pkey);
-    int (*public_check) (EVP_PKEY *pkey);                                                      
-    int (*param_check) (EVP_PKEY *pkey);                                                       
-
-    int (*digest_custom) (EVP_PKEY_CTX *ctx, EVP_MD_CTX *mctx);
-} EVP_PKEY_METHOD;
-
+#include "openssl-compat.h"
 
 ica_x25519_ctx_new_t		p_ica_x25519_ctx_new;
 ica_x448_ctx_new_t		p_ica_x448_ctx_new;
@@ -136,16 +78,16 @@ static int ibmca_x25519_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
         goto ret;
     }
 
-    key = calloc(1, sizeof(ECX_KEY));
+    key = ossl_ecx_key_new_simple(ECX_KEY_TYPE_X25519);
     private = calloc(1, sizeof(priv));
-    if (key == NULL) {
+    if (key == NULL || private == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
 
     memcpy(private, priv, sizeof(priv));
-    memcpy(key, pub, sizeof(pub));
-    key->priv = private;
+    ossl_ecx_copypubkey(key, pub, sizeof(pub));
+    ossl_ecx_set0_privkey(key, private);
 
     EVP_PKEY_assign(pkey, NID_X25519, key);
     rc = 1;
@@ -199,12 +141,12 @@ static int ibmca_x25519_derive(EVP_PKEY_CTX *pkey_ctx, unsigned char *key, size_
         goto ret;
     }
 
-    if (p_ica_x25519_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_x25519_key_set(ctx, ossl_ecx_get0_privkey(key_ecx), NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X25519_DERIVE, IBMCA_R_PKEY_KEYS_NOT_SET);
-        goto ret;;
+        goto ret;
     }
 
-    if (p_ica_x25519_derive(ctx, key, peerkey_ecx->pub) != 0)
+    if (p_ica_x25519_derive(ctx, key, ossl_ecx_get0_pubkey(peerkey_ecx)) != 0)
         goto ret;
 
     rc = 1;
@@ -236,16 +178,16 @@ static int ibmca_x448_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
         goto ret;
     }
 
-    key = calloc(1, sizeof(ECX_KEY));
+    key = ossl_ecx_key_new_simple(ECX_KEY_TYPE_X448);
     private = calloc(1, sizeof(priv));
-    if (key == NULL) {
+    if (key == NULL || private == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_X448_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
 
     memcpy(private, priv, sizeof(priv));
-    memcpy(key, pub, sizeof(pub));
-    key->priv = private;
+    ossl_ecx_copypubkey(key, pub, sizeof(pub));
+    ossl_ecx_set0_privkey(key, private);
 
     EVP_PKEY_assign(pkey, NID_X448, key);
     rc = 1;
@@ -299,12 +241,12 @@ static int ibmca_x448_derive(EVP_PKEY_CTX *pkey_ctx, unsigned char *key, size_t 
         goto ret;
     }
 
-    if (p_ica_x448_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_x448_key_set(ctx, ossl_ecx_get0_privkey(key_ecx), NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_X448_DERIVE, IBMCA_R_PKEY_KEYS_NOT_SET);
-        goto ret;;
+        goto ret;
     }
 
-    if (p_ica_x448_derive(ctx, key, peerkey_ecx->pub) != 0)
+    if (p_ica_x448_derive(ctx, key, ossl_ecx_get0_pubkey(peerkey_ecx)) != 0)
         goto ret;
 
     rc = 1;
@@ -341,16 +283,16 @@ static int ibmca_ed25519_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
         goto ret;
     }
 
-    key = calloc(1, sizeof(ECX_KEY));
+    key = ossl_ecx_key_new_simple(ECX_KEY_TYPE_ED25519);
     private = calloc(1, sizeof(priv));
-    if (key == NULL) {
+    if (key == NULL || private == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
 
     memcpy(private, priv, sizeof(priv));
-    memcpy(key, pub, sizeof(pub));
-    key->priv = private;
+    ossl_ecx_copypubkey(key, pub, sizeof(pub));
+    ossl_ecx_set0_privkey(key, private);
 
     EVP_PKEY_assign(pkey, NID_ED25519, key);
     rc = 1;
@@ -398,9 +340,9 @@ static int ibmca_ed25519_sign(EVP_MD_CTX *md_ctx, unsigned char *sig,
         goto ret;
     }
 
-    if (p_ica_ed25519_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_ed25519_key_set(ctx, ossl_ecx_get0_privkey(key_ecx), NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_SIGN, IBMCA_R_PKEY_KEYS_NOT_SET);
-        goto ret;;
+        goto ret;
     }
 
     if (p_ica_ed25519_sign(ctx, sig, tbs, tbslen) != 0)
@@ -443,7 +385,7 @@ static int ibmca_ed25519_verify(EVP_MD_CTX *md_ctx, const unsigned char *sig,
         goto ret;
     }
 
-    if (p_ica_ed25519_key_set(ctx, NULL, key_ecx->pub) != 0) {
+    if (p_ica_ed25519_key_set(ctx, NULL, ossl_ecx_get0_pubkey(key_ecx)) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED25519_VERIFY, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;
     }
@@ -485,16 +427,16 @@ static int ibmca_ed448_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
         goto ret;
     }
 
-    key = calloc(1, sizeof(ECX_KEY));
+    key = ossl_ecx_key_new_simple(ECX_KEY_TYPE_ED448);
     private = calloc(1, sizeof(priv));
-    if (key == NULL) {
+    if (key == NULL || private == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_KEYGEN, IBMCA_R_PKEY_KEYGEN_FAILED);
         goto ret;
     }
 
     memcpy(private, priv, sizeof(priv));
-    memcpy(key, pub, sizeof(pub));
-    key->priv = private;
+    ossl_ecx_copypubkey(key, pub, sizeof(pub));
+    ossl_ecx_set0_privkey(key, private);
 
     EVP_PKEY_assign(pkey, NID_ED448, key);
     rc = 1;
@@ -542,9 +484,9 @@ static int ibmca_ed448_sign(EVP_MD_CTX *md_ctx, unsigned char *sig,
         goto ret;
     }
 
-    if (p_ica_ed448_key_set(ctx, key_ecx->priv, NULL) != 0) {
+    if (p_ica_ed448_key_set(ctx, ossl_ecx_get0_privkey(key_ecx), NULL) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_SIGN, IBMCA_R_PKEY_KEYS_NOT_SET);
-        goto ret;;
+        goto ret;
     }
 
     if (p_ica_ed448_sign(ctx, sig, tbs, tbslen) != 0)
@@ -587,7 +529,7 @@ static int ibmca_ed448_verify(EVP_MD_CTX *md_ctx, const unsigned char *sig,
         goto ret;
     }
 
-    if (p_ica_ed448_key_set(ctx, NULL, key_ecx->pub) != 0) {
+    if (p_ica_ed448_key_set(ctx, NULL, ossl_ecx_get0_pubkey(key_ecx)) != 0) {
         IBMCAerr(IBMCA_F_IBMCA_ED448_VERIFY, IBMCA_R_PKEY_KEYS_NOT_SET);
         goto ret;
     }
@@ -665,8 +607,8 @@ const EVP_PKEY_METHOD *ibmca_ed25519(void)
     EVP_PKEY_meth_set_ctrl(ibmca_ed25519_pmeth, ibmca_ed_ctrl, NULL);
     EVP_PKEY_meth_set_copy(ibmca_ed25519_pmeth, ibmca_ed25519_copy);
     EVP_PKEY_meth_set_keygen(ibmca_ed25519_pmeth, NULL, ibmca_ed25519_keygen);
-    ibmca_ed25519_pmeth->digestsign = ibmca_ed25519_sign;
-    ibmca_ed25519_pmeth->digestverify = ibmca_ed25519_verify;
+    EVP_PKEY_meth_set_digestsign(ibmca_ed25519_pmeth, ibmca_ed25519_sign);
+    EVP_PKEY_meth_set_digestverify(ibmca_ed25519_pmeth, ibmca_ed25519_verify);
 
 ret:
     return ibmca_ed25519_pmeth;
@@ -684,8 +626,8 @@ const EVP_PKEY_METHOD *ibmca_ed448(void)
     EVP_PKEY_meth_set_ctrl(ibmca_ed448_pmeth, ibmca_ed_ctrl, NULL);
     EVP_PKEY_meth_set_copy(ibmca_ed448_pmeth, ibmca_ed448_copy);
     EVP_PKEY_meth_set_keygen(ibmca_ed448_pmeth, NULL, ibmca_ed448_keygen);
-    ibmca_ed448_pmeth->digestsign = ibmca_ed448_sign;
-    ibmca_ed448_pmeth->digestverify = ibmca_ed448_verify;
+    EVP_PKEY_meth_set_digestsign(ibmca_ed448_pmeth, ibmca_ed448_sign);
+    EVP_PKEY_meth_set_digestverify(ibmca_ed448_pmeth, ibmca_ed448_verify);
 
 ret:
     return ibmca_ed448_pmeth;
