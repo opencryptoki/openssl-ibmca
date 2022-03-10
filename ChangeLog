@@ -1,3 +1,6 @@
+* openssl-ibmca 2.2.3
+- Fix PKEY segfault with OpenSSL 3.0
+
 * openssl-ibmca 2.2.2
 - Fix tests with OpenSSL 3.0
 - Build against libica 4.0
