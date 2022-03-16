@@ -7,8 +7,8 @@ rsa512.pl	\
 rsa1k.pl	\
 rsa2k.pl	\
 rsa4k.pl	\
-rsa8k.pl	\
-rsa16k.pl
+rsa8k.pl
+#rsa16k.pl
 
 TESTS = \
 	rsakey		\
