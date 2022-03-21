@@ -19,9 +19,36 @@
 
 #include <openssl/opensslv.h>
 
+typedef enum {
+    ECX_KEY_TYPE_X25519,
+    ECX_KEY_TYPE_X448,
+    ECX_KEY_TYPE_ED25519,
+    ECX_KEY_TYPE_ED448
+} ECX_KEY_TYPE;
+
 #ifdef OPENSSL_VERSION_PREREQ
 /* This is 3.x */
-#include <crypto/evp.h>
+
+#  define X25519_KEYLEN         32
+#  define X448_KEYLEN           56
+#  define ED25519_KEYLEN        32
+#  define ED448_KEYLEN          57
+
+#  define MAX_KEYLEN  ED448_KEYLEN
+
+typedef int CRYPTO_REF_COUNT;
+
+typedef struct ecx_key_st {
+    OSSL_LIB_CTX *libctx;
+    char *propq;
+    unsigned int haspubkey:1;
+    unsigned char pubkey[MAX_KEYLEN];
+    unsigned char *privkey;
+    size_t keylen;
+    ECX_KEY_TYPE type;
+    CRYPTO_REF_COUNT references;
+    CRYPTO_RWLOCK *lock;
+} ECX_KEY;
 
 static inline ECX_KEY *ossl_ecx_key_new_simple(ECX_KEY_TYPE type)
 {
@@ -93,13 +120,6 @@ typedef struct {
     unsigned char pub[57];
     unsigned char *priv;
 } ECX_KEY;
-
-typedef enum {
-    ECX_KEY_TYPE_X25519,
-    ECX_KEY_TYPE_X448,
-    ECX_KEY_TYPE_ED25519,
-    ECX_KEY_TYPE_ED448
-} ECX_KEY_TYPE;
 
 static inline ECX_KEY *ossl_ecx_key_new_simple(ECX_KEY_TYPE type)
 {
