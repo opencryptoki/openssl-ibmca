@@ -19,17 +19,18 @@
 use strict;
 use warnings;
 use test;
+use FindBin;
 
 # TLS 1.3 with RSA signatures
-test::tls(10001, "server-key-rsa.pem", "server-cert-rsa.pem", "ALL", "TLS_AES_256_GCM_SHA384", "-tls1_3");
+test::tls(10001, "$FindBin::Bin/server-key-rsa.pem", "$FindBin::Bin/server-cert-rsa.pem", "ALL", "TLS_AES_256_GCM_SHA384", "-tls1_3");
 # TLS 1.3 with EC signatures
-test::tls(10002, "server-key-ec.pem", "server-cert-ec.pem", "ALL", "TLS_AES_256_GCM_SHA384", "-tls1_3");
+test::tls(10002, "$FindBin::Bin/server-key-ec.pem", "$FindBin::Bin/server-cert-ec.pem", "ALL", "TLS_AES_256_GCM_SHA384", "-tls1_3");
 # TLS 1.2 with RSA signatures and ECDH key exchange
-test::tls(10003, "server-key-rsa.pem", "server-cert-rsa.pem", "ECDHE-RSA-AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
+test::tls(10003, "$FindBin::Bin/server-key-rsa.pem", "$FindBin::Bin/server-cert-rsa.pem", "ECDHE-RSA-AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
 # TLS 1.2 with ECDSA signatures and ECDH key exchange
-test::tls(10004, "server-key-ec.pem", "server-cert-ec.pem", "ECDHE-ECDSA-AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
+test::tls(10004, "$FindBin::Bin/server-key-ec.pem", "$FindBin::Bin/server-cert-ec.pem", "ECDHE-ECDSA-AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
 # TLS 1.2 with RSA signatures and DH key exchange
-test::tls(10005, "server-key-rsa.pem", "server-cert-rsa.pem", "DHE-RSA-AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
+test::tls(10005, "$FindBin::Bin/server-key-rsa.pem", "$FindBin::Bin/server-cert-rsa.pem", "DHE-RSA-AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
 # TLS 1.2 with RSA signatures and RSA key exchange
-test::tls(10006, "server-key-rsa.pem", "server-cert-rsa.pem", "AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
+test::tls(10006, "$FindBin::Bin/server-key-rsa.pem", "$FindBin::Bin/server-cert-rsa.pem", "AES256-GCM-SHA384", "\"\"", "-no_tls1_3");
 
