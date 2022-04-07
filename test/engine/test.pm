@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 
+use FindBin;
+
 package test;
 
 sub osslversion1 {
@@ -69,16 +71,16 @@ sub rsaencdec {
 		my $bytes = 1 + int(rand($max_file_size));
 		# engine enc, no-engine dec
 		`openssl rand $bytes > rsaencdec.${i}.${keylen}.data.in`;
-		`$eng openssl rsautl -encrypt -inkey rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.in -out rsaencdec.${i}.${keylen}.data.out`;
-		`openssl rsautl -decrypt -inkey rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.out -out rsaencdec.${i}.${keylen}.data.dec`;
+		`$eng openssl rsautl -encrypt -inkey $FindBin::Bin/rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.in -out rsaencdec.${i}.${keylen}.data.out`;
+		`openssl rsautl -decrypt -inkey $FindBin::Bin/rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.out -out rsaencdec.${i}.${keylen}.data.dec`;
 		`cmp rsaencdec.${i}.${keylen}.data.in rsaencdec.${i}.${keylen}.data.dec`;
 		exit(99) if ($?);
 		`rm -f rsaencdec.${i}.${keylen}.data.in rsaencdec.${i}.${keylen}.out rsaencdec.${i}.${keylen}.dec`;
 
 		# no-engine enc, engine dec
 		`openssl rand $bytes > rsaencdec.${i}.${keylen}.data.in`;
-		`openssl rsautl -encrypt -inkey rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.in -out rsaencdec.${i}.${keylen}.data.out`;
-		`$eng openssl rsautl -decrypt -inkey rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.out -out rsaencdec.${i}.${keylen}.data.dec`;
+		`openssl rsautl -encrypt -inkey $FindBin::Bin/rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.in -out rsaencdec.${i}.${keylen}.data.out`;
+		`$eng openssl rsautl -decrypt -inkey $FindBin::Bin/rsa$keylen.key -in rsaencdec.${i}.${keylen}.data.out -out rsaencdec.${i}.${keylen}.data.dec`;
 		`cmp rsaencdec.${i}.${keylen}.data.in rsaencdec.${i}.${keylen}.data.dec`;
 		exit(99) if ($?);
 		`rm -f rsaencdec.${i}.${keylen}.data.in rsaencdec.${i}.${keylen}.out rsaencdec.${i}.${keylen}.dec`;
@@ -100,16 +102,16 @@ sub rsasignverify {
 		$key .= $hex[rand(@hex)] for (1..$keylen);
 		# engine sign, no-engine verify
 		`openssl rand $bytes > rsasignverify.${i}.${keylen}.data.in`;
-		`$eng openssl rsautl -sign -inkey rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.in -out rsasignverify.${i}.${keylen}.data.out`;
-		`openssl rsautl -verify -inkey rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.out -out rsasignverify.${i}.${keylen}.data.rec`;
+		`$eng openssl rsautl -sign -inkey $FindBin::Bin/rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.in -out rsasignverify.${i}.${keylen}.data.out`;
+		`openssl rsautl -verify -inkey $FindBin::Bin/rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.out -out rsasignverify.${i}.${keylen}.data.rec`;
 		`cmp rsasignverify.${i}.${keylen}.data.in rsasignverify.${i}.${keylen}.data.rec`;
 		exit(99) if ($?);
 		`rm -f rsasignverify.${i}.${keylen}.data.in rsasignverify.${i}.${keylen}.data.out rsasignverify.${i}.${keylen}.data.rec`;
 
 		# no-engine sign, engine verify
 		`openssl rand $bytes > rsasignverify.${i}.${keylen}.data.in`;
-		`openssl rsautl -sign -inkey rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.in -out rsasignverify.${i}.${keylen}.data.out`;
-		`$eng openssl rsautl -verify -inkey rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.out -out rsasignverify.${i}.${keylen}.data.rec`;
+		`openssl rsautl -sign -inkey $FindBin::Bin/rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.in -out rsasignverify.${i}.${keylen}.data.out`;
+		`$eng openssl rsautl -verify -inkey $FindBin::Bin/rsa$keylen.key -in rsasignverify.${i}.${keylen}.data.out -out rsasignverify.${i}.${keylen}.data.rec`;
 		`cmp rsasignverify.${i}.${keylen}.data.in rsasignverify.${i}.${keylen}.data.rec`;
 		exit(99) if ($?);
 		`rm -f rsasignverify.${i}.${keylen}.data.in rsasignverify.${i}.${keylen}.data.out rsasignverify.${i}.${keylen}.data.rec`;
@@ -131,15 +133,15 @@ sub dsasignverify {
 		my $bytes = 1 + int(rand($max_file_size));
 		# engine sign, no-engine verify
 		`openssl rand $bytes > dsa.${i}.${keylen}.data.in`;
-		`$eng openssl dgst -sign dsa$keylen.key -out dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
-		`openssl dgst -verify dsa${keylen}_pub.key -signature dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
+		`$eng openssl dgst -sign $FindBin::Bin/dsa$keylen.key -out dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
+		`openssl dgst -verify $FindBin::Bin/dsa${keylen}_pub.key -signature dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
 		exit(99) if ($?);
 		`rm -f dsa.${i}.${keylen}.data.in dsa.${i}.${keylen}.data.out`;
 
 		# no-engine sign, engine verify
 		`openssl rand $bytes > dsa.${i}.${keylen}.data.in`;
-		`openssl dgst -sign dsa$keylen.key -out dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
-		`$eng openssl dgst -verify dsa${keylen}_pub.key -signature dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
+		`openssl dgst -sign $FindBin::Bin/dsa$keylen.key -out dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
+		`$eng openssl dgst -verify $FindBin::Bin/dsa${keylen}_pub.key -signature dsa.${i}.${keylen}.data.out dsa.${i}.${keylen}.data.in`;
 		exit(99) if ($?);
 		`rm -f dsa.${i}.${keylen}.data.in dsa.${i}.${keylen}.data.out`;
 	}
