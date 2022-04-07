@@ -130,6 +130,8 @@ if test "x$enable_provider" = xyes; then
 		[#include <ica_api.h>])
 fi
 
+AC_CHECK_DECLS([ica_cleanup],,,[#include <ica_api.h>])
+
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile

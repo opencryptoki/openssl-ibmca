@@ -102,6 +102,7 @@ ica_aes_gcm_initialize_t        p_ica_aes_gcm_initialize;
 ica_aes_gcm_intermediate_t      p_ica_aes_gcm_intermediate;
 ica_aes_gcm_last_t              p_ica_aes_gcm_last;
 #endif
+ica_cleanup_t                   p_ica_cleanup;
 
 /* save libcrypto's default ec methods */
 #ifndef NO_EC
@@ -652,8 +653,10 @@ static void ibmca_destructor(void)
         free((void *)LIBICA_NAME);
 }
 
-static void ica_cleanup(void)
+static void do_ica_cleanup(void)
 {
+    if (p_ica_cleanup)
+        p_ica_cleanup();
     if (ibmca_dso && dlclose(ibmca_dso)) {
         IBMCAerr(IBMCA_F_IBMCA_FINISH, IBMCA_R_DSO_FAILURE);
         return;
@@ -725,6 +728,7 @@ static void ica_cleanup(void)
     p_ica_x448_ctx_del = NULL;
     p_ica_ed25519_ctx_del = NULL;
     p_ica_ed448_ctx_del = NULL;
+    p_ica_cleanup = NULL;
 }
 
 static int ibmca_init(ENGINE *e)
@@ -806,6 +810,9 @@ static int ibmca_init(ENGINE *e)
     BIND(ibmca_dso, ica_ed25519_ctx_del);
     BIND(ibmca_dso, ica_ed448_ctx_del);
 
+    /* ica_cleanup is not always present and only needed for newer libraries */
+    p_ica_cleanup = (ica_cleanup_t)dlsym(ibmca_dso, "ica_cleanup");
+
     /* disable fallbacks on Libica */
     if (BIND(ibmca_dso, ica_set_fallback_mode))
         p_ica_set_fallback_mode(0);
@@ -821,7 +828,7 @@ static int ibmca_init(ENGINE *e)
     return 1;
 
 err:
-    ica_cleanup();
+    do_ica_cleanup();
     return 0;
 }
 
@@ -884,7 +891,7 @@ static int ibmca_finish(ENGINE *e)
     if (p_ica_close_adapter)
         p_ica_close_adapter(ibmca_handle);
 
-    ica_cleanup();
+    do_ica_cleanup();
     memset(&ibmca_registration, 0, sizeof(ibmca_registration));
     return 1;
 }

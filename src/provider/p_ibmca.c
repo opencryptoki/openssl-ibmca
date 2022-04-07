@@ -633,6 +633,9 @@ static void ibmca_teardown(void *vprovctx)
     pthread_mutex_destroy(&provctx->debug_mutex);
 
     P_FREE(provctx, provctx);
+#if HAVE_DECL_ICA_CLEANUP == 1
+    ica_cleanup();
+#endif
 }
 
 static const OSSL_PARAM ibmca_param_types[] = {
