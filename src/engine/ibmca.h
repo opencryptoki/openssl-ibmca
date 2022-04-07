@@ -616,6 +616,8 @@ int (*ica_ed25519_ctx_del_t)(ICA_ED25519_CTX **ctx);
 typedef
 int (*ica_ed448_ctx_del_t)(ICA_ED448_CTX **ctx);
 
+typedef void (*ica_cleanup_t)(void);
+
 /* entry points into libica, filled out at DSO load time */
 extern ica_get_functionlist_t           p_ica_get_functionlist;
 extern ica_set_fallback_mode_t          p_ica_set_fallback_mode;
@@ -681,3 +683,4 @@ extern ica_x25519_ctx_del_t		p_ica_x25519_ctx_del;
 extern ica_x448_ctx_del_t		p_ica_x448_ctx_del;
 extern ica_ed25519_ctx_del_t		p_ica_ed25519_ctx_del;
 extern ica_ed448_ctx_del_t		p_ica_ed448_ctx_del;
+extern ica_cleanup_t            p_ica_cleanup;
