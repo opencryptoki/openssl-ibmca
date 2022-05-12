@@ -1000,7 +1000,7 @@ static int ibmca_keymgmt_dh_match(const void *vkey1, const void *vkey2,
             }
         }
 
-        if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+        if (!checked && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
             if (key1->dh.priv != NULL || key2->dh.priv != NULL) {
                 ok = ok && (BN_cmp(key1->dh.priv, key2->dh.priv) == 0);
                 checked = 1;

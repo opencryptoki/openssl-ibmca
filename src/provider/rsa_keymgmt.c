@@ -641,7 +641,7 @@ static int ibmca_keymgmt_rsa_match(const void *vkey1, const void *vkey2,
 {
     const struct ibmca_key *key1 = vkey1;
     const struct ibmca_key *key2 = vkey2;
-    int ok = 1;
+    int ok = 1, checked = 0;
 
     if (key1 == NULL || key2 == NULL)
         return 0;
@@ -652,7 +652,7 @@ static int ibmca_keymgmt_rsa_match(const void *vkey1, const void *vkey2,
     if (ibmca_keymgmt_match(key1, key2) == 0)
         return 0;
 
-    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)
+    if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
         ok = ok && (key1->rsa.public.key_length ==
                            key2->rsa.public.key_length &&
                     memcmp(key1->rsa.public.exponent,
@@ -661,8 +661,10 @@ static int ibmca_keymgmt_rsa_match(const void *vkey1, const void *vkey2,
                     memcmp(key1->rsa.public.modulus,
                            key2->rsa.public.modulus,
                            key1->rsa.public.key_length) == 0);
+        checked = 1;
+    }
 
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
+    if (!checked && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
         ok = ok && (key1->rsa.private.key_length ==
                            key2->rsa.private.key_length &&
                     CRYPTO_memcmp(key1->rsa.private.p,

@@ -751,7 +751,7 @@ static int ibmca_keymgmt_ec_match(const void *vkey1, const void *vkey2,
     const struct ibmca_key *key2 = vkey2;
     BIGNUM *x1 = NULL, *y1 = NULL, *d1 = NULL;
     BIGNUM *x2 = NULL, *y2 = NULL, *d2 = NULL;
-    int ok = 1, rc1, rc2;
+    int ok = 1, rc1, rc2, checked = 0;
 
     if (key1 == NULL || key2 == NULL)
         return 0;
@@ -781,9 +781,10 @@ static int ibmca_keymgmt_ec_match(const void *vkey1, const void *vkey2,
 
         ok = ok && (rc1 == rc2 && (rc1 == -1 ||
                     (BN_cmp(x1, x2) == 0 && BN_cmp(y1, y2) == 0)));
+        checked = 1;
     }
 
-    if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
+    if (!checked && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         rc1 = ibmca_keymgmt_ec_priv_key_as_bn(key1, &d1);
         if (rc1 == 0) {
             ok = 0;
