@@ -20,13 +20,25 @@ TESTS = \
 check_PROGRAMS = rsakey eckey dhkey threadtest
 
 dhkey_SOURCES = dhkey.c
-dhkey_LDADD = -lcrypto
+if PROVIDER_FULL_LIBICA
+dhkey_LDADD = -lcrypto -lica
+else
+dhkey_LDADD = -lcrypto -lica-cex
+endif
 
 eckey_SOURCES = eckey.c
-eckey_LDADD = -lcrypto
+if PROVIDER_FULL_LIBICA
+eckey_LDADD = -lcrypto -lica
+else
+eckey_LDADD = -lcrypto -lica-cex
+endif
 
 rsakey_SOURCES = rsakey.c
-rsakey_LDADD = -lcrypto
+if PROVIDER_FULL_LIBICA
+rsakey_LDADD = -lcrypto -lica
+else
+rsakey_LDADD = -lcrypto -lica-cex
+endif
 
 threadtest_SOURCES = threadtest.c
 threadtest_LDADD = -lcrypto -lpthread
