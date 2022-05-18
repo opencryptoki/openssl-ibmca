@@ -26,6 +26,8 @@
 #include <openssl/provider.h>
 #include <openssl/err.h>
 
+#include <ica_api.h>
+
 #define UNUSED(var)                             ((void)(var))
 
 void setup(void)
@@ -729,6 +731,56 @@ int check_rsakey(int bits, const char *algo, const char *name)
     return ret;
 }
 
+static const unsigned int required_ica_mechs[] = { RSA_ME,  RSA_CRT };
+static const unsigned int required_ica_mechs_len =
+                        sizeof(required_ica_mechs) / sizeof(unsigned int);
+
+int check_libica()
+{
+    unsigned int mech_len, i, k, found = 0;
+    libica_func_list_element *mech_list = NULL;
+    int rc;
+
+    rc = ica_get_functionlist(NULL, &mech_len);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to get function list from libica!\n");
+        return 77;
+    }
+
+    mech_list = calloc(sizeof(libica_func_list_element), mech_len);
+    if (mech_list == NULL) {
+        fprintf(stderr, "Failed to allocate memory for function list!\n");
+        return 77;
+    }
+
+    rc = ica_get_functionlist(mech_list, &mech_len);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to get function list from libica!\n");
+        free(mech_list);
+        return 77;
+    }
+
+    for (i = 0; i < mech_len; i++) {
+        for (k = 0; k < required_ica_mechs_len; k++) {
+            if (mech_list[i].mech_mode_id == required_ica_mechs[k]) {
+                if (mech_list[i].flags &
+                    (ICA_FLAG_SW | ICA_FLAG_SHW | ICA_FLAG_DHW))
+                    found++;
+            }
+        }
+    }
+
+    free(mech_list);
+
+    if (found < required_ica_mechs_len) {
+        fprintf(stderr,
+               "Libica does not support the required algorithms, skipping.\n");
+        return 77;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     static const struct testparams {
@@ -766,6 +818,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed to set OPENSSL_MODULES environment variable!\n");
         return 77;
     }
+
+    ret = check_libica();
+    if (ret != 0)
+        return ret;
 
     setup();
     for (i = 0; i < (int)(sizeof(params) / sizeof(struct testparams)); ++i) {
