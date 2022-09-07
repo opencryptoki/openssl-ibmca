@@ -366,7 +366,6 @@ void ECDSA_METHOD_get_verify(const ECDSA_METHOD *meth,
 extern EC_KEY_METHOD *ibmca_ec;
 extern const EC_KEY_METHOD *ossl_ec;
 
-int ibmca_ec_key_gen(EC_KEY *eckey);
 int ibmca_ecdsa_sign(int type, const unsigned char *dgst, int dlen,
 		     unsigned char *sig_array, unsigned int *siglen,
 		     const BIGNUM *kinv, const BIGNUM *r, EC_KEY *eckey);

@@ -29,9 +29,9 @@ void setup(void)
 #endif
 }
 
-int check_eckey(int nid, const char *name)
+int check_eckey(int nid, const char *name, int error)
 {
-    int            ret = 0;
+    int            ret = !error;
     ECDSA_SIG     *sig = NULL;
     EC_KEY        *eckey = NULL;
     unsigned char  digest[20];
@@ -66,8 +66,11 @@ int check_eckey(int nid, const char *name)
     }
     sig = ECDSA_do_sign(digest, sizeof(digest), eckey);
     if (sig == NULL) {
-        /* error */
-        fprintf(stderr, "Failed to sign with %s\n", name);
+        if (error) 
+            fprintf(stderr, "Failed to sign with %s\n", name);
+        else
+            fprintf(stderr, "Assuming %s is not supported and skipping test\n",
+                    name);
         goto out;
     }
     ret = ECDSA_do_verify(digest, sizeof(digest), sig, eckey);
@@ -98,19 +101,20 @@ int main(int argc, char **argv)
     static const struct testparams {
         int         nid;
         const char *name;
+        int         error;
     } params[] = {
-                {NID_X9_62_prime192v1, "NID_X9_62_prime192v1"},
-                {NID_secp224r1,        "NID_secp224r1"},
-                {NID_X9_62_prime256v1, "NID_X9_62_prime256v1"},
-                {NID_secp384r1,        "NID_secp384r1"},
-                {NID_secp521r1,        "NID_secp521r1"},
-                {NID_brainpoolP160r1,  "NID_brainpoolP160r1"},
-                {NID_brainpoolP192r1,  "NID_brainpoolP192r1"},
-                {NID_brainpoolP224r1,  "NID_brainpoolP224r1"},
-                {NID_brainpoolP256r1,  "NID_brainpoolP256r1"},
-                {NID_brainpoolP320r1,  "NID_brainpoolP320r1"},
-                {NID_brainpoolP384r1,  "NID_brainpoolP384r1"},
-                {NID_brainpoolP512r1,  "NID_brainpoolP512r1"}
+                  {NID_X9_62_prime192v1, "NID_X9_62_prime192v1", 0},
+                  {NID_secp224r1,        "NID_secp224r1",        0},
+                  {NID_X9_62_prime256v1, "NID_X9_62_prime256v1", 1},
+                  {NID_secp384r1,        "NID_secp384r1",        1},
+                  {NID_secp521r1,        "NID_secp521r1",        1},
+                  {NID_brainpoolP160r1,  "NID_brainpoolP160r1",  0},
+                  {NID_brainpoolP192r1,  "NID_brainpoolP192r1",  0},
+                  {NID_brainpoolP224r1,  "NID_brainpoolP224r1",  0},
+                  {NID_brainpoolP256r1,  "NID_brainpoolP256r1",  0},
+                  {NID_brainpoolP320r1,  "NID_brainpoolP320r1",  0},
+                  {NID_brainpoolP384r1,  "NID_brainpoolP384r1",  0},
+                  {NID_brainpoolP512r1,  "NID_brainpoolP512r1",  0}
     };
             
     int ret = 0, i;
@@ -127,7 +131,7 @@ int main(int argc, char **argv)
     
     setup();
     for (i = 0; i < sizeof(params) / sizeof(struct testparams); ++i) {
-        if (!check_eckey(params[i].nid, params[i].name)) {
+        if (!check_eckey(params[i].nid, params[i].name, params[i].error)) {
             fprintf(stderr, "Failure for %s\n", params[i].name);
             ret = 99;
         }

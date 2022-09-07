@@ -297,11 +297,13 @@ inline static int set_RSA_prop(ENGINE *e)
 #ifndef OPENSSL_NO_EC
 static int set_EC_prop(ENGINE *e)
 {
+    int (*keygen_sw)(EC_KEY *key) = NULL;
+
     if (ibmca_registration.ec_enabled) {
         return 1;
     }
 
- #ifdef OLDER_OPENSSL
+#  ifdef OLDER_OPENSSL
     ossl_ecdh = ECDH_get_default_method();
     ossl_ecdsa = ECDSA_get_default_method();
 
@@ -311,25 +313,34 @@ static int set_EC_prop(ENGINE *e)
     ECDSA_METHOD_set_name(ibmca_ecdsa, "Ibmca ECDSA method");
     ECDSA_METHOD_set_sign(ibmca_ecdsa, ibmca_older_ecdsa_do_sign);
     ECDSA_METHOD_set_verify(ibmca_ecdsa, ibmca_older_ecdsa_do_verify);
-  #ifdef ECDSA_FLAG_FIPS_METHOD
+#    ifdef ECDSA_FLAG_FIPS_METHOD
     ECDSA_METHOD_set_flags(ibmca_ecdsa, ECDSA_FLAG_FIPS_METHOD);
-  #endif
+#    endif
 
     ECDH_METHOD_set_name(ibmca_ecdh, "Ibmca ECDH method");
     ECDH_METHOD_set_compute_key(ibmca_ecdh, ibmca_older_ecdh_compute_key);
-  #ifdef ECDH_FLAG_FIPS_METHOD
+#    ifdef ECDH_FLAG_FIPS_METHOD
     ECDH_METHOD_set_flags(ibmca_ecdh, ECDH_FLAG_FIPS_METHOD);
-  #endif
+#    endif
 
     if (!ENGINE_set_ECDH(e, ibmca_ecdh))
         return 0;
     if (!ENGINE_set_ECDSA(e, ibmca_ecdsa))
         return 0;
- #else
+#  else
     ossl_ec = EC_KEY_get_default_method();
+    /*
+         * EC_KEY_METHOD_get_keygen misses the const-qualifier of the
+         * parameter in some openssl versions.
+         */
+    EC_KEY_METHOD_get_keygen((EC_KEY_METHOD *)ossl_ec, &keygen_sw);
+    if (keygen_sw == NULL) {
+        IBMCAerr(IBMCA_F_IBMCA_EC_KEY_GEN, IBMCA_R_EC_INTERNAL_ERROR);
+        return 0;
+    }
 
     ibmca_ec = EC_KEY_METHOD_new(ibmca_ec);
-    EC_KEY_METHOD_set_keygen(ibmca_ec, ibmca_ec_key_gen);
+    EC_KEY_METHOD_set_keygen(ibmca_ec, keygen_sw);
     EC_KEY_METHOD_set_compute_key(ibmca_ec, ibmca_ecdh_compute_key);
     EC_KEY_METHOD_set_sign(ibmca_ec, ibmca_ecdsa_sign, ECDSA_sign_setup,
                            ibmca_ecdsa_sign_sig);
@@ -338,7 +349,7 @@ static int set_EC_prop(ENGINE *e)
 
     if (!ENGINE_set_EC(e, ibmca_ec))
         return 0;
- #endif
+#  endif
 
     ibmca_registration.ec_enabled = 1;
 
