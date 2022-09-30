@@ -1,3 +1,6 @@
+* openssl-ibmca 2.3.1
+- Adjustments for libica 4.1.0
+
 * openssl-ibmca 2.3.0
 - First version including the provider
 - Fix for engine build without OpenSSL 3.0 sources
