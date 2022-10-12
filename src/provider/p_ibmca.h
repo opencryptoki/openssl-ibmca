@@ -216,6 +216,7 @@ struct ibmca_op_ctx {
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
         union {
             struct {
+                int selection;
                 int curve_nid;
                 point_conversion_form_t format;
             } gen; /* For operation EVP_PKEY_OP_KEYGEN */
