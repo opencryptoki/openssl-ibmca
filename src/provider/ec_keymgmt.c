@@ -928,9 +928,10 @@ static void *ibmca_keymgmt_ec_gen_init(void *vprovctx, int selection,
     for (p = params; p != NULL && p->key != NULL; p++)
         ibmca_debug_ctx(provctx, "param: %s", p->key);
 
-    if ((selection & OSSL_KEYMGMT_SELECT_KEYPAIR) == 0) {
+    if ((selection & (OSSL_KEYMGMT_SELECT_KEYPAIR |
+                      OSSL_KEYMGMT_SELECT_ALL_PARAMETERS)) == 0) {
         put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
-                      "selection is not KEYPAIR");
+                      "selection is not KEYPAIR and/or parameters");
         return NULL;
     }
 
@@ -943,6 +944,7 @@ static void *ibmca_keymgmt_ec_gen_init(void *vprovctx, int selection,
     }
 
     /* set defaults */
+    ctx->ec.gen.selection = selection;
     ctx->ec.gen.curve_nid = NID_undef;
     ctx->ec.gen.format = POINT_CONVERSION_UNCOMPRESSED;
 
@@ -1223,6 +1225,9 @@ static void *ibmca_keymgmt_ec_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
 
     ibmca_debug_op_ctx(genctx, "prime_size: %lu", key->ec.prime_size);
 
+    if ((genctx->ec.gen.selection & OSSL_KEYMGMT_SELECT_KEYPAIR) == 0)
+        goto out;
+
     key->ec.key = ica_ec_key_new(key->ec.curve_nid, &privlen);
     if (key->ec.key == NULL || key->ec.prime_size != privlen) {
         ibmca_debug_op_ctx(genctx, "ica_ec_key_new failed");
@@ -1267,6 +1272,7 @@ static void *ibmca_keymgmt_ec_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
         return NULL;
     }
 
+out:
     ibmca_debug_op_ctx(genctx, "key: %p", key);
 
     return key;
