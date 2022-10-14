@@ -833,6 +833,11 @@ static int ibmca_init(ENGINE *e)
         goto err;
     }
 
+#ifndef NO_EC
+    if (!ibmca_ec_init())
+        goto err;
+#endif
+
     if (!set_supported_meths(e))
         goto err;
 

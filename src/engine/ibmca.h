@@ -298,6 +298,7 @@ void ibmca_dh_destroy(void);
 #define IBMCA_EC_MAX_Z_LEN	IBMCA_EC_MAX_D_LEN
 
 #ifndef OPENSSL_NO_EC
+int ibmca_ec_init(void);
 void ibmca_ec_destroy(void);
 
 int ibmca_ecdh_compute_key(unsigned char **pout, size_t *poutlen,
