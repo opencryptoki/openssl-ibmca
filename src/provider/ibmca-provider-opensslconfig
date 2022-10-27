@@ -83,7 +83,7 @@ sub generate()
         }
         if ($providersect && $line =~ /\[\s*$providersect\s*\]/) {
             print $oh "ibmca_provider = ibmca_provider_section\n";
-            print $oh # Make sure that you have configured and activated at least one other provider!\n";
+            print $oh "# Make sure that you have configured and activated at least one other provider!\n";
             print "WARNING: The IBMCA provider was added to section [$providersect].\n"; 
             print "Make sure that you have configured and activated at least one other provider, e.g. the default provider!\n";
         }
