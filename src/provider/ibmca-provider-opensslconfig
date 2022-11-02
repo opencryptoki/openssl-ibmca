@@ -30,7 +30,7 @@ use warnings;
 sub generate()
 {
     my ($osslconfpath);
-    my ($ih, $line, $oh, $defaultcnfsect, $indefaultsect, $providersect);
+    my ($ih, $line, $oh, $defaultcnfsect, $indefaultsect, $providersect, $inprovidersect);
     my ($inalgsect, $algsection);
 
     $osslconfpath = `openssl version -d` || die "Please install openssl binary";
@@ -43,6 +43,7 @@ sub generate()
     $defaultcnfsect = undef;
     $indefaultsect = 0;
     $providersect = undef;
+    $inprovidersect = 0;
     while ($line = <$ih>) {
         if ($line =~ /openssl_conf\s*=\s*(.*)/) {
             $defaultcnfsect = $1;
@@ -67,13 +68,22 @@ sub generate()
         } elsif ($inalgsect) {
             if ($line =~ /\[\s*\w+\s*\]/) {
                 print $oh "default_properties = ?provider=ibmca\n";
+		$inalgsect = 0;
             } elsif ($line =~ /^\s*default_properties\s*=\s*(\w+)\s*/) {
                 print $oh "default_properties = ?provider=ibmca\n";
                 print $oh "# The following was commented out by ibmca-provider-opensslconfig script\n";
                 print "WARNING: The default_properties in $algsection was modified by this script.\n";
                 $line = "# $line";
             }
-        }
+        } elsif ($inprovidersect) {
+	    if ($line =~ /\[\s*\w+\s*\]/) {
+		$inprovidersect = 0;
+		print $oh "ibmca_provider = ibmca_provider_section\n";
+		print $oh "# Make sure that you have configured and activated at least one other provider!\n";
+		print "WARNING: The IBMCA provider was added to section [$providersect].\n"; 
+		print "Make sure that you have configured and activated at least one other provider, e.g. the default provider!\n";
+	    }
+	}
         print $oh "$line";
         if ($defaultcnfsect && $line =~ /\[\s*$defaultcnfsect\s*\]/) {
             $indefaultsect = 1;
@@ -81,11 +91,8 @@ sub generate()
         if ($algsection && $line =~ /\[\s*$algsection\s*\]/) {
             $inalgsect = 1;
         }
-        if ($providersect && $line =~ /\[\s*$providersect\s*\]/) {
-            print $oh "ibmca_provider = ibmca_provider_section\n";
-            print $oh "# Make sure that you have configured and activated at least one other provider!\n";
-            print "WARNING: The IBMCA provider was added to section [$providersect].\n"; 
-            print "Make sure that you have configured and activated at least one other provider, e.g. the default provider!\n";
+	if ($providersect && $line =~ /\[\s*$providersect\s*\]/) {
+	    $inprovidersect = 1;
         }
     }
 
@@ -100,8 +107,8 @@ providers = provider_section
     if (!$providersect) {
         print $oh qq|
 [provider_section]
-ibmca_provider = ibmca_provider_section
 default = default_sect
+ibmca_provider = ibmca_provider_section
 
 [default_sect]
 activate = 1
