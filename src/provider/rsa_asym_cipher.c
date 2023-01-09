@@ -218,6 +218,15 @@ static int ibmca_asym_cipher_rsa_get_ctx_params(void *vctx, OSSL_PARAM params[])
     if (rc == 0)
         return 0;
 
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    /* OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION */
+    rc = ibmca_param_build_set_uint(ctx->provctx, NULL, params,
+                                    OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION,
+                                    0);
+    if (rc == 0)
+        return 0;
+#endif
+
     return 1;
 }
 
@@ -230,6 +239,9 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
     void *label = NULL;
     size_t labellen = 0;
     int i, rc;
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    unsigned int implicit_rejection;
+#endif
 
     if (ctx == NULL)
         return 0;
@@ -374,6 +386,19 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
     if (rc == 0)
         return 0;
 
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    rc = ibmca_param_get_uint(ctx->provctx, params,
+                              OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION,
+                              &implicit_rejection);
+    if (rc == 0)
+        return 0;
+    if (rc > 0 && implicit_rejection != 0) {
+        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                         "RSA: Implicit rejection is not supported");
+        return 0;
+    }
+#endif
+
     return 1;
 }
 
@@ -384,6 +409,9 @@ static const OSSL_PARAM ibmca_asym_cipher_rsa_gettable_params[] = {
     OSSL_PARAM_octet_ptr(OSSL_ASYM_CIPHER_PARAM_OAEP_LABEL, NULL, 0),
     OSSL_PARAM_uint(OSSL_ASYM_CIPHER_PARAM_TLS_CLIENT_VERSION, NULL),
     OSSL_PARAM_uint(OSSL_ASYM_CIPHER_PARAM_TLS_NEGOTIATED_VERSION, NULL),
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    OSSL_PARAM_uint(OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION, NULL),
+#endif
     OSSL_PARAM_END
 };
 
@@ -412,6 +440,9 @@ static const OSSL_PARAM ibmca_asym_cipher_rsa_settable_params[] = {
     OSSL_PARAM_octet_string(OSSL_ASYM_CIPHER_PARAM_OAEP_LABEL, NULL, 0),
     OSSL_PARAM_uint(OSSL_ASYM_CIPHER_PARAM_TLS_CLIENT_VERSION, NULL),
     OSSL_PARAM_uint(OSSL_ASYM_CIPHER_PARAM_TLS_NEGOTIATED_VERSION, NULL),
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    OSSL_PARAM_uint(OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION, NULL),
+#endif
     OSSL_PARAM_END
 };
 
