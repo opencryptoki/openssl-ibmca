@@ -708,6 +708,9 @@ static int ibmca_signature_ec_set_ctx_params(void *vctx,
     const OSSL_PARAM *p;
     const char *name, *props = NULL;
     size_t md_size;
+#ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
+    unsigned int nonce_type;
+#endif
     int rc;
 
     if (ctx == NULL)
@@ -746,6 +749,20 @@ static int ibmca_signature_ec_set_ctx_params(void *vctx,
         ctx->ec.signature.md_size = md_size;
     }
 
+#ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
+    /* OSSL_SIGNATURE_PARAM_NONCE_TYPE */
+    rc = ibmca_param_get_uint(ctx->provctx, params,
+                              OSSL_SIGNATURE_PARAM_NONCE_TYPE, &nonce_type);
+    if (rc == 0)
+        return 0;
+    /* Only allow nonce_type = 0 = random K */
+    if (nonce_type != 0) {
+        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                         "Deterministic signature is not supported");
+        return 0;
+    }
+#endif
+
     return 1;
 }
 
@@ -776,6 +793,9 @@ static const OSSL_PARAM ibmca_signature_ec_settable_params[] = {
     OSSL_PARAM_utf8_string(OSSL_SIGNATURE_PARAM_DIGEST, NULL, 0),
     OSSL_PARAM_size_t(OSSL_SIGNATURE_PARAM_DIGEST_SIZE, NULL),
     OSSL_PARAM_utf8_string(OSSL_SIGNATURE_PARAM_PROPERTIES, NULL, 0),
+#ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
+    OSSL_PARAM_uint(OSSL_SIGNATURE_PARAM_NONCE_TYPE, NULL),
+#endif
     OSSL_PARAM_END
 };
 
