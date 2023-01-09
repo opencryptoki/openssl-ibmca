@@ -1993,7 +1993,7 @@ static int ibmca_keymgmt_ec_export(void *vkey, int selection,
     size_t enc_len = 0;
     BIGNUM *x = NULL, *y = NULL, *d = NULL;
     char *name;
-    int rc = 1;
+    int rc = 1, format;
 
     if (key == NULL || param_callback == NULL)
         return 0;
@@ -2044,8 +2044,16 @@ static int ibmca_keymgmt_ec_export(void *vkey, int selection,
         }
 
         /* OSSL_PKEY_PARAM_PUB_KEY */
-        enc_len = EC_POINT_point2buf(group, point, POINT_CONVERSION_COMPRESSED,
-                                     &enc, NULL);
+#if OPENSSL_VERSION_PREREQ(3, 1)
+        /*
+         * Since OpenSSL 3.1: Export OSSL_PKEY_PARAM_PUB_KEY in the format
+         * selected by OSSL_PKEY_PARAM_EC_POINT_CONVERSION_FORMAT.
+         */
+        format = key->ec.format;
+#else
+        format = POINT_CONVERSION_COMPRESSED;
+#endif
+        enc_len = EC_POINT_point2buf(group, point, format, &enc, NULL);
         if (enc_len == 0) {
             put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                           "EC_POINT_point2buf failed");
