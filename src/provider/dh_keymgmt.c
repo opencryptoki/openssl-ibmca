@@ -1758,6 +1758,10 @@ static int ibmca_keymgmt_dh_import(void *vkey, int selection,
 
         rc = ibmca_param_get_bn(key->provctx, params,
                                 OSSL_PKEY_PARAM_PRIV_KEY, &key->dh.priv);
+        if (rc <= 0) {
+            BN_clear_free(key->dh.priv);
+            key->dh.priv = NULL;
+        }
         if (rc == 0)
             return 0;
      }

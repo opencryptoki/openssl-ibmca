@@ -1390,10 +1390,10 @@ static int ibmca_keymgmt_ec_priv_key_from_data(const struct ibmca_key *key,
     }
 
     rc = ibmca_param_get_bn(key->provctx, params, OSSL_PKEY_PARAM_PRIV_KEY, d);
-    if (rc == 0) {
+    if (rc <= 0) {
         BN_clear_free(*d);
         *d = NULL;
-        return 0;
+        return rc;
     }
 
    return 1;
