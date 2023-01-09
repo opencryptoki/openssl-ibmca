@@ -254,7 +254,7 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
         goto error;
     }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_D, d);
-    if (rc == 0)
+    if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_FACTOR1 */
@@ -264,7 +264,7 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
         goto error;
     }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_FACTOR1, p);
-    if (rc == 0)
+    if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_FACTOR2 */
@@ -274,7 +274,7 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
         goto error;
     }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_FACTOR2, q);
-    if (rc == 0)
+    if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_EXPONENT1 */
@@ -285,7 +285,7 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
     }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_EXPONENT1,
                             dp);
-    if (rc == 0)
+    if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_EXPONENT2 */
@@ -296,7 +296,7 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
     }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_EXPONENT2,
                             dq);
-    if (rc == 0)
+    if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_COEFFICIENT1 */
@@ -307,7 +307,7 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
     }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_COEFFICIENT1,
                             qinv);
-    if (rc == 0)
+    if (rc <= 0)
         goto error;
 
     return 1;
@@ -1744,7 +1744,7 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
         if (BN_bn2binpad(p, key->rsa.private.p,
                          ICA_P_LEN(key->rsa.private.key_length)) <= 0) {
             put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "BN_bn2binpad failed for private d");
+                          "BN_bn2binpad failed for private p");
             goto out;
         }
         if (BN_bn2binpad(q, key->rsa.private.q,
