@@ -1080,6 +1080,15 @@ static int ibmca_keymgmt_ec_gen_set_params(void *vgenctx,
         }
     }
 
+#ifdef OSSL_PKEY_PARAM_DHKEM_IKM
+    if (OSSL_PARAM_locate_const(params, OSSL_PKEY_PARAM_DHKEM_IKM) != NULL) {
+        put_error_op_ctx(genctx, IBMCA_ERR_INVALID_PARAM,
+                         "EC parameter '%s' is not supported",
+                         OSSL_PKEY_PARAM_DHKEM_IKM);
+        return 0;
+    }
+#endif
+
     return 1;
 }
 
