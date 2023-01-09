@@ -281,10 +281,18 @@ static int ibmca_signature_rsa_pss_check_params(struct ibmca_op_ctx *ctx)
         break;
     case RSA_PSS_SALTLEN_MAX_SIGN:
     case RSA_PSS_SALTLEN_MAX:
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+    case RSA_PSS_SALTLEN_AUTO_DIGEST_MAX:
+#endif
         saltlen = ctx->key->get_max_param_size(ctx->key) -
                     EVP_MD_get_size(ctx->rsa.signature.md) - 2;
         if ((ctx->key->rsa.bits & 0x7) == 1)
             saltlen--;
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+        if (ctx->rsa.signature.saltlen == RSA_PSS_SALTLEN_AUTO_DIGEST_MAX &&
+            saltlen > EVP_MD_get_size(ctx->rsa.signature.md))
+            saltlen = EVP_MD_get_size(ctx->rsa.signature.md);
+#endif
         if (saltlen < ctx->rsa.signature.pss.saltlen) {
             put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
                              "Saltlen should be >= %d, but max salt len is %d",
@@ -331,7 +339,11 @@ static int ibmca_signature_rsa_op_init(struct ibmca_op_ctx *ctx,
 
     ctx->rsa.signature.pss = ibmca_rsa_pss_defaults;
     /* Max for sign, auto for verify */
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+    ctx->rsa.signature.pss.saltlen = RSA_PSS_SALTLEN_AUTO_DIGEST_MAX;
+#else
     ctx->rsa.signature.pss.saltlen = RSA_PSS_SALTLEN_AUTO;
+#endif
 
     if (key->type == EVP_PKEY_RSA_PSS) {
         ctx->rsa.signature.pad_mode = RSA_PKCS1_PSS_PADDING;
@@ -1509,6 +1521,13 @@ static int ibmca_signature_rsa_get_ctx_params(void *vctx, OSSL_PARAM params[])
                                             OSSL_SIGNATURE_PARAM_PSS_SALTLEN,
                                             OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO);
                 break;
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+            case RSA_PSS_SALTLEN_AUTO_DIGEST_MAX:
+                rc = ibmca_param_build_set_utf8(ctx->provctx, NULL, params,
+                                            OSSL_SIGNATURE_PARAM_PSS_SALTLEN,
+                                            OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO_DIGEST_MAX);
+                break;
+#endif
             default:
                 rc = snprintf(p->data, p->data_size, "%d",
                               ctx->rsa.signature.saltlen);
@@ -1660,6 +1679,10 @@ static int ibmca_signature_rsa_set_ctx_params(void *vctx,
                 saltlen = RSA_PSS_SALTLEN_MAX;
             else if (strcmp(p->data, OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO) == 0)
                 saltlen = RSA_PSS_SALTLEN_AUTO;
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+            else if (strcmp(p->data, OSSL_PKEY_RSA_PSS_SALT_LEN_AUTO_DIGEST_MAX) == 0)
+                saltlen = RSA_PSS_SALTLEN_AUTO_DIGEST_MAX;
+#endif
             else
                 saltlen = atoi(p->data);
 
@@ -1670,7 +1693,11 @@ static int ibmca_signature_rsa_set_ctx_params(void *vctx,
             return 0;
         }
 
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+        if (saltlen < RSA_PSS_SALTLEN_AUTO_DIGEST_MAX) {
+#else
         if (saltlen < RSA_PSS_SALTLEN_MAX) {
+#endif
             put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
                              "Invalid salt length: %d", saltlen);
             return 0;
@@ -1680,6 +1707,9 @@ static int ibmca_signature_rsa_set_ctx_params(void *vctx,
             ctx->rsa.signature.pss.restricted) {
             switch (saltlen) {
             case RSA_PSS_SALTLEN_AUTO:
+#ifdef RSA_PSS_SALTLEN_AUTO_DIGEST_MAX
+            case RSA_PSS_SALTLEN_AUTO_DIGEST_MAX:
+#endif
                 if (ctx->operation == EVP_PKEY_OP_VERIFY) {
                     put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
                                      "Cannot use auto-detected salt length");
