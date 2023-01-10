@@ -213,7 +213,7 @@ static int ibmca_asym_cipher_rsa_get_ctx_params(void *vctx, OSSL_PARAM params[])
 
     /* OSSL_ASYM_CIPHER_PARAM_TLS_NEGOTIATED_VERSION */
     rc = ibmca_param_build_set_uint(ctx->provctx, NULL, params,
-                                    OSSL_ASYM_CIPHER_PARAM_TLS_CLIENT_VERSION,
+                                    OSSL_ASYM_CIPHER_PARAM_TLS_NEGOTIATED_VERSION,
                                     ctx->rsa.cipher.tls_alt_version);
     if (rc == 0)
         return 0;
