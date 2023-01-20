@@ -698,6 +698,14 @@ static int ibmca_signature_ec_get_ctx_params(void *vctx,
     if (rc == 0)
        return 0;
 
+#ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
+    /* OSSL_SIGNATURE_PARAM_NONCE_TYPE */
+    rc = ibmca_param_build_set_uint(ctx->provctx, NULL, params,
+                                    OSSL_SIGNATURE_PARAM_NONCE_TYPE, 0);
+    if (rc == 0)
+       return 0;
+#endif
+
     return 1;
 }
 
@@ -770,6 +778,9 @@ static const OSSL_PARAM ibmca_signature_ec_gettable_params[] = {
     OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_ALGORITHM_ID, NULL, 0),
     OSSL_PARAM_utf8_string(OSSL_SIGNATURE_PARAM_DIGEST, NULL, 0),
     OSSL_PARAM_size_t(OSSL_SIGNATURE_PARAM_DIGEST_SIZE, NULL),
+#ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
+    OSSL_PARAM_uint(OSSL_SIGNATURE_PARAM_NONCE_TYPE, NULL),
+#endif
     OSSL_PARAM_END
 };
 
