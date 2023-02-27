@@ -1,5 +1,5 @@
 /*
- * Copyright [2021-2022] International Business Machines Corp.
+ * Copyright [2021-2023] International Business Machines Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@
 #include <openssl/core_names.h>
 
 #include "p_ibmca.h"
+#include "constant_time.h"
 
 const OSSL_ITEM ibmca_rsa_padding_table[] = {
     { RSA_PKCS1_PADDING,        OSSL_PKEY_RSA_PAD_MODE_PKCSV15 },
@@ -583,10 +584,10 @@ int ibmca_rsa_check_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
         dbmask[i] ^= masked_db[i];
 
     /* pkcs1v2.2, section 7.1.2, Step 3g:
-     * DB = lHash’ || PS || 0x01 || M .
+     * DB = lHashâ€™ || PS || 0x01 || M .
      *
      * If there is no octet with hexadecimal value 0x01 to separate
-     * PS from M, if lHash does not equal lHash’, output "decryption
+     * PS from M, if lHash does not equal lHashâ€™, output "decryption
      * error" and stop.
      */
     if (EVP_Digest((void *)label, label_len, hash, NULL,
@@ -644,11 +645,22 @@ int ibmca_rsa_check_pkcs1_tls_padding(const struct ibmca_prov_ctx *provctx,
                                       size_t *outlen)
 {
     size_t i;
-    bool ok, alt_ok;
+    unsigned int ok, version_ok, alt_ok;
+    unsigned char rand_buf[IBMCA_SSL_MAX_MASTER_KEY_LENGTH];
 
     ibmca_debug_ctx(provctx,
                     "inlen: %lu outsize: %lu client_version: 0x%04x alt_version: 0x%04x" ,
                     inlen, outsize, client_version, alt_version);
+
+    /*
+     * The implementation of this function is copied from OpenSSL's function
+     * ossl_rsa_padding_check_PKCS1_type_2_TLS() in crypto/rsa/rsa_pk1.c
+     * and is slightly modified to fit to the providers environment.
+     * Changes include:
+     * - Different variable and define names.
+     * - Usage of put_error_ctx and ibmca_debug_ctx to report errors and issue
+     *   debug messages.
+     */
 
     /*
      * The format is
@@ -659,6 +671,10 @@ int ibmca_rsa_check_pkcs1_tls_padding(const struct ibmca_prov_ctx *provctx,
      * PreMasterSecret:  Version-major | Version-minor | 64 bytes secret
      */
 
+    /*
+     * If these checks fail then either the message in publicly invalid, or
+     * we've been called incorrectly. We can fail immediately.
+     */
     if (inlen < RSA_PKCS1_PADDING_SIZE + IBMCA_SSL_MAX_MASTER_KEY_LENGTH) {
         put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM, "PKCS1 encoding error");
         return 0;
@@ -669,50 +685,77 @@ int ibmca_rsa_check_pkcs1_tls_padding(const struct ibmca_prov_ctx *provctx,
         return 0;
     }
 
-    /* Check PKCA#1 type 2 padding */
-    if (in[0] != 0x00 || in[1] != 0x02) {
-        ibmca_debug_ctx(provctx, "ERROR: PKCS1 encoding error");
-        goto error;
-    }
-    for (i = 2; i < inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH - 1; i++) {
-        if (in[i] == 0x00) {
-            ibmca_debug_ctx(provctx, "ERROR: PKCS1 encoding error");
-            goto error;
-        }
-    }
-    if (in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH - 1] != 0x00) {
-        ibmca_debug_ctx(provctx, "ERROR: PKCS1 encoding error");
-        goto error;
+    /*
+     * Generate a random premaster secret to use in the event that we fail
+     * to decrypt.
+     */
+    if (RAND_priv_bytes_ex(provctx->libctx, rand_buf,
+                           IBMCA_SSL_MAX_MASTER_KEY_LENGTH, 0) <= 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "RAND_priv_bytes_ex failed");
+        return 0;
     }
 
-    /* Check version */
-    ok = (in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH] ==
-                                            ((client_version >> 8) & 0xff));
-    ok &= (in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH] ==
-                                            (client_version & 0xff));
+    ok = constant_time_is_zero(in[0]);
+    ok &= constant_time_eq(in[1], 2);
 
-    if (alt_version != 0) {
-        alt_ok = (in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH] ==
-                                                ((alt_version >> 8) & 0xff));
-        alt_ok &= (in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH] ==
-                                                (alt_version & 0xff));
-        ok |= alt_ok;
-    }
-    if (!ok) {
-        ibmca_debug_ctx(provctx, "ERROR: Version check failed");
-        goto error;
+    /* Check we have the expected padding data */
+    for (i = 2; i < inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH - 1; i++)
+        ok &= ~constant_time_is_zero_8(in[i]);
+    ok &= constant_time_is_zero_8(
+                            in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH - 1]);
+
+    /*
+     * If the version in the decrypted pre-master secret is correct then
+     * version_good will be 0xff, otherwise it'll be zero. The
+     * Klima-Pokorny-Rosa extension of Bleichenbacher's attack
+     * (http://eprint.iacr.org/2003/052/) exploits the version number
+     * check as a "bad version oracle". Thus version checks are done in
+     * constant time and are treated like any other decryption error.
+     */
+    version_ok =
+        constant_time_eq(in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH],
+                         (client_version >> 8) & 0xff);
+    version_ok &=
+        constant_time_eq(in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH + 1],
+                         client_version & 0xff);
+
+    /*
+     * The premaster secret must contain the same version number as the
+     * ClientHello to detect version rollback attacks (strangely, the
+     * protocol does not offer such protection for DH ciphersuites).
+     * However, buggy clients exist that send the negotiated protocol
+     * version instead if the server does not support the requested
+     * protocol version. If SSL_OP_TLS_ROLLBACK_BUG is set then we tolerate
+     * such clients. In that case alt_version will be non-zero and set to
+     * the negotiated version.
+     */
+    if (alt_version > 0) {
+        alt_ok = constant_time_eq(in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH],
+                             (alt_version >> 8) & 0xff);
+        alt_ok &= constant_time_eq(
+                             in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH + 1],
+                             alt_version & 0xff);
+        version_ok |= alt_ok;
     }
 
+    ok &= version_ok;
+
+    /*
+     * Now copy the result over to the buffer if good, or random data if
+     * not good.
+     */
     *outlen = IBMCA_SSL_MAX_MASTER_KEY_LENGTH;
-    if (out != NULL)
-        memcpy(out, &in[inlen - IBMCA_SSL_MAX_MASTER_KEY_LENGTH],
-               IBMCA_SSL_MAX_MASTER_KEY_LENGTH);
+    for (i = 0; out != NULL && i < IBMCA_SSL_MAX_MASTER_KEY_LENGTH; i++) {
+        out[i] = constant_time_select_8(ok,
+                                        in[inlen -
+                                           IBMCA_SSL_MAX_MASTER_KEY_LENGTH + i],
+                                        rand_buf[i]);
+    }
 
-    ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
+    ibmca_debug_ctx(provctx, "ok: %d outlen: %lu",
+                    constant_time_select_int(ok, 1, 0), *outlen);
 
-    return 1;
-
-error:
     /*
      * We must not leak whether a decryption failure occurs because of
      * Bleichenbacher's attack on PKCS #1 v1.5 RSA padding (see RFC 2246,
@@ -721,18 +764,6 @@ error:
      * fails. See https://tools.ietf.org/html/rfc5246#section-7.4.7.1
      * So, whether we actually succeeded or not, return success.
      */
-    *outlen = IBMCA_SSL_MAX_MASTER_KEY_LENGTH;
-    if (out != NULL) {
-        if (RAND_priv_bytes_ex(provctx->libctx, out,
-                               IBMCA_SSL_MAX_MASTER_KEY_LENGTH, 0) <= 0) {
-            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
-                          "RAND_priv_bytes_ex failed");
-            return 0;
-        }
-    }
-
-    ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
-
     return 1;
 }
 
