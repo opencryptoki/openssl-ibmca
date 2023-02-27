@@ -455,11 +455,14 @@ int ibmca_rsa_build_digest_info(const struct ibmca_prov_ctx *provctx,
 int ibmca_rsa_add_pkcs1_padding(const struct ibmca_prov_ctx *provctx, int type,
                                 const unsigned char *in, size_t inlen,
                                 unsigned char *out, size_t outlen);
-int ibmca_rsa_check_pkcs1_padding(const struct ibmca_prov_ctx *provctx,
-                                  int type,
-                                  const unsigned char *in, size_t inlen,
-                                  unsigned char *out, size_t outsize,
-                                  unsigned char ** outptr, size_t *outlen);
+int ibmca_rsa_check_pkcs1_padding_type1(const struct ibmca_prov_ctx *provctx,
+                                        const unsigned char *in, size_t inlen,
+                                        unsigned char *out, size_t outsize,
+                                        unsigned char **outptr, size_t *outlen);
+int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
+                                        const unsigned char *in, size_t inlen,
+                                        unsigned char *out, size_t outsize,
+                                        size_t *outlen);
 int ibmca_rsa_add_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                                     const unsigned char *in, size_t inlen,
                                     unsigned char *out, size_t outlen,
