@@ -861,9 +861,9 @@ static int ibmca_asym_cipher_rsa_decrypt(void *vctx,
         break;
 
     case RSA_PKCS1_PADDING:
-        rc = ibmca_rsa_check_pkcs1_padding(ctx->key->provctx, 2,
-                                           dec_data, dec_data_len,
-                                           out, outsize, NULL, outlen);
+        rc = ibmca_rsa_check_pkcs1_padding_type2(ctx->key->provctx,
+                                                 dec_data, dec_data_len,
+                                                 out, outsize, outlen);
         break;
 
     case RSA_PKCS1_OAEP_PADDING:

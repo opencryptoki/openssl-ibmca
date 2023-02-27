@@ -209,24 +209,21 @@ int ibmca_rsa_add_pkcs1_padding(const struct ibmca_prov_ctx *provctx, int type,
     return 1;
 }
 
-int ibmca_rsa_check_pkcs1_padding(const struct ibmca_prov_ctx *provctx,
-                                  int type,
-                                  const unsigned char *in, size_t inlen,
-                                  unsigned char *out, size_t outsize,
-                                  unsigned char **outptr, size_t *outlen)
+int ibmca_rsa_check_pkcs1_padding_type1(const struct ibmca_prov_ctx *provctx,
+                                        const unsigned char *in, size_t inlen,
+                                        unsigned char *out, size_t outsize,
+                                        unsigned char **outptr, size_t *outlen)
 {
     const unsigned char *p;
     int found = 0;
 
-    ibmca_debug_ctx(provctx, "type: %d inlen: %lu outsize: %lu", type,
-                    inlen, outsize);
+    ibmca_debug_ctx(provctx, "inlen: %lu outsize: %lu", inlen, outsize);
 
     /*
      * The format is
      * 00 || BT || PS || 00 || D
      * BT - block type
-     * PS - padding string, at least 8 bytes of FF for BT = 1 or at least 8
-     *      bytes of random non-zero data for BT = 2
+     * PS - padding string, at least 8 bytes of FF
      * D  - data.
      */
     if (inlen < RSA_PKCS1_PADDING_SIZE) {
@@ -236,42 +233,24 @@ int ibmca_rsa_check_pkcs1_padding(const struct ibmca_prov_ctx *provctx,
 
     p = in;
 
-    if (*(p++) != 0 || *(p++) != type) {
+    if (*(p++) != 0 || *(p++) != 1) {
         put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM, "PKCS1 encoding error");
         return 0;
     }
 
-    switch (type) {
-    case 1:
-        while (p < in + inlen) {
-            if (*p != 0xff) {
-                if (*p == 0x00) {
-                    found = 1;
-                    break;
-                }
 
-                put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
-                              "PKCS1 encoding error");
-                return 0;
-            }
-            p++;
-        }
-        break;
-
-    case 2:
-        while (p < in + inlen) {
+    while (p < in + inlen) {
+        if (*p != 0xff) {
             if (*p == 0x00) {
                 found = 1;
                 break;
             }
-            p++;
-        }
-        break;
 
-    default:
-        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
-                       "Invalid PKCS1 block type: %d", type);
-        return 0;
+            put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                          "PKCS1 encoding error");
+            return 0;
+        }
+        p++;
     }
 
     if (!found) {
@@ -298,6 +277,94 @@ int ibmca_rsa_check_pkcs1_padding(const struct ibmca_prov_ctx *provctx,
     ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
 
     return 1;
+}
+
+int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
+                                        const unsigned char *in, size_t inlen,
+                                        unsigned char *out, size_t outsize,
+                                        size_t *outlen)
+{
+    unsigned int ok, found, zero;
+    size_t zero_index = 0, msg_index, mlen;
+    size_t i, j;
+
+    /*
+     * The implementation of this function is copied from OpenSSL's function
+     * ossl_rsa_padding_check_PKCS1_type_2() in crypto/rsa/rsa_pk1.c
+     * and is slightly modified to fit to the providers environment.
+     * Changes include:
+     * - Different variable and define names.
+     * - Usage of put_error_ctx and ibmca_debug_ctx to report errors and issue
+     *   debug messages.
+     * - No support for implicit rejection (will be added later).
+     */
+
+    ibmca_debug_ctx(provctx, "inlen: %lu outsize: %lu", inlen, outsize);
+
+    /*
+     * The format is
+     * 00 || BT || PS || 00 || D
+     * BT - block type
+     * PS - padding string, at least 8 bytes of random non-zero data for BT = 2
+     * D  - data.
+     */
+
+    /*
+     * PKCS#1 v1.5 decryption. See "PKCS #1 v2.2: RSA Cryptography Standard",
+     * section 7.2.2.
+     */
+    if (inlen < RSA_PKCS1_PADDING_SIZE) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM, "PKCS1 encoding error");
+        return 0;
+    }
+
+    ok = constant_time_is_zero(in[0]);
+    ok &= constant_time_eq(in[1], 2);
+
+    /* scan over padding data */
+    found = 0;
+    for (i = 2; i < inlen; i++) {
+        zero = constant_time_is_zero(in[i]);
+
+        zero_index = constant_time_select_int(~found & zero, i, zero_index);
+        found |= zero;
+    }
+
+    /*
+     * PS must be at least 8 bytes long, and it starts two bytes into |enc_msg|.
+     * If we never found a 0-byte, then |zero_index| is 0 and the check
+     * also fails.
+     */
+    ok &= constant_time_ge(zero_index, 2 + 8);
+
+    /*
+     * Skip the zero byte. This is incorrect if we never found a zero-byte
+     * but in this case we also do not copy the message out.
+     */
+    msg_index = zero_index + 1;
+    mlen = inlen - msg_index;
+
+    /*
+     * For good measure, do this check in constant time as well.
+     */
+    ok &= constant_time_ge(outsize, mlen);
+
+    /*
+     * since at this point the |msg_index| does not provide the signal
+     * indicating if the padding check failed or not, we don't have to worry
+     * about leaking the length of returned message, we still need to ensure
+     * that we read contents of both buffers so that cache accesses don't leak
+     * the value of |good|
+     */
+    for (i = msg_index, j = 0; i < inlen && j < outsize; i++, j++)
+        out[j] = constant_time_select_8(ok, in[i], out[j]);
+
+    *outlen = j;
+
+    ibmca_debug_ctx(provctx, "ok: %d outlen: %lu",
+                    constant_time_select_int(ok, 1, 0), *outlen);
+
+    return constant_time_select_int(ok, 1, 0);
 }
 
 static int ibmca_rsa_pkcs1_mgf1(const struct ibmca_prov_ctx *provctx,
