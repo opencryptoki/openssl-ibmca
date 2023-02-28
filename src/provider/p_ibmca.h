@@ -203,6 +203,7 @@ struct ibmca_op_ctx {
                 size_t oaep_labellen;
                 unsigned int tls_clnt_version;
                 unsigned int tls_alt_version;
+                unsigned int implicit_rejection;
             } cipher; /* For operation EVP_PKEY_OP_ENCRYPT/DECRYPT */
             struct {
                 int pad_mode;
@@ -462,7 +463,9 @@ int ibmca_rsa_check_pkcs1_padding_type1(const struct ibmca_prov_ctx *provctx,
 int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
                                         const unsigned char *in, size_t inlen,
                                         unsigned char *out, size_t outsize,
-                                        size_t *outlen);
+                                        size_t *outlen,
+                                        const unsigned char *kdk,
+                                        size_t kdklen);
 int ibmca_rsa_add_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                                     const unsigned char *in, size_t inlen,
                                     unsigned char *out, size_t outlen,
@@ -504,6 +507,10 @@ int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                                      const EVP_MD *pss_md,
                                      const EVP_MD *mgf1_md,
                                      int saltlen);
+
+int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
+                                 const unsigned char *in, size_t inlen,
+                                 unsigned char *kdk, size_t kdklen);
 
 extern const OSSL_ALGORITHM ibmca_ec_keymgmt[];
 extern const OSSL_ALGORITHM ibmca_ec_signature[];
