@@ -869,7 +869,7 @@ static int ibmca_asym_cipher_rsa_decrypt(void *vctx,
     case RSA_PKCS1_OAEP_PADDING:
         rc = ibmca_rsa_check_oaep_mgf1_padding(ctx->key->provctx,
                                                dec_data, dec_data_len,
-                                               out, outsize, NULL, outlen,
+                                               out, outsize, outlen,
                                                ctx->rsa.cipher.oaep_md,
                                                ctx->rsa.cipher.mgf1_md,
                                                ctx->rsa.cipher.oaep_label,
