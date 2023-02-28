@@ -28,6 +28,7 @@
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
+#include <openssl/sha.h>
 
 #include "p_ibmca.h"
 
@@ -67,6 +68,12 @@ static void *ibmca_asym_cipher_rsa_newctx(void *vprovctx)
         ibmca_debug_ctx(provctx, "ERROR: ibmca_op_newctx failed");
         return NULL;
     }
+
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    opctx->rsa.cipher.implicit_rejection = 1;
+#else
+    opctx->rsa.cipher.implicit_rejection = 0;
+#endif
 
     ibmca_debug_ctx(provctx, "opctx: %p", opctx);
 
@@ -118,6 +125,7 @@ static int ibmca_asym_cipher_rsa_dup_cb(const struct ibmca_op_ctx *ctx,
 
     new_ctx->rsa.cipher.oaep_label = NULL;
     new_ctx->rsa.cipher.oaep_labellen = 0;
+    new_ctx->rsa.cipher.implicit_rejection = ctx->rsa.cipher.implicit_rejection;
 
     return 1;
 }
@@ -222,7 +230,7 @@ static int ibmca_asym_cipher_rsa_get_ctx_params(void *vctx, OSSL_PARAM params[])
     /* OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION */
     rc = ibmca_param_build_set_uint(ctx->provctx, NULL, params,
                                     OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION,
-                                    0);
+                                    ctx->rsa.cipher.implicit_rejection);
     if (rc == 0)
         return 0;
 #endif
@@ -239,9 +247,6 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
     void *label = NULL;
     size_t labellen = 0;
     int i, rc;
-#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
-    unsigned int implicit_rejection;
-#endif
 
     if (ctx == NULL)
         return 0;
@@ -389,14 +394,9 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
 #ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
     rc = ibmca_param_get_uint(ctx->provctx, params,
                               OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION,
-                              &implicit_rejection);
+                              &ctx->rsa.cipher.implicit_rejection);
     if (rc == 0)
         return 0;
-    if (rc > 0 && implicit_rejection != 0) {
-        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
-                         "RSA: Implicit rejection is not supported");
-        return 0;
-    }
 #endif
 
     return 1;
@@ -495,6 +495,11 @@ static int ibmca_asym_cipher_rsa_op_init(struct ibmca_op_ctx *ctx,
     ctx->rsa.cipher.oaep_md = NULL;
     ctx->rsa.cipher.oaep_label = NULL;
     ctx->rsa.cipher.oaep_labellen = 0;
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    ctx->rsa.cipher.implicit_rejection = 1;
+#else
+    ctx->rsa.cipher.implicit_rejection = 0;
+#endif
 
     if (params != NULL) {
         if (ibmca_asym_cipher_rsa_set_ctx_params(ctx, params) == 0) {
@@ -771,6 +776,7 @@ static int ibmca_asym_cipher_rsa_decrypt(void *vctx,
                                          size_t outsize,
                                          const unsigned char *in, size_t inlen)
 {
+    unsigned char kdk[SHA256_DIGEST_LENGTH] = {0};
     struct ibmca_op_ctx *ctx = vctx;
     unsigned char *dec_data;
     size_t dec_data_len, rsa_size;
@@ -861,9 +867,20 @@ static int ibmca_asym_cipher_rsa_decrypt(void *vctx,
         break;
 
     case RSA_PKCS1_PADDING:
+        if (ctx->rsa.cipher.implicit_rejection) {
+            rc = ibmca_keymgmt_rsa_derive_kdk(ctx->key, in, inlen,
+                                              kdk, sizeof(kdk));
+            if (rc == 0)
+                goto out;
+        }
+
         rc = ibmca_rsa_check_pkcs1_padding_type2(ctx->key->provctx,
                                                  dec_data, dec_data_len,
-                                                 out, outsize, outlen);
+                                                 out, outsize, outlen,
+                                                 ctx->rsa.cipher.implicit_rejection
+                                                         ? kdk : NULL,
+                                                 ctx->rsa.cipher.implicit_rejection
+                                                         ? sizeof(kdk) : 0);
         break;
 
     case RSA_PKCS1_OAEP_PADDING:

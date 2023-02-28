@@ -30,6 +30,8 @@
 #include <openssl/core_names.h>
 #include <openssl/params.h>
 #include <openssl/param_build.h>
+#include <openssl/sha.h>
+#include <openssl/hmac.h>
 
 #include "p_ibmca.h"
 
@@ -1795,6 +1797,152 @@ out:
     BN_free(qinv);
 
     return rc;
+}
+
+int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
+                                 const unsigned char *in, size_t inlen,
+                                 unsigned char *kdk, size_t kdklen)
+{
+    BIGNUM *n = NULL, *e = NULL, *d = NULL;
+    BIGNUM *p = NULL, *q = NULL, *dp = NULL, *dq = NULL, *qinv = NULL;
+    unsigned char *buf = NULL;
+    EVP_MAC_CTX *ctx = NULL;
+    EVP_MAC *hmac = NULL;
+    EVP_MD *md = NULL;
+    size_t md_len;
+    unsigned char d_hash[SHA256_DIGEST_LENGTH] = { 0 };
+    OSSL_PARAM params[2];
+    int rc, ret = 0;
+
+    /*
+     * The implementation of this function is copied from OpenSSL's function
+     * derive_kdk() in crypto/rsa/rsa_ossl.c and is slightly modified to fit to
+     * the providers environment.
+     * Changes include:
+     * - Different variable and define names.
+     * - Usage of put_error_ctx and ibmca_debug_ctx to report errors and issue
+     *   debug messages.
+     * - Different code to get the private key component 'd'.
+     * - Use of the EVP APIs instead of the internal APIs for Digest and HMAC
+     *   operations.
+     */
+
+    ibmca_debug_key(key, "key: %p inlen: %lu kdklen: %lu", key, inlen, kdklen);
+
+    if (kdklen != SHA256_DIGEST_LENGTH) {
+        put_error_key(key, IBMCA_ERR_INVALID_PARAM, "KDK length is wrong");
+        return 0;
+    }
+
+    rc = ibmca_keymgmt_rsa_priv_as_bn(key, &p, &q, &dp, &dq, &qinv);
+    if (rc == 0)
+        goto out;
+
+    rc =  ibmca_keymgmt_rsa_pub_as_bn(key, &n, &e);
+    if (rc == 0)
+        goto out;
+
+    rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+    if (rc == 0)
+        goto out;
+
+    buf = P_SECURE_ZALLOC(key->provctx, key->rsa.private.key_length);
+    if (buf == NULL) {
+        put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
+                     "Failed to allocate buffer for private key");
+        goto out;
+    }
+
+    BN_set_flags(d, BN_FLG_CONSTTIME);
+    if (BN_bn2binpad(d, buf, key->rsa.private.key_length) < 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                     "BN_bn2binpad failed");
+        goto out;
+    }
+
+    /*
+     * we use hardcoded hash so that migrating between versions that use
+     * different hash doesn't provide a Bleichenbacher oracle:
+     * if the attacker can see that different versions return different
+     * messages for the same ciphertext, they'll know that the message is
+     * syntethically generated, which means that the padding check failed
+     */
+    md = EVP_MD_fetch(key->provctx->libctx, "sha256", NULL);
+    if (md == NULL) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MD_fetch failed for sha256");
+        goto out;
+    }
+
+    if (EVP_Digest(buf, key->rsa.private.key_length, d_hash, NULL, md, NULL)
+                                                                        <= 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "EVP_Digest failed");
+        goto out;
+    }
+
+    hmac = EVP_MAC_fetch(key->provctx->libctx, "HMAC", NULL);
+    if (hmac == NULL) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MAC_fetch failed for HMAC");
+        goto out;
+    }
+
+    ctx = EVP_MAC_CTX_new(hmac);
+    if (hmac == NULL) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "EVP_MAC_CTX_new failed");
+        goto out;
+    }
+
+    params[0] = OSSL_PARAM_construct_utf8_string(
+                                        OSSL_MAC_PARAM_DIGEST, "sha256", 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    if (EVP_MAC_init(ctx, d_hash, sizeof(d_hash), params) != 1) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MAC_init failed for HMAC with sha256");
+        goto out;
+    }
+
+    if (inlen < key->rsa.private.key_length) {
+        memset(buf, 0, key->rsa.private.key_length - inlen);
+        if (EVP_MAC_update(ctx, buf, key->rsa.private.key_length - inlen)
+                                                                        != 1) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                          "EVP_MAC_update failed");
+            goto out;
+        }
+    }
+    if (EVP_MAC_update(ctx, in, inlen) != 1) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "EVP_MAC_update failed");
+        goto out;
+    }
+
+    if (EVP_MAC_final(ctx, kdk, &md_len, kdklen) != 1 ||
+        md_len != kdklen) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "EVP_MAC_final failed");
+        goto out;
+    }
+
+    ret = 1;
+
+out:
+    BN_free(n);
+    BN_free(e);
+    BN_free(d);
+    BN_free(p);
+    BN_free(q);
+    BN_free(dp);
+    BN_free(dq);
+    BN_free(qinv);
+    if (buf != NULL)
+        P_SECURE_CLEAR_FREE(key->provctx, buf, key->rsa.private.key_length);
+    EVP_MAC_free(hmac);
+    EVP_MAC_CTX_free(ctx);
+    EVP_MD_free(md);
+
+    ibmca_debug_key(key, "ret: %d", ret);
+
+    return ret;
 }
 
 static const OSSL_DISPATCH ibmca_rsa_keymgmt_functions[] = {

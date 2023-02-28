@@ -137,6 +137,135 @@ out:
     return rc;
 }
 
+static int ibmca_rsa_prf(const struct ibmca_prov_ctx *provctx,
+                         unsigned char *out, size_t outlen,
+                         const char *label, size_t labellen,
+                         const unsigned char *kdk, size_t kdklen,
+                         uint16_t bitlen)
+{
+    size_t pos;
+    int ret = 0;
+    uint16_t iter = 0;
+    unsigned char be_iter[sizeof(iter)];
+    unsigned char be_bitlen[sizeof(bitlen)];
+    EVP_MAC_CTX *ctx = NULL;
+    EVP_MAC *hmac = NULL;
+    unsigned char hmac_out[SHA256_DIGEST_LENGTH];
+    OSSL_PARAM params[2];
+    size_t md_len;
+
+    /*
+     * The implementation of this function is copied from OpenSSL's function
+     * ossl_rsa_prf() in crypto/rsa/rsapk1.c and is slightly modified to fit to
+     * the providers environment.
+     * Changes include:
+     * - Different variable and define names.
+     * - Usage of put_error_ctx and ibmca_debug_ctx to report errors and issue
+     *   debug messages.
+     * - Use of the EVP API instead of the internal APIs for HMAC operations.
+     */
+
+    ibmca_debug_ctx(provctx, "outlen: %lu labellen: %lu kdk: %p kdklen: %lu",
+                    outlen, labellen, kdk, kdklen);
+
+    if (outlen * 8 != bitlen) {
+        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM, "invalid outlen");
+        return 0;
+    }
+
+    be_bitlen[0] = (bitlen >> 8) & 0xff;
+    be_bitlen[1] = bitlen & 0xff;
+
+    hmac = EVP_MAC_fetch(provctx->libctx, "HMAC", NULL);
+    if (hmac == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MAC_fetch failed for HMAC");
+        goto out;
+    }
+
+    ctx = EVP_MAC_CTX_new(hmac);
+    if (hmac == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MAC_CTX_new failed");
+        goto out;
+    }
+
+    /*
+     * we use hardcoded hash so that migrating between versions that use
+     * different hash doesn't provide a Bleichenbacher oracle:
+     * if the attacker can see that different versions return different
+     * messages for the same ciphertext, they'll know that the message is
+     * syntethically generated, which means that the padding check failed
+     */
+    params[0] = OSSL_PARAM_construct_utf8_string(
+                                        OSSL_MAC_PARAM_DIGEST, "sha256", 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    if (EVP_MAC_init(ctx, kdk, kdklen, params) != 1) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "EVP_MAC_init failed for HMAC with sha256");
+        goto out;
+    }
+
+    for (pos = 0; pos < outlen; pos += SHA256_DIGEST_LENGTH, iter++) {
+        if (EVP_MAC_init(ctx, NULL, 0, NULL) != 1) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "EVP_MAC_init failed");
+            goto out;
+        }
+
+        be_iter[0] = (iter >> 8) & 0xff;
+        be_iter[1] = iter & 0xff;
+
+        if (EVP_MAC_update(ctx, be_iter, sizeof(be_iter)) != 1) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "EVP_MAC_update failed");
+            goto out;
+        }
+        if (EVP_MAC_update(ctx, (unsigned char *)label, labellen) != 1) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "EVP_MAC_update failed");
+            goto out;
+        }
+        if (EVP_MAC_update(ctx, be_bitlen, sizeof(be_bitlen)) != 1) {
+            put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                          "EVP_MAC_update failed");
+            goto out;
+        }
+
+        /*
+         * HMAC_Final requires the output buffer to fit the whole MAC
+         * value, so we need to use the intermediate buffer for the last
+         * unaligned block
+         */
+        md_len = SHA256_DIGEST_LENGTH;
+        if (pos + SHA256_DIGEST_LENGTH > outlen) {
+            if (EVP_MAC_final(ctx, hmac_out, &md_len, sizeof(hmac_out)) != 1) {
+                put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                              "EVP_MAC_final failed");
+                goto out;
+            }
+            memcpy(out + pos, hmac_out, outlen - pos);
+        } else {
+            if (EVP_MAC_final(ctx, out + pos, &md_len, outlen - pos) != 1) {
+                put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                              "EVP_MAC_final failed");
+                goto out;
+            }
+        }
+    }
+
+    ret = 1;
+
+out:
+    EVP_MAC_free(hmac);
+    EVP_MAC_CTX_free(ctx);
+
+    ibmca_debug_ctx(provctx, "ret: %d", ret);
+
+    return ret;
+}
+
 int ibmca_rsa_add_pkcs1_padding(const struct ibmca_prov_ctx *provctx, int type,
                                 const unsigned char *in, size_t inlen,
                                 unsigned char *out, size_t outlen)
@@ -279,13 +408,25 @@ int ibmca_rsa_check_pkcs1_padding_type1(const struct ibmca_prov_ctx *provctx,
     return 1;
 }
 
+#define MAX_LEN_GEN_TRIES 128
+
 int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
                                         const unsigned char *in, size_t inlen,
                                         unsigned char *out, size_t outsize,
-                                        size_t *outlen)
+                                        size_t *outlen,
+                                        const unsigned char *kdk,
+                                        size_t kdklen)
 {
-    unsigned int ok, found, zero;
+    unsigned int ok = 0, found, zero;
     size_t zero_index = 0, msg_index, mlen;
+    unsigned char *synthetic = NULL;
+    int synthethic_length;
+    uint16_t len_candidate;
+    unsigned char candidate_lengths[MAX_LEN_GEN_TRIES * sizeof(len_candidate)];
+    uint16_t len_mask;
+    uint16_t max_sep_offset;
+    int synth_msg_index = 0;
+
     size_t i, j;
 
     /*
@@ -293,13 +434,13 @@ int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
      * ossl_rsa_padding_check_PKCS1_type_2() in crypto/rsa/rsa_pk1.c
      * and is slightly modified to fit to the providers environment.
      * Changes include:
-     * - Different variable and define names.
+     * - Different variable, function and define names.
      * - Usage of put_error_ctx and ibmca_debug_ctx to report errors and issue
      *   debug messages.
-     * - No support for implicit rejection (will be added later).
      */
 
-    ibmca_debug_ctx(provctx, "inlen: %lu outsize: %lu", inlen, outsize);
+    ibmca_debug_ctx(provctx, "inlen: %lu outsize: %lu kdk: %p kdklen: %lu",
+                    inlen, outsize, kdk, kdklen);
 
     /*
      * The format is
@@ -316,6 +457,58 @@ int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
     if (inlen < RSA_PKCS1_PADDING_SIZE) {
         put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM, "PKCS1 encoding error");
         return 0;
+    }
+
+
+    if (kdk != NULL && kdklen > 0) {
+        /*
+         * Implicit rejection is enabled.
+         * Generate a random message to return in case the padding checks fail.
+         */
+        synthetic = P_ZALLOC(provctx, inlen);
+        if (synthetic == NULL) {
+            put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
+                          "Failed to allocate synthetic buffer");
+            return 0;
+        }
+
+        if (ibmca_rsa_prf(provctx, synthetic, inlen, "message", 7, kdk, kdklen,
+                          inlen * 8) != 1)
+            goto out;
+
+        /* decide how long the random message should be */
+        if (ibmca_rsa_prf(provctx, candidate_lengths, sizeof(candidate_lengths),
+                         "length", 6, kdk, kdklen,
+                         MAX_LEN_GEN_TRIES * sizeof(len_candidate) * 8) != 1)
+            goto out;
+
+        /*
+         * max message size is the size of the modulus size minus 2 bytes for
+         * version and padding type and a minimum of 8 bytes padding
+         */
+        len_mask = max_sep_offset = inlen - 2 - 8;
+        /*
+         * we want a mask so lets propagate the high bit to all positions less
+         * significant than it
+         */
+        len_mask |= len_mask >> 1;
+        len_mask |= len_mask >> 2;
+        len_mask |= len_mask >> 4;
+        len_mask |= len_mask >> 8;
+
+        synthethic_length = 0;
+        for (i = 0; i < MAX_LEN_GEN_TRIES * (int)sizeof(len_candidate);
+                                                i += sizeof(len_candidate)) {
+            len_candidate = (candidate_lengths[i] << 8) |
+                                                    candidate_lengths[i + 1];
+            len_candidate &= len_mask;
+
+            synthethic_length = constant_time_select_int(
+                            constant_time_lt(len_candidate, max_sep_offset),
+                                             len_candidate, synthethic_length);
+        }
+
+        synth_msg_index = inlen - synthethic_length;
     }
 
     ok = constant_time_is_zero(in[0]);
@@ -356,15 +549,29 @@ int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
      * that we read contents of both buffers so that cache accesses don't leak
      * the value of |good|
      */
-    for (i = msg_index, j = 0; i < inlen && j < outsize; i++, j++)
-        out[j] = constant_time_select_8(ok, in[i], out[j]);
+    if (kdk != NULL) {
+        msg_index = constant_time_select_int(ok, msg_index, synth_msg_index);
+
+        for (i = msg_index, j = 0; i < inlen && j < outsize; i++, j++)
+            out[j] = constant_time_select_8(ok, in[i], synthetic[i]);
+    } else {
+        for (i = msg_index, j = 0; i < inlen && j < outsize; i++, j++)
+            out[j] = constant_time_select_8(ok, in[i], out[j]);
+    }
 
     *outlen = j;
+
+out:
+    if (synthetic != NULL)
+        P_FREE(provctx, synthetic);
 
     ibmca_debug_ctx(provctx, "ok: %d outlen: %lu",
                     constant_time_select_int(ok, 1, 0), *outlen);
 
-    return constant_time_select_int(ok, 1, 0);
+    if (kdk != NULL)
+        return 1;
+    else
+        return constant_time_select_int(ok, 1, 0);
 }
 
 static int ibmca_rsa_pkcs1_mgf1(const struct ibmca_prov_ctx *provctx,
