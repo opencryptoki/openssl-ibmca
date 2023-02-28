@@ -566,17 +566,30 @@ done:
 int ibmca_rsa_check_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                                       const unsigned char *in, size_t inlen,
                                       unsigned char *out, size_t outsize,
-                                      unsigned char **outptr, size_t *outlen,
+                                      size_t *outlen,
                                       const EVP_MD *oaep_md,
                                       const EVP_MD *mgf1_md,
                                       const unsigned char *label,
                                       size_t label_len)
 {
-    int rc = 0, error = 0;
-    size_t dbmask_len = 0, ps_len, i, oaep_md_len;
-    const unsigned char *masked_seed, *masked_db;
-    unsigned char *dbmask = NULL, *seed_mask = NULL;
-    unsigned char hash[EVP_MAX_MD_SIZE];
+    size_t i, dblen = 0, mlen = -1, one_index = 0, msg_index, mdlen;
+    unsigned int ok = 0, found_one_byte, mask;
+    const unsigned char *maskedseed, *maskeddb;
+    unsigned char *db = NULL;
+    unsigned char seed[EVP_MAX_MD_SIZE], phash[EVP_MAX_MD_SIZE];
+
+    /*
+     * The implementation of this function is copied from OpenSSL's function
+     * RSA_padding_check_PKCS1_OAEP_mgf1() in crypto/rsa/rsa_oaep.c
+     * and is slightly modified to fit to the providers environment.
+     * Changes include:
+     * - Different variable and define names.
+     * - Usage of put_error_ctx and ibmca_debug_ctx to report errors and issue
+     *   debug messages.
+     * - No need for copying the input to an allocated 'em' buffer. The caller
+     *   guarantees that the size of the input is already the size of the
+     *   modulus.
+     */
 
     if (oaep_md == NULL) {
         put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
@@ -592,116 +605,122 @@ int ibmca_rsa_check_oaep_mgf1_padding(const struct ibmca_prov_ctx *provctx,
                     inlen, outsize, EVP_MD_get0_name(oaep_md),
                     EVP_MD_get0_name(mgf1_md), label_len);
 
-    oaep_md_len = EVP_MD_get_size(oaep_md);
-    if (oaep_md_len <= 0) {
-        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
-                      "EVP_MD_get_size failed");
-        goto done;
-    }
+    mdlen = EVP_MD_get_size(oaep_md);
 
-    if (inlen < oaep_md_len + 2) {
+    /*
+     * |inlen| is guaranteed by the caller to be the modulus size.
+     * |inlen| >= 2 * |mdlen| + 2 must hold for the modulus
+     * irrespective of the ciphertext, see PKCS #1 v2.2, section 7.1.2.
+     * This does not leak any side-channel information.
+     */
+    if (inlen < 2 * mdlen + 2) {
         put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
-                      "Input size too small");
+                      "Input parameters wrong");
         goto done;
     }
 
-    /* allocate memory now for later use */
-    dbmask_len = outsize - oaep_md_len - 1;
-    dbmask = P_ZALLOC(provctx, dbmask_len);
-    seed_mask = P_ZALLOC(provctx, oaep_md_len);
-    if ((seed_mask == NULL) || (dbmask == NULL)) {
+    dblen = inlen - mdlen - 1;
+    db = P_ZALLOC(provctx, dblen);
+    if (db == NULL) {
         put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
-                      "Failed to allocate mask or seed buffer");
+                      "Failed to allocate mask or message buffer");
         goto done;
     }
 
-    /* pkcs1v2.2, section 7.1.2, Step 3b:
-     * Separate the encoded message EM and process the decrypted message.
-     *
-     * To mitigate fault and timing attacks, just flag errors and
-     * keep going.
+    /*
+     * The first byte must be zero, however we must not leak if this is
+     * true. See James H. Manger, "A Chosen Ciphertext  Attack on RSA
+     * Optimal Asymmetric Encryption Padding (OAEP) [...]", CRYPTO 2001).
      */
-    masked_seed = in + 1;
-    masked_db = in + oaep_md_len + 1;
+    ok = constant_time_is_zero(in[0]);
 
-    /* pkcs1v2.2, section 7.1.2, Step 3c:
-     * Compute seedMask using MGF1.
-     */
-    if (ibmca_rsa_pkcs1_mgf1(provctx, seed_mask, oaep_md_len, masked_db,
-                             dbmask_len, mgf1_md) == 0)
-        error++;
+    maskedseed = in + 1;
+    maskeddb = in + 1 + mdlen;
 
-    /* pkcs1v2.2, section 7.1.2, Step 3d:
-     * Compute seed using MGF1.
-     */
-    for (i = 0; i < oaep_md_len; i++)
-        seed_mask[i] ^= masked_seed[i];
+    if (ibmca_rsa_pkcs1_mgf1(provctx, seed, mdlen, maskeddb, dblen,
+                             mgf1_md) == 0)
+        goto done;
 
-    /* pkcs1v2.2, section 7.1.2, Step 3e:
-     * Compute dbmask using MGF1.
-     */
-    if (ibmca_rsa_pkcs1_mgf1(provctx, dbmask, dbmask_len, seed_mask,
-                             oaep_md_len, mgf1_md) == 0)
-        error++;
+    for (i = 0; i < mdlen; i++)
+        seed[i] ^= maskedseed[i];
 
-    /* pkcs1v2.2, section 7.1.2, Step 3f:
-     * Compute db using MGF1.
-     */
-    for (i = 0; i < dbmask_len; i++)
-        dbmask[i] ^= masked_db[i];
+    if (ibmca_rsa_pkcs1_mgf1(provctx, db, dblen, seed, mdlen, mgf1_md) == 0)
+        goto done;
 
-    /* pkcs1v2.2, section 7.1.2, Step 3g:
-     * DB = lHash’ || PS || 0x01 || M .
-     *
-     * If there is no octet with hexadecimal value 0x01 to separate
-     * PS from M, if lHash does not equal lHash’, output "decryption
-     * error" and stop.
-     */
-    if (EVP_Digest((void *)label, label_len, hash, NULL,
-                   oaep_md, NULL) == 0) {
+    for (i = 0; i < dblen; i++)
+        db[i] ^= maskeddb[i];
+
+    if (EVP_Digest((void *)label, label_len, phash, NULL, oaep_md, NULL) == 0) {
         put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR, "EVP_Digest failed");
         goto done;
     }
-    if (memcmp(dbmask, hash, oaep_md_len))
-        error++;
 
-    ps_len = oaep_md_len;
-    while ((ps_len < dbmask_len) && (dbmask[ps_len] == 0x00))
-        ps_len++;
+    ok &= constant_time_is_zero(CRYPTO_memcmp(db, phash, mdlen));
 
-    if (ps_len >= dbmask_len ||
-        (ps_len < dbmask_len && dbmask[ps_len] != 0x01) ||
-        in[0] != 0)
-        error++;
-
-    if (error)
-        goto done;
-
-    ps_len++;
-    *outlen = dbmask_len - ps_len;
-
-    if (outsize < *outlen) {
-        put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
-                      "Output buffer too small");
-        goto done;
+    found_one_byte = 0;
+    for (i = mdlen; i < dblen; i++) {
+        /*
+         * Padding consists of a number of 0-bytes, followed by a 1.
+         */
+        unsigned int equals1 = constant_time_eq(db[i], 1);
+        unsigned int equals0 = constant_time_is_zero(db[i]);
+        one_index = constant_time_select_int(~found_one_byte & equals1,
+                                             i, one_index);
+        found_one_byte |= equals1;
+        ok &= (found_one_byte | equals0);
     }
 
-    if (out != NULL)
-        memcpy(out, dbmask + ps_len, *outlen);
-    if (outptr != NULL)
-        *outptr = dbmask + ps_len;
+    ok &= found_one_byte;
 
-    ibmca_debug_ctx(provctx, "outlen: %lu", *outlen);
+    /*
+     * At this point |good| is zero unless the plaintext was valid,
+     * so plaintext-awareness ensures timing side-channels are no longer a
+     * concern.
+     */
+    msg_index = one_index + 1;
+    mlen = dblen - msg_index;
 
-    rc = 1;
+    /*
+     * For good measure, do this check in constant time as well.
+     */
+    ok &= constant_time_ge(outsize, mlen);
+
+    /*
+     * Move the result in-place by |dblen| - |mdlen| - 1 - |mlen| bytes
+     * to the left.
+     * Then if |good| move |mlen| bytes from |db| + |mdlen| + 1 to |out|.
+     * Otherwise leave |out| unchanged.
+     * Copy the memory back in a way that does not reveal the size of
+     * the data being copied via a timing side channel. This requires copying
+     * parts of the buffer multiple times based on the bits set in the real
+     * length. Clear bits do a non-copy with identical access pattern.
+     * The loop below has overall complexity of O(N*log(N)).
+     */
+    outsize = constant_time_select_int(constant_time_lt(dblen - mdlen - 1,
+                                                        outsize),
+                                       dblen - mdlen - 1, outsize);
+    for (msg_index = 1; msg_index < dblen - mdlen - 1; msg_index <<= 1) {
+        mask = ~constant_time_eq(msg_index & (dblen - mdlen - 1 - mlen),
+                                 0);
+        for (i = mdlen + 1; i < dblen - msg_index; i++)
+            db[i] = constant_time_select_8(mask, db[i + msg_index], db[i]);
+    }
+    for (i = 0; i < outsize; i++) {
+        mask = ok & constant_time_lt(i, mlen);
+        out[i] = constant_time_select_8(mask, db[i + mdlen + 1], out[i]);
+    }
 
 done:
-    if (seed_mask)
-        P_CLEAR_FREE(provctx, seed_mask, oaep_md_len);
-    if (dbmask)
-        P_CLEAR_FREE(provctx, dbmask, dbmask_len);
+    P_CLEANSE(provctx, seed, sizeof(seed));
+    if (db)
+        P_CLEAR_FREE(provctx, db, dblen);
 
-    return rc;
+    *outlen = constant_time_select_int(ok, mlen, 0);
+
+    ibmca_debug_ctx(provctx, "ok: %d outlen: %lu",
+                    constant_time_select_int(ok, 1, 0), *outlen);
+
+    return constant_time_select_int(ok, 1, 0);
 }
 
 int ibmca_rsa_check_pkcs1_tls_padding(const struct ibmca_prov_ctx *provctx,
