@@ -69,6 +69,10 @@ AC_CHECK_FUNCS([gethostbyaddr gethostbyname memset strcasecmp strncasecmp strstr
 AC_CHECK_DECLS([ICA_FLAG_DHW,DES_ECB], [],
 		AC_MSG_ERROR([*** libica-devel >= 3.6.0 are required ***]),
 		[#include <ica_api.h>])
+AC_CHECK_DECLS([OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION],
+		[openssl_implicit_rejection="yes"], [openssl_implicit_rejection="no"],
+		[#include <openssl/core_names.h>])
+AM_CONDITIONAL([OPENSSL_IMPLICIT_REJECTION], [test "x$openssl_implicit_rejection" = xyes])
 
 AC_ARG_WITH([libica-cex],
 	[AS_HELP_STRING([--with-libica-cex],[Use libica-cex as default library for the IBMCA engine])],

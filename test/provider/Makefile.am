@@ -10,6 +10,10 @@ rsa4k.pl	\
 rsa8k.pl
 #rsa16k.pl
 
+if OPENSSL_IMPLICIT_REJECTION
+TESTS_PERL += rsaimplrej.pl
+endif
+
 TESTS = \
 	rsakey		\
 	eckey		\
