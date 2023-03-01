@@ -353,6 +353,21 @@ sub tls {
    `rm -f server-$port.out`;
 }
 
+sub rsaimplrej {
+    my $prov = "OPENSSL_CONF=$ENV{IBMCA_OPENSSL_TEST_CONF} OPENSSL_MODULES=$ENV{IBMCA_TEST_PATH}";
+
+    my ($key, $in, $out) = @_;
+
+    `$prov openssl list -providers | grep "name: ibmca"`;
+    exit(99) if ($?);
+
+    `$prov openssl pkeyutl -decrypt -inkey $key -in $in -out rsaimplrej.out`;
+    exit(99) if ($?);
+    `cmp $out rsaimplrej.out`;
+    exit(99) if ($?);
+    `rm -f rsaimplrej.out`;
+}
+
 `bash -c unset OPENSSL_CONF`;
 `bash -c unset OPENSSL_MODULES`;
 
