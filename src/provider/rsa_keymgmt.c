@@ -21,6 +21,7 @@
 #include <err.h>
 #include <strings.h>
 #include <string.h>
+#include <errno.h>
 
 #include <openssl/evp.h>
 #include <openssl/bn.h>
@@ -412,6 +413,13 @@ static struct ibmca_key *ibmca_keymgmt_rsa_new_type(
         return NULL;
     }
 
+    if (pthread_rwlock_init(&key->rsa.blinding_lock, NULL) != 0) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "pthread_rwlock_init failed: %s", strerror(errno));
+        ibmca_keymgmt_free(key);
+        return NULL;
+    }
+
     /* Set defaults */
     if (type == EVP_PKEY_RSA_PSS)
         key->rsa.pss = ibmca_rsa_pss_defaults;
@@ -520,7 +528,7 @@ static void ibmca_keymgmt_rsa_free_priv(struct ibmca_key *key)
      key->rsa.private.key_length = 0;
 }
 
-static void ibmca_keymgmt_rsa_free_cb(struct ibmca_key *key)
+static void ibmca_keymgmt_rsa_clean(struct ibmca_key *key)
 {
     if (key == NULL)
         return;
@@ -532,6 +540,33 @@ static void ibmca_keymgmt_rsa_free_cb(struct ibmca_key *key)
 
     if (key->type == EVP_PKEY_RSA_PSS)
         key->rsa.pss = ibmca_rsa_pss_defaults;
+
+    if (pthread_rwlock_wrlock(&key->rsa.blinding_lock) != 0) {
+        ibmca_debug_key(key, "ERROR: pthread_rwlock_wrlock failed: %s",
+                        strerror(errno));
+        return;
+    }
+
+    if (key->rsa.blinding != NULL)
+        BN_BLINDING_free(key->rsa.blinding);
+    key->rsa.blinding = NULL;
+    if (key->rsa.mt_blinding)
+        BN_BLINDING_free(key->rsa.mt_blinding);
+    key->rsa.mt_blinding = NULL;
+
+    pthread_rwlock_unlock(&key->rsa.blinding_lock);
+}
+
+static void ibmca_keymgmt_rsa_free_cb(struct ibmca_key *key)
+{
+    if (key == NULL)
+        return;
+
+    ibmca_debug_key(key, "key: %p", key);
+
+    ibmca_keymgmt_rsa_clean(key);
+
+    pthread_rwlock_destroy(&key->rsa.blinding_lock);
 }
 
 static int ibmca_keymgmt_rsa_dup_pub(const struct ibmca_key *key,
@@ -593,6 +628,12 @@ static int ibmca_keymgmt_rsa_dup_cb(const struct ibmca_key *key,
         return 0;
 
     ibmca_debug_key(key, "key: %p new_key: %p", key, new_key);
+
+    if (pthread_rwlock_init(&new_key->rsa.blinding_lock, NULL) != 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "pthread_rwlock_init failed: %s", strerror(errno));
+        return 0;
+    }
 
     new_key->rsa.bits = key->rsa.bits;
 
@@ -1101,6 +1142,13 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
         return NULL;
     }
 
+    if (pthread_rwlock_init(&key->rsa.blinding_lock, NULL) != 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "pthread_rwlock_init failed: %s", strerror(errno));
+        ibmca_keymgmt_free(key);
+        return NULL;
+    }
+
     key->rsa.bits = genctx->rsa.gen.bits;
     ibmca_debug_op_ctx(genctx, "bits: %lu", key->rsa.bits);
 
@@ -1194,8 +1242,7 @@ static int ibmca_keymgmt_rsa_security_bits(size_t bits)
     }
 }
 
-static int ibmca_keymgmt_rsa_pub_as_bn(struct ibmca_key *key,
-                                       BIGNUM **n, BIGNUM **e)
+int ibmca_keymgmt_rsa_pub_as_bn(struct ibmca_key *key, BIGNUM **n, BIGNUM **e)
 {
     if (key->rsa.public.modulus == NULL || key->rsa.public.exponent == NULL)
         return 0;
@@ -1699,7 +1746,7 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
         ibmca_debug_key(key, "param: %s", parm->key);
 
     /* Clear any already existing key components */
-    ibmca_keymgmt_rsa_free_cb(key);
+    ibmca_keymgmt_rsa_clean(key);
     ibmca_clean_fallback_pkey_cache(key);
 
     /* Import public key parts */
