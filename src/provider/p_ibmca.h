@@ -127,6 +127,9 @@ struct ibmca_key {
             ica_rsa_key_crt_t private;
             ica_rsa_key_mod_expo_t public;
             struct ibmca_pss_params pss; /* For type EVP_PKEY_RSA_PSS only */
+            BN_BLINDING *blinding;
+            BN_BLINDING *mt_blinding;
+            pthread_rwlock_t blinding_lock;
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
         struct {
             int curve_nid;
@@ -511,6 +514,17 @@ int ibmca_rsa_check_pss_mgf1_padding(const struct ibmca_prov_ctx *provctx,
 int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
                                  const unsigned char *in, size_t inlen,
                                  unsigned char *kdk, size_t kdklen);
+
+int ibmca_keymgmt_rsa_pub_as_bn(struct ibmca_key *key, BIGNUM **n, BIGNUM **e);
+
+int ibmca_rsa_crt_with_blinding(struct ibmca_key *key, const unsigned char *in,
+                                unsigned char *out, size_t rsa_size);
+
+int ossl_bn_rsa_do_unblind(const unsigned char *intermediate,
+                           const BIGNUM *unblind,
+                           const unsigned char *to_mod,
+                           unsigned char *buf, int num,
+                           BN_MONT_CTX *m_ctx, BN_ULONG n0);
 
 extern const OSSL_ALGORITHM ibmca_ec_keymgmt[];
 extern const OSSL_ALGORITHM ibmca_ec_signature[];

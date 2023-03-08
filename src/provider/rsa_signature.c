@@ -719,10 +719,9 @@ static int ibmca_signature_rsa_sign(void *vctx,
         goto out;
 
     /* Perform private key encrypt */
-    rc = ica_rsa_crt(ctx->provctx->ica_adapter, enc_data,
-                          &ctx->key->rsa.private, sig);
-    if (rc != 0) {
-        ibmca_debug_op_ctx(ctx, "ica_rsa_crt failed with: %s", strerror(rc));
+    rc = ibmca_rsa_crt_with_blinding(ctx->key, enc_data, sig, rsa_size);
+    if (rc != 1) {
+        ibmca_debug_op_ctx(ctx, "ibmca_asym_cipher_rsa_with_blinding failed");
 
         rc = ibmca_signature_rsa_sign_fallback(ctx, sig, *siglen,
                                                enc_data, enc_data_len);
