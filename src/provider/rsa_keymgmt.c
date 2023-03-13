@@ -553,6 +553,9 @@ static void ibmca_keymgmt_rsa_clean(struct ibmca_key *key)
     if (key->rsa.mt_blinding)
         BN_BLINDING_free(key->rsa.mt_blinding);
     key->rsa.mt_blinding = NULL;
+    if (key->rsa.blinding_mont_ctx != NULL)
+        BN_MONT_CTX_free(key->rsa.blinding_mont_ctx);
+    key->rsa.blinding_mont_ctx = NULL;
 
     pthread_rwlock_unlock(&key->rsa.blinding_lock);
 }
