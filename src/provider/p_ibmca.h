@@ -130,6 +130,8 @@ struct ibmca_key {
             BN_BLINDING *blinding;
             BN_BLINDING *mt_blinding;
             pthread_rwlock_t blinding_lock;
+            BN_MONT_CTX *blinding_mont_ctx;
+            BN_ULONG blinding_mont_ctx_n0;
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
         struct {
             int curve_nid;

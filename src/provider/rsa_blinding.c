@@ -29,11 +29,91 @@
 
 #include "p_ibmca.h"
 
+#ifdef SIXTY_FOUR_BIT_LONG
+    #define BN_MASK2        (0xffffffffffffffffL)
+#endif
+#ifdef SIXTY_FOUR_BIT
+    #define BN_MASK2        (0xffffffffffffffffLL)
+#endif
+#ifdef THIRTY_TWO_BIT
+    #error "Not supported"
+#endif
+
+/*
+ * Provider context used by mod-expo callback function for generating the
+ * blinding factor by BN_BLINDING_create_param() or within BN_BLINDING_update()
+ * when a new blinding factor is generated after 32 requests.
+ * This variable must be thread local!
+ */
+static __thread const struct ibmca_prov_ctx *ibmca_mod_expo_provctx = NULL;
+
+static int ibmca_rsa_blinding_bn_mod_exp(BIGNUM *r, const BIGNUM *a,
+                                         const BIGNUM *p, const BIGNUM *m,
+                                         BN_CTX *ctx, BN_MONT_CTX *m_ctx)
+{
+    const struct ibmca_prov_ctx *provctx = ibmca_mod_expo_provctx;
+    ica_rsa_key_mod_expo_t ica_mode_expo;
+    unsigned char *buffer, *in, *out;
+    size_t size;
+    int rc = 0;
+
+    if (provctx == NULL)
+        return 0;
+
+    ibmca_debug_ctx(provctx, "provctx: %p", provctx);
+
+    size = BN_num_bytes(m);
+    buffer = P_ZALLOC(provctx, 4 * size);
+    if (buffer == NULL) {
+        ibmca_debug_ctx(provctx,
+                        "Failed to allocate a buffer for libica mod-expo");
+        goto out;
+    }
+
+    ica_mode_expo.key_length = size;
+    ica_mode_expo.modulus = buffer;
+    ica_mode_expo.exponent = buffer + size;
+
+    in = buffer + 2 * size;
+    out = buffer + 3 * size;
+
+    if (BN_bn2binpad(a, in, size) == -1 ||
+        BN_bn2binpad(p, ica_mode_expo.exponent, size) == -1 ||
+        BN_bn2binpad(m, ica_mode_expo.modulus, size) == -1) {
+        ibmca_debug_ctx(provctx, "BN_bn2binpad failed");
+        goto out;
+    }
+
+    rc = ica_rsa_mod_expo(provctx->ica_adapter, in, &ica_mode_expo, out);
+    if (rc != 0) {
+        ibmca_debug_ctx(provctx, "ica_rsa_mod_expo failed with: %s",
+                        strerror(rc));
+        rc = 0;
+        goto out;
+    }
+
+    if (BN_bin2bn(out, size, r) == NULL) {
+        ibmca_debug_ctx(provctx, "BN_bin2bn failed");
+        goto out;
+    }
+
+    rc = 1;
+
+out:
+    P_CLEAR_FREE(provctx, buffer, 4 * size);
+
+    ibmca_debug_ctx(provctx, "rc: %d", rc);
+
+    /* Use software fallback if libica operation failed */
+    return rc != 1 ? BN_mod_exp_mont(r, a, p, m, ctx, m_ctx) : 1;
+}
+
 static BN_BLINDING *ibmca_rsa_setup_blinding(struct ibmca_key *key)
 {
-    BIGNUM *n = NULL, *e = NULL;
+    BIGNUM *n = NULL, *e = NULL, *R = NULL, *Ri = NULL, *tmod = NULL;
     BN_CTX *bn_ctx = NULL;
     BN_BLINDING *blinding = NULL;
+    BN_ULONG word;
     int rc;
 
     ibmca_debug_key(key, "key: %p", key);
@@ -52,7 +132,92 @@ static BN_BLINDING *ibmca_rsa_setup_blinding(struct ibmca_key *key)
 
     BN_set_flags(n, BN_FLG_CONSTTIME);
 
-    blinding = BN_BLINDING_create_param(NULL, e, n, bn_ctx, NULL, NULL);
+    /*
+     * Setup the BN_MONT_CTX if needed, it is required by for the mod-expo
+     * callback passed to BN_BLINDING_create_param(). The callback won't be
+     * called if BN_MONT_CTX is NULL.
+     * We hold the write lock on blinding_lock when this function is called,
+     * so no need to use BN_MONT_CTX_set_locked().
+     */
+    if (key->rsa.blinding_mont_ctx == NULL) {
+        key->rsa.blinding_mont_ctx = BN_MONT_CTX_new();
+        if (key->rsa.blinding_mont_ctx == NULL) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                          "BN_MONT_CTX_new failed");
+            goto out;
+        }
+
+        if (BN_MONT_CTX_set(key->rsa.blinding_mont_ctx, n, bn_ctx) != 1) {
+            BN_MONT_CTX_free(key->rsa.blinding_mont_ctx);
+            key->rsa.blinding_mont_ctx = NULL;
+
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                          "BN_MONT_CTX_new failed");
+            goto out;
+        }
+
+        /* Calculate blinding_mont_ctx_n0, BN_MONT_CTX is opaque */
+        R = BN_CTX_get(bn_ctx);
+        Ri = BN_CTX_get(bn_ctx);
+        tmod = BN_CTX_get(bn_ctx);
+        if (R == NULL || Ri == NULL || tmod == NULL) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_CTX_get failed");
+            goto out;
+        }
+
+        BN_zero(R);
+        if (!BN_set_bit(R, BN_BITS2)) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_set_bit failed");
+            goto out;
+        }
+
+        memcpy(&word, key->rsa.public.modulus + key->rsa.public.key_length -
+                      sizeof(BN_ULONG), sizeof(word));
+        if (!BN_set_word(tmod, word)) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_set_word failed");
+            goto out;
+        }
+
+        if (BN_is_one(tmod))
+            BN_zero(Ri);
+        else if ((BN_mod_inverse(Ri, R, tmod, bn_ctx)) == NULL) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_mod_inverse failed");
+            goto out;
+        }
+        if (!BN_lshift(Ri, Ri, BN_BITS2)) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_lshift failed");
+            goto out;
+        }
+
+        if (!BN_is_zero(Ri)) {
+            if (!BN_sub_word(Ri, 1)) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_sub_word failed");
+                goto out;
+            }
+        } else {
+            if (!BN_set_word(Ri, BN_MASK2)) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_set_word failed");
+                goto out;
+            }
+        }
+
+        if (!BN_div(Ri, NULL, Ri, tmod, bn_ctx)) {
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_div failed");
+            goto out;
+        }
+
+        key->rsa.blinding_mont_ctx_n0 = BN_get_word(Ri);
+    }
+
+    /*
+     * BN_BLINDING_create_param() calls the ibmca_rsa_blinding_bn_mod_exp()
+     * callback which needs to know the provider context.
+     */
+    ibmca_mod_expo_provctx = key->provctx;
+
+    blinding = BN_BLINDING_create_param(NULL, e, n, bn_ctx,
+                                        ibmca_rsa_blinding_bn_mod_exp,
+                                        key->rsa.blinding_mont_ctx);
     if (blinding == NULL) {
         put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                       "BN_BLINDING_create_param failed");
@@ -168,6 +333,13 @@ static int ibmca_rsa_blinding_convert(struct ibmca_key *key,
         }
     }
 
+    /* BN_BLINDING_convert_ex() calls BN_BLINDING_update() which may call
+     * BN_BLINDING_create_param() to generate a new blinding factor. This
+     * calls the ibmca_rsa_blinding_bn_mod_exp() callback which needs to know
+     * the provider context.
+     */
+    ibmca_mod_expo_provctx = key->provctx;
+
     rc = BN_BLINDING_convert_ex(bn_in, unblind, blinding, bn_ctx);
 
     if (!local)
@@ -204,7 +376,8 @@ static int ibmca_rsa_blinding_invert(struct ibmca_key *key,
     ibmca_debug_key(key, "key: %p rsa_size: %lu", key, rsa_size);
 
     rc = ossl_bn_rsa_do_unblind(in, unblind, key->rsa.public.modulus,
-                                out, rsa_size, NULL, 0);
+                                out, rsa_size, key->rsa.blinding_mont_ctx,
+                                key->rsa.blinding_mont_ctx_n0);
     if (rc <= 0) {
         put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                       "ossl_bn_rsa_do_unblind failed");
