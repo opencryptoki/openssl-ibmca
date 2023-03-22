@@ -47,10 +47,16 @@ If ALL is not used, the default_algorithms consists of a comma separated list
 of
 .I mechanisms
 :
-.B CIPHERS | DIGESTS | RSA | DH | DSA.
+.B CIPHERS | DIGESTS | RSA | DH | DSA | EC | PKEY_CRYPTO | RAND
 .PP
 Only all CIPHERS and/or DIGESTS can be
 de/activated. Algorithms like AES can not be de/activated independently.
+.PP
+.B Note: 
+Algorithms denoted by CIPHERS, DIGESTS, EC (since IBM z15 for certain curves),
+and PKEY are already accelerated by OpenSSL itself using CPACF.
+Therefore, do not accelerate them using the IBMCA engine. This would actually
+make them slower.
 .SS Control Command
 IBMCA does support one optional control command:
 .PP

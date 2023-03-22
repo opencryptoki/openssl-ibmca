@@ -84,6 +84,11 @@ of
 .I mechanisms
 : \fBRSA\fP | \fBEC\fP | \fBDH\fP.
 If this option is not specified, \fBALL\fP is the default.
+.PP
+.B Note:
+Depending on the hardware level (IBM z15), EC is already accelerated implicitly
+by OpenSSL for certain curves. Therefore, do not accelerate EC using the IBMCA
+provider if you are on an IBM z15 or later. This would actually make it slower.
 .RE
 .PP
 .IP "debug = yes | no | stderr"

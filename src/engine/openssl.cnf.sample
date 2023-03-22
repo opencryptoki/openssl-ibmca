@@ -30,10 +30,10 @@ init = 1
 # with "ALL" denoting the same as all of them in a comma separated
 # list.
 #
-# Note that IBM Z hardware support for the symmetric crypto
-# primitives (CIPHERS, DIGESTS) most likely comes natively with your
-# OpenSSL version. Therefore, this sample configuration excludes them
-# from the default_algorithms list below.
+# Note: Algorithms denoted by CIPHERS, DIGESTS, EC (since IBM z15 for certain
+# curves), and PKEY are already accelerated by OpenSSL itself using CPACF.
+# Therefore, do not accelerate them using the IBMCA engine. This would actually
+# make them slower.
 #
 # Moreover, ibmca's CIPHER and DIGEST implementations do not
 # support the processing of messages in arbitrary chunk sizes.
