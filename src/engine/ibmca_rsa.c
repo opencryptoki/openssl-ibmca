@@ -296,7 +296,12 @@ end:
 
 static int ibmca_rsa_init(RSA * rsa)
 {
-    RSA_blinding_off(rsa);
+    /*
+     * Ensure that the MONT_CTXs for public and private keys are cached.
+     * This enables that ibmca_mod_exp_mont() is also called during
+     * (re-)setup of the RSA blinding factors.
+     */
+    RSA_set_flags(rsa, RSA_FLAG_CACHE_PUBLIC | RSA_FLAG_CACHE_PRIVATE);
 
     return 1;
 }
