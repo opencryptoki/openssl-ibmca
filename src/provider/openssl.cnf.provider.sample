@@ -24,10 +24,18 @@ activate = 1
 identity = ibmca
 module = ibmca-provider.so
 activate = 1
-#debug = yes
-#fips = yes
-#algorithms = RSA,EC,DH
-algorithms = ALL
+# Note: Disable the FIPS mode of the IBMCA provider by setting fips=no in the 
+# provider configuration. The IBMCA provider is currently not FIPS-certified.
+# It does not perform any FIPS self-tests itself nor an integrity check which
+# would be required to be FIPS-certified. It is only checked whether libica
+# library has successfully performed its self-tests and integrity checks when
+# FIPS mode is enabled.
+fips = no
+# Note: Depending on the hardware level (IBM z15), EC is already accelerated
+# implicitly by OpenSSL for certain curves. Therefore, do not accelerate EC 
+# using the IBMCA provider if you are on an IBM z15 or later. This would 
+# actually make it slower.
+algorithms = RSA,EC,DH
 #fallback-properties = provider=default
 
 [evp_properties]

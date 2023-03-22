@@ -95,6 +95,16 @@ init = 1
 # with "ALL" denoting the same as all of them in a comma separated
 # list.
 #
+# Note: Algorithms denoted by CIPHERS, DIGESTS, EC (since IBM z15 for certain
+# curves), and PKEY are already accelerated by OpenSSL itself using CPACF.
+# Therefore, do not accelerate them using the IBMCA engine. This would actually
+# make them slower.
+#
+# Moreover, ibmca's CIPHER and DIGEST implementations do not
+# support the processing of messages in arbitrary chunk sizes.
+# All chunks, except the final one, are required to be a multiple
+# of the primitive's block size.
+#
 # RSA
 # - RSA encrypt, decrypt, sign and verify, key lengths 512-4096
 #
@@ -128,8 +138,8 @@ init = 1
 #
 # PKEY_CRYPTO
 # - X25519, X448, ED25519, ED448
-#default_algorithms = ALL
-default_algorithms = PKEY_CRYPTO,RAND,RSA,DH,DSA,EC
+
+default_algorithms = RSA,DH,DSA,RAND
 |;
     close($ih);
     close($oh);
