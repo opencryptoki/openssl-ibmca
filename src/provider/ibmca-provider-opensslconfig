@@ -55,7 +55,7 @@ sub generate()
                     print $oh "providers = provider_section\n";
                 }
                 if (!$algsection) {
-                    print $oh "alg_section = evp_properties_section\n";
+                    print $oh "alg_section = evp_properties\n";
                 }
                 $indefaultsect = 0;
             } elsif ($line =~ /^\s*providers\s*=\s*(\w+)\s*/) {
@@ -137,7 +137,7 @@ algorithms = RSA,EC,DH
 
     if (!$algsection) {
         print $oh qq|
-[evp_properties_section]
+[evp_properties]
 default_properties = ?provider=ibmca
 |;
     }
