@@ -1,0 +1,44 @@
+os: linux
+dist: focal
+
+language: c
+
+before_install:
+    - sudo apt-get -qq update
+    - sudo apt-get install -y libica3 libica-dev
+
+jobs:
+    include:
+       - name: "linux-s390x-gcc"
+         os: linux
+         arch: s390x
+         compiler: gcc
+         env: CONFIG_OPTS="--enable-engine --enable-provider"
+ 
+before_script:
+    - git clone https://github.com/openssl/openssl.git
+    - pushd openssl
+    - git checkout master
+    - ./config -w
+    - make -j 5 -s
+    - export OPENSSL_DIR=$PWD
+    - export PATH=$OPENSSL_DIR/apps/:$PATH
+    - export LD_LIBRARY_PATH=$OPENSSL_DIR/:$LD_LIBRARY_PATH
+    - popd
+    - openssl version
+    - git clone https://github.com/opencryptoki/libica.git
+    - pushd libica
+    - ./bootstrap.sh
+    - ./configure CFLAGS="-I$OPENSSL_DIR/include -L$OPENSSL_DIR"
+    - make -j 5 V=0
+    - export LIBICA_DIR=$PWD
+    - export LD_LIBRARY_PATH=$LIBICA_DIR/src/.libs:$LD_LIBRARY_PATH
+    - popd
+    - $LIBICA_DIR/src/icainfo
+
+script:
+    - ./bootstrap.sh
+    - ./configure CFLAGS="-I$OPENSSL_DIR/include -L$OPENSSL_DIR -I$LIBICA_DIR/include -L$LIBICA_DIR/src/.libs" $CONFIG_OPTS
+    - make -j 5 V=0
+    - make check V=0
+
