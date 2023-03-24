@@ -68,7 +68,7 @@ sub generate()
         } elsif ($inalgsect) {
             if ($line =~ /\[\s*\w+\s*\]/) {
                 print $oh "default_properties = ?provider=ibmca\n";
-		$inalgsect = 0;
+                $inalgsect = 0;
             } elsif ($line =~ /^\s*default_properties\s*=\s*(\w+)\s*/) {
                 print $oh "default_properties = ?provider=ibmca\n";
                 print $oh "# The following was commented out by ibmca-provider-opensslconfig script\n";
@@ -76,14 +76,14 @@ sub generate()
                 $line = "# $line";
             }
         } elsif ($inprovidersect) {
-	    if ($line =~ /\[\s*\w+\s*\]/) {
-		$inprovidersect = 0;
-		print $oh "ibmca_provider = ibmca_provider_section\n";
-		print $oh "# Make sure that you have configured and activated at least one other provider!\n";
-		print "WARNING: The IBMCA provider was added to section [$providersect].\n"; 
-		print "Make sure that you have configured and activated at least one other provider, e.g. the default provider!\n";
-	    }
-	}
+            if ($line =~ /\[\s*\w+\s*\]/) {
+                $inprovidersect = 0;
+                print $oh "ibmca_provider = ibmca_provider_section\n";
+                print $oh "# Make sure that you have configured and activated at least one other provider!\n";
+                print "WARNING: The IBMCA provider was added to section [$providersect].\n"; 
+                print "Make sure that you have configured and activated at least one other provider, e.g. the default provider!\n";
+            }
+        }
         print $oh "$line";
         if ($defaultcnfsect && $line =~ /\[\s*$defaultcnfsect\s*\]/) {
             $indefaultsect = 1;
@@ -91,8 +91,8 @@ sub generate()
         if ($algsection && $line =~ /\[\s*$algsection\s*\]/) {
             $inalgsect = 1;
         }
-	if ($providersect && $line =~ /\[\s*$providersect\s*\]/) {
-	    $inprovidersect = 1;
+        if ($providersect && $line =~ /\[\s*$providersect\s*\]/) {
+            $inprovidersect = 1;
         }
     }
 
