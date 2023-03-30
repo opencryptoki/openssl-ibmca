@@ -5,7 +5,7 @@
 # %global modulesdir %(pkg-config --variable=modulesdir libcrypto)
 
 Name:       openssl-ibmca
-Version:    2.3.1
+Version:    2.4.0
 Release:    1%{?dist}
 Summary:    An IBMCA OpenSSL dynamic provider
 
@@ -45,6 +45,9 @@ mv -f src/provider/openssl.cnf.sample src/provider/openssl.cnf.sample.%{_arch}
 %dir %attr(777,root,root) %{_localstatedir}/log/ibmca
 
 %changelog
+* Thu Mar 30 2023 Ingo Franzki <ifranzki@linux.ibm.com> 2.4.0
+- Update Version
+
 * Fri Sep 30 2022 Juergen Christ <jchrist@linux.ibm.com> 2.3.1
 - Adjust to libica 4.1.0
 

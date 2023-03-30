@@ -191,14 +191,11 @@ To report a bug please submit a
 * distro release
 * openssl-ibmca package version
 * libica package version
+* OpenSSL package version
 * steps to reproduce the bug
 
-Regarding technical or usage questions, send email to
- [opencryptoki-tech](
-    https://sourceforge.net/p/opencryptoki/mailman/opencryptoki-tech) or
- [opencryptoki-users](
-    https://sourceforge.net/p/opencryptoki/mailman/opencryptoki-users)
- mailing list respectively.
+Regarding technical or usage questions, also submit a
+ [ticket](https://github.com/opencryptoki/openssl-ibmca/issues).
 
 ## Limitations
 
