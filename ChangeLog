@@ -1,3 +1,12 @@
+* openssl-ibmca 2.4.0
+- Provider: Adjustments for OpenSSL versions 3.1 and 3.2 
+- Provider: Support RSA blinding
+- Provider: Constant-time fixes for RSA PKCS#1 v1.5 and OAEP padding
+- Provider: Support "implicit rejection" option for RSA PKCS#1 v1.5 padding
+- Provider: Adjustments in OpenSSL config generator and example configs
+- Engine: EC: Cache ICA key in EC_KEY object (performance improvement)
+- Engine: Enable RSA blinding
+
 * openssl-ibmca 2.3.1
 - Adjustments for libica 4.1.0
 
