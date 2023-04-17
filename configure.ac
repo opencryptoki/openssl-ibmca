@@ -48,6 +48,20 @@ AC_DISABLE_STATIC
 AC_PROG_CC
 LT_INIT
 
+dnl --- check for perl
+AC_PATH_PROG(PERL, perl)
+if test -z "$PERL" ; then
+	AC_MSG_ERROR([Please install perl])
+fi
+
+AC_MSG_CHECKING([if perl module 'FindBin' is installed])
+(echo "use FindBin;" ; echo "exit(0);") | $PERL > /dev/null 2>&1
+if test $? != 0 ; then
+	AC_MSG_RESULT(no)
+	AC_MSG_ERROR([Please install perl-FindBin])
+fi
+AC_MSG_RESULT(yes)
+
 # Checks for libraries.
 AC_CHECK_LIB([crypto], [RAND_add], [], AC_MSG_ERROR([*** openssl >= 1.1.1 is required ***]))
 AC_CHECK_LIB([crypto], [OSSL_LIB_CTX_new], [openssl_3_0="yes"], [openssl_3_0="no"])
