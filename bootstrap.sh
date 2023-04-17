@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-autoreconf -iv
+autoreconf --force --install --verbose --warnings=all
