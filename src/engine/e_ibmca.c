@@ -642,6 +642,9 @@ static int set_supported_meths(ENGINE *e)
         if (!ENGINE_set_pkey_meths(e, ibmca_engine_pkey_meths))
             goto out;
 
+    if (!ENGINE_set_flags(e, ENGINE_FLAGS_NO_REGISTER_ALL))
+        goto out;
+
     rc = 1;
 out:
     free(pmech_list);
