@@ -1203,6 +1203,15 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
         }
     }
 
+    /* If p < q, swap and recalculate now */
+    rc = ica_rsa_crt_key_check(&key->rsa.private);
+    if (rc > 1) {
+        put_error_op_ctx(genctx, IBMCA_ERR_INTERNAL_ERROR,
+                         "ica_rsa_crt_key_check failed");
+        ibmca_keymgmt_free(key);
+        return NULL;
+    }
+
     p = 3;
     n = 0;
     if (osslcb != NULL && osslcb(cb_params, cbarg) == 0) {
@@ -1821,6 +1830,15 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
                          ICA_QINV_LEN(key->rsa.private.key_length)) <= 0) {
             put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                           "BN_bn2binpad failed for private qinv");
+            goto out;
+        }
+
+        /* If p < q, swap and recalculate now */
+        rc = ica_rsa_crt_key_check(&key->rsa.private);
+        if (rc > 1) {
+            rc = 0;
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                          "ica_rsa_crt_key_check failed");
             goto out;
         }
     }
