@@ -241,24 +241,13 @@ static int ibmca_keymgmt_rsa_pub_key_to_data(
     return 1;
 }
 
-static int ibmca_keymgmt_rsa_priv_key_from_data(
+static int ibmca_keymgmt_rsa_priv_crt_key_from_data(
                                         const struct ibmca_prov_ctx *provctx,
-                                        const OSSL_PARAM params[],
-                                        BIGNUM **d, BIGNUM **p,
+                                        const OSSL_PARAM params[], BIGNUM **p,
                                         BIGNUM **q, BIGNUM **dp,
                                         BIGNUM **dq, BIGNUM **qinv)
 {
     int rc;
-
-    /* OSSL_PKEY_PARAM_RSA_D */
-    *d = BN_secure_new();
-    if (*d == NULL) {
-        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
-        goto error;
-    }
-    rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_D, d);
-    if (rc <= 0)
-        goto error;
 
     /* OSSL_PKEY_PARAM_RSA_FACTOR1 */
     *p = BN_secure_new();
@@ -316,8 +305,6 @@ static int ibmca_keymgmt_rsa_priv_key_from_data(
     return 1;
 
 error:
-    BN_clear_free(*d);
-    *d = NULL;
     BN_clear_free(*p);
     *p = NULL;
     BN_clear_free(*dp);
@@ -326,6 +313,31 @@ error:
     *dq = NULL;
     BN_clear_free(*qinv);
     *qinv = NULL;
+
+    return 0;
+}
+
+static int ibmca_keymgmt_rsa_priv_me_key_from_data(
+                                        const struct ibmca_prov_ctx *provctx,
+                                        const OSSL_PARAM params[], BIGNUM **d)
+{
+    int rc;
+
+    /* OSSL_PKEY_PARAM_RSA_D */
+    *d = BN_secure_new();
+    if (*d == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
+        goto error;
+    }
+    rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_D, d);
+    if (rc <= 0)
+        goto error;
+
+    return 1;
+
+error:
+    BN_clear_free(*d);
+    *d = NULL;
 
     return 0;
 }
@@ -451,13 +463,14 @@ static void *ibmca_keymgmt_rsa_pss_new(void *vprovctx)
 
 static int ibmca_keymgmt_rsa_alloc_pub(struct ibmca_key *key)
 {
-    key->rsa.public.key_length = (key->rsa.bits + 7) / 8;
+    key->rsa.public.key_length = key->rsa.keylength;
 
     key->rsa.public.modulus = P_ZALLOC(key->provctx,
                                        key->rsa.public.key_length);
     key->rsa.public.exponent = P_ZALLOC(key->provctx,
                                         key->rsa.public.key_length);
-    if (key->rsa.public.modulus == NULL || key->rsa.public.exponent == NULL) {
+
+    if (!ibmca_keymgmt_rsa_pub_valid(&key->rsa.public)) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
                      "Failed to allocate libica public RSA key");
         return 0;
@@ -466,24 +479,42 @@ static int ibmca_keymgmt_rsa_alloc_pub(struct ibmca_key *key)
     return 1;
 }
 
-static int ibmca_keymgmt_rsa_alloc_priv(struct ibmca_key *key)
+static int ibmca_keymgmt_rsa_alloc_priv_crt(struct ibmca_key *key)
 {
-    key->rsa.private.key_length = (key->rsa.bits + 7) / 8;
-    key->rsa.private.p = P_SECURE_ZALLOC(key->provctx,
-                            ICA_P_LEN(key->rsa.private.key_length));
-    key->rsa.private.q = P_SECURE_ZALLOC(key->provctx,
-                            ICA_Q_LEN(key->rsa.private.key_length));
-    key->rsa.private.dp = P_SECURE_ZALLOC(key->provctx,
-                            ICA_DP_LEN(key->rsa.private.key_length));
-    key->rsa.private.dq = P_SECURE_ZALLOC(key->provctx,
-                            ICA_DQ_LEN(key->rsa.private.key_length));
-    key->rsa.private.qInverse = P_SECURE_ZALLOC(key->provctx,
-                            ICA_QINV_LEN(key->rsa.private.key_length));
-    if (key->rsa.private.p == NULL || key->rsa.private.q == NULL ||
-        key->rsa.private.dp == NULL || key->rsa.private.dq == NULL ||
-        key->rsa.private.qInverse == NULL ) {
+    key->rsa.private_crt.key_length = key->rsa.keylength;
+
+    key->rsa.private_crt.p = P_SECURE_ZALLOC(key->provctx,
+                                  ICA_P_LEN(key->rsa.private_crt.key_length));
+    key->rsa.private_crt.q = P_SECURE_ZALLOC(key->provctx,
+                                  ICA_Q_LEN(key->rsa.private_crt.key_length));
+    key->rsa.private_crt.dp = P_SECURE_ZALLOC(key->provctx,
+                                  ICA_DP_LEN(key->rsa.private_crt.key_length));
+    key->rsa.private_crt.dq = P_SECURE_ZALLOC(key->provctx,
+                                  ICA_DQ_LEN(key->rsa.private_crt.key_length));
+    key->rsa.private_crt.qInverse = P_SECURE_ZALLOC(key->provctx,
+                                 ICA_QINV_LEN(key->rsa.private_crt.key_length));
+
+    if (!ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt)) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
-                      "Failed to allocate libica private RSA key");
+                      "Failed to allocate libica private RSA CRT key");
+        return 0;
+    }
+
+    return 1;
+}
+
+static int ibmca_keymgmt_rsa_alloc_priv_me(struct ibmca_key *key)
+{
+    key->rsa.private_me.key_length = key->rsa.keylength;
+
+    key->rsa.private_me.modulus = P_ZALLOC(key->provctx,
+                                           key->rsa.private_me.key_length);
+    key->rsa.private_me.exponent = P_ZALLOC(key->provctx,
+                                            key->rsa.private_me.key_length);
+
+    if (!ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me)) {
+        put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
+                     "Failed to allocate libica private RSA ME key");
         return 0;
     }
 
@@ -503,29 +534,42 @@ static void ibmca_keymgmt_rsa_free_pub(struct ibmca_key *key)
     key->rsa.public.key_length = 0;
 }
 
-static void ibmca_keymgmt_rsa_free_priv(struct ibmca_key *key)
+static void ibmca_keymgmt_rsa_free_priv_crt(struct ibmca_key *key)
 {
-    if (key->rsa.private.p != NULL)
-         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private.p,
-                             ICA_P_LEN(key->rsa.private.key_length));
-     key->rsa.private.p = NULL;
-     if (key->rsa.private.q != NULL)
-         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private.q,
-                             ICA_Q_LEN(key->rsa.private.key_length));
-     key->rsa.private.q = NULL;
-     if (key->rsa.private.dp != NULL)
-         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private.dp,
-                             ICA_DP_LEN(key->rsa.private.key_length));
-     key->rsa.private.dp = NULL;
-     if (key->rsa.private.dq != NULL)
-         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private.dq,
-                             ICA_DQ_LEN(key->rsa.private.key_length));
-     key->rsa.private.dq = NULL;
-     if (key->rsa.private.qInverse != NULL)
-         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private.qInverse,
-                             ICA_QINV_LEN(key->rsa.private.key_length));
-     key->rsa.private.qInverse = NULL;
-     key->rsa.private.key_length = 0;
+    if (key->rsa.private_crt.p != NULL)
+         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private_crt.p,
+                             ICA_P_LEN(key->rsa.private_crt.key_length));
+     key->rsa.private_crt.p = NULL;
+     if (key->rsa.private_crt.q != NULL)
+         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private_crt.q,
+                             ICA_Q_LEN(key->rsa.private_crt.key_length));
+     key->rsa.private_crt.q = NULL;
+     if (key->rsa.private_crt.dp != NULL)
+         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private_crt.dp,
+                             ICA_DP_LEN(key->rsa.private_crt.key_length));
+     key->rsa.private_crt.dp = NULL;
+     if (key->rsa.private_crt.dq != NULL)
+         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private_crt.dq,
+                             ICA_DQ_LEN(key->rsa.private_crt.key_length));
+     key->rsa.private_crt.dq = NULL;
+     if (key->rsa.private_crt.qInverse != NULL)
+         P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private_crt.qInverse,
+                             ICA_QINV_LEN(key->rsa.private_crt.key_length));
+     key->rsa.private_crt.qInverse = NULL;
+     key->rsa.private_crt.key_length = 0;
+}
+
+static void ibmca_keymgmt_rsa_free_priv_me(struct ibmca_key *key)
+{
+    if (key->rsa.private_me.modulus != NULL)
+        P_CLEAR_FREE(key->provctx, key->rsa.private_me.modulus,
+                     key->rsa.private_me.key_length);
+    key->rsa.private_me.modulus = NULL;
+    if (key->rsa.private_me.exponent != NULL)
+        P_CLEAR_FREE(key->provctx, key->rsa.private_me.exponent,
+                     key->rsa.private_me.key_length);
+    key->rsa.private_me.exponent = NULL;
+    key->rsa.private_me.key_length = 0;
 }
 
 static void ibmca_keymgmt_rsa_clean(struct ibmca_key *key)
@@ -535,7 +579,8 @@ static void ibmca_keymgmt_rsa_clean(struct ibmca_key *key)
 
     ibmca_debug_key(key, "key: %p", key);
 
-    ibmca_keymgmt_rsa_free_priv(key);
+    ibmca_keymgmt_rsa_free_priv_crt(key);
+    ibmca_keymgmt_rsa_free_priv_me(key);
     ibmca_keymgmt_rsa_free_pub(key);
 
     if (key->type == EVP_PKEY_RSA_PSS)
@@ -572,6 +617,30 @@ static void ibmca_keymgmt_rsa_free_cb(struct ibmca_key *key)
     pthread_rwlock_destroy(&key->rsa.blinding_lock);
 }
 
+bool ibmca_keymgmt_rsa_pub_valid(const ica_rsa_key_mod_expo_t *public)
+{
+    return public->key_length != 0 &&
+           public->modulus != NULL &&
+           public->exponent != NULL;
+}
+
+bool ibmca_keymgmt_rsa_priv_crt_valid(const ica_rsa_key_crt_t *private_crt)
+{
+    return private_crt->key_length != 0 &&
+           private_crt->p != NULL &&
+           private_crt->q != NULL &&
+           private_crt->dp != NULL &&
+           private_crt->dq != NULL &&
+           private_crt->qInverse != NULL;
+}
+
+bool ibmca_keymgmt_rsa_priv_me_valid(const ica_rsa_key_mod_expo_t *private_me)
+{
+    return private_me->key_length != 0 &&
+           private_me->modulus != NULL &&
+           private_me->exponent != NULL;
+}
+
 static int ibmca_keymgmt_rsa_dup_pub(const struct ibmca_key *key,
                                      struct ibmca_key *new_key)
 {
@@ -583,8 +652,8 @@ static int ibmca_keymgmt_rsa_dup_pub(const struct ibmca_key *key,
     new_key->rsa.public.exponent = P_MEMDUP(key->provctx,
                                             key->rsa.public.exponent,
                                             key->rsa.public.key_length);
-    if (new_key->rsa.public.modulus == NULL ||
-        new_key->rsa.public.exponent == NULL) {
+
+    if (!ibmca_keymgmt_rsa_pub_valid(&new_key->rsa.public)) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
                       "Failed to allocate libica RSA key");
         return 0;
@@ -593,29 +662,46 @@ static int ibmca_keymgmt_rsa_dup_pub(const struct ibmca_key *key,
     return 1;
 }
 
-static int ibmca_keymgmt_rsa_dup_priv(const struct ibmca_key *key,
-                                      struct ibmca_key *new_key)
+static int ibmca_keymgmt_rsa_dup_priv_crt(const struct ibmca_key *key,
+                                          struct ibmca_key *new_key)
 {
-    new_key->rsa.private.key_length = key->rsa.private.key_length;
+    new_key->rsa.private_crt.key_length = key->rsa.private_crt.key_length;
 
-    new_key->rsa.private.p = P_SECURE_MEMDUP(key->provctx, key->rsa.private.p,
-                                      ICA_P_LEN(key->rsa.private.key_length));
-    new_key->rsa.private.q = P_SECURE_MEMDUP(key->provctx, key->rsa.private.q,
-                                      ICA_Q_LEN(key->rsa.private.key_length));
-    new_key->rsa.private.dp = P_SECURE_MEMDUP(key->provctx, key->rsa.private.dp,
-                                       ICA_DP_LEN(key->rsa.private.key_length));
-    new_key->rsa.private.dq = P_SECURE_MEMDUP(key->provctx, key->rsa.private.dq,
-                                       ICA_DQ_LEN(key->rsa.private.key_length));
-    new_key->rsa.private.qInverse = P_SECURE_MEMDUP(key->provctx,
-                                       key->rsa.private.qInverse,
+    new_key->rsa.private_crt.p = P_SECURE_MEMDUP(key->provctx, key->rsa.private_crt.p,
+                                      ICA_P_LEN(key->rsa.private_crt.key_length));
+    new_key->rsa.private_crt.q = P_SECURE_MEMDUP(key->provctx, key->rsa.private_crt.q,
+                                      ICA_Q_LEN(key->rsa.private_crt.key_length));
+    new_key->rsa.private_crt.dp = P_SECURE_MEMDUP(key->provctx, key->rsa.private_crt.dp,
+                                       ICA_DP_LEN(key->rsa.private_crt.key_length));
+    new_key->rsa.private_crt.dq = P_SECURE_MEMDUP(key->provctx, key->rsa.private_crt.dq,
+                                       ICA_DQ_LEN(key->rsa.private_crt.key_length));
+    new_key->rsa.private_crt.qInverse = P_SECURE_MEMDUP(key->provctx,
+                                       key->rsa.private_crt.qInverse,
                                        ICA_QINV_LEN(
-                                                 key->rsa.private.key_length));
+                                                 key->rsa.private_crt.key_length));
 
-    if (new_key->rsa.private.p == NULL ||
-        new_key->rsa.private.q == NULL ||
-        new_key->rsa.private.dp == NULL ||
-        new_key->rsa.private.dq == NULL ||
-        new_key->rsa.private.qInverse == NULL) {
+    if (!ibmca_keymgmt_rsa_priv_crt_valid(&new_key->rsa.private_crt)) {
+        put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
+                      "Failed to allocate libica RSA key");
+        return 0;
+    }
+
+    return 1;
+}
+
+static int ibmca_keymgmt_rsa_dup_priv_me(const struct ibmca_key *key,
+                                         struct ibmca_key *new_key)
+{
+    new_key->rsa.private_me.key_length = key->rsa.private_me.key_length;
+
+    new_key->rsa.private_me.modulus = P_MEMDUP(key->provctx,
+                                               key->rsa.private_me.modulus,
+                                               key->rsa.private_me.key_length);
+    new_key->rsa.private_me.exponent = P_MEMDUP(key->provctx,
+                                                key->rsa.private_me.exponent,
+                                                key->rsa.private_me.key_length);
+
+    if (!ibmca_keymgmt_rsa_priv_me_valid(&new_key->rsa.private_me)) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
                       "Failed to allocate libica RSA key");
         return 0;
@@ -639,14 +725,20 @@ static int ibmca_keymgmt_rsa_dup_cb(const struct ibmca_key *key,
     }
 
     new_key->rsa.bits = key->rsa.bits;
+    new_key->rsa.keylength = key->rsa.keylength;
 
-    if (key->rsa.public.key_length != 0) {
+    if (ibmca_keymgmt_rsa_pub_valid(&key->rsa.public)) {
         if (ibmca_keymgmt_rsa_dup_pub(key, new_key) == 0)
             return 0;
     }
 
-    if (key->rsa.private.key_length != 0) {
-        if (ibmca_keymgmt_rsa_dup_priv(key, new_key) == 0)
+    if (ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt)) {
+        if (ibmca_keymgmt_rsa_dup_priv_crt(key, new_key) == 0)
+            return 0;
+    }
+
+    if (ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me)) {
+        if (ibmca_keymgmt_rsa_dup_priv_me(key, new_key) == 0)
             return 0;
     }
 
@@ -667,19 +759,54 @@ static int ibmca_keymgmt_rsa_has(const void *vkey, int selection)
     ibmca_debug_key(key, "key: %p selection: 0x%x", key, selection);
 
     if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0)
-        ok = ok && (key->rsa.public.key_length != 0 &&
-                    key->rsa.public.modulus != NULL &&
-                    key->rsa.public.exponent != NULL);
+        ok = ok && ibmca_keymgmt_rsa_pub_valid(&key->rsa.public);
     if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
-        ok = ok && (key->rsa.private.key_length != 0 &&
-                    key->rsa.private.p != NULL &&
-                    key->rsa.private.q != NULL &&
-                    key->rsa.private.dp != NULL &&
-                    key->rsa.private.dq != NULL &&
-                    key->rsa.private.qInverse != NULL);
+        ok = ok && (ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt) ||
+                    ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me));
 
     ibmca_debug_key(key, "ok: %d", ok);
     return ok;
+}
+
+static bool ibmca_keymgmt_rsa_pub_equal(const ica_rsa_key_mod_expo_t *public1,
+                                        const ica_rsa_key_mod_expo_t *public2)
+{
+    return public1->key_length > 0 &&
+           public1->key_length == public2-> key_length &&
+           memcmp(public1->exponent, public2->exponent,
+                  public1->key_length) == 0 &&
+           memcmp(public1->modulus, public2->modulus,
+                  public1->key_length) == 0;
+}
+
+static bool ibmca_keymgmt_rsa_priv_crt_equal(
+                                    const ica_rsa_key_crt_t *private_crt1,
+                                    const ica_rsa_key_crt_t *private_crt2)
+{
+    return private_crt1->key_length > 0 &&
+           private_crt1->key_length == private_crt2->key_length &&
+           CRYPTO_memcmp(private_crt1->p, private_crt2->p,
+                         ICA_P_LEN(private_crt1->key_length)) == 0 &&
+           CRYPTO_memcmp(private_crt1->q, private_crt2->q,
+                         ICA_Q_LEN(private_crt1->key_length)) == 0 &&
+           CRYPTO_memcmp(private_crt1->dp, private_crt2->dp,
+                         ICA_DP_LEN(private_crt1->key_length)) == 0 &&
+           CRYPTO_memcmp(private_crt1->dq, private_crt2->dq,
+                         ICA_DQ_LEN(private_crt1->key_length)) == 0 &&
+           CRYPTO_memcmp(private_crt1->qInverse, private_crt2->qInverse,
+                         ICA_QINV_LEN(private_crt1->key_length)) == 0;
+}
+
+static bool ibmca_keymgmt_rsa_priv_me_equal(
+                                    const ica_rsa_key_mod_expo_t *private_me1,
+                                    const ica_rsa_key_mod_expo_t *private_me2)
+{
+    return private_me1->key_length > 0 &&
+           private_me1->key_length == private_me2-> key_length &&
+           CRYPTO_memcmp(private_me1->exponent, private_me2->exponent,
+                         private_me2->key_length) == 0 &&
+           CRYPTO_memcmp(private_me1->modulus, private_me2->modulus,
+                         private_me1->key_length) == 0;
 }
 
 static int ibmca_keymgmt_rsa_match(const void *vkey1, const void *vkey2,
@@ -699,35 +826,16 @@ static int ibmca_keymgmt_rsa_match(const void *vkey1, const void *vkey2,
         return 0;
 
     if ((selection & OSSL_KEYMGMT_SELECT_PUBLIC_KEY) != 0) {
-        ok = ok && (key1->rsa.public.key_length ==
-                           key2->rsa.public.key_length &&
-                    memcmp(key1->rsa.public.exponent,
-                           key2->rsa.public.exponent,
-                           key1->rsa.public.key_length) == 0 &&
-                    memcmp(key1->rsa.public.modulus,
-                           key2->rsa.public.modulus,
-                           key1->rsa.public.key_length) == 0);
+        ok = ok && ibmca_keymgmt_rsa_pub_equal(&key1->rsa.public,
+                                               &key2->rsa.public);
         checked = 1;
     }
 
     if (!checked && (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0)
-        ok = ok && (key1->rsa.private.key_length ==
-                           key2->rsa.private.key_length &&
-                    CRYPTO_memcmp(key1->rsa.private.p,
-                           key2->rsa.private.p,
-                           ICA_P_LEN(key1->rsa.private.key_length)) == 0 &&
-                    CRYPTO_memcmp(key1->rsa.private.q,
-                           key2->rsa.private.q,
-                           ICA_Q_LEN(key1->rsa.private.key_length)) == 0 &&
-                    CRYPTO_memcmp(key1->rsa.private.dp,
-                           key2->rsa.private.dp,
-                           ICA_DP_LEN(key1->rsa.private.key_length)) == 0 &&
-                    CRYPTO_memcmp(key1->rsa.private.dq,
-                           key2->rsa.private.dq,
-                           ICA_DQ_LEN(key1->rsa.private.key_length)) == 0 &&
-                    CRYPTO_memcmp(key1->rsa.private.qInverse,
-                           key2->rsa.private.qInverse,
-                           ICA_QINV_LEN(key1->rsa.private.key_length)) == 0);
+        ok = ok && (ibmca_keymgmt_rsa_priv_crt_equal(&key1->rsa.private_crt,
+                                                     &key2->rsa.private_crt) ||
+                    ibmca_keymgmt_rsa_priv_me_equal(&key1->rsa.private_me,
+                                                    &key2->rsa.private_me));
 
     ibmca_debug_key(key1, "ok: %d", ok);
     return ok;
@@ -922,7 +1030,7 @@ static int ibmca_keymgmt_rsa_gen_set_template(void *vgenctx, void *vtempl)
     ibmca_keymgmt_rsa_gen_free_cb(genctx);
 
     genctx->rsa.gen.bits = templ->rsa.bits;
-    if (templ->rsa.public.exponent != NULL)  {
+    if (ibmca_keymgmt_rsa_pub_valid(&templ->rsa.public)) {
         genctx->rsa.gen.pub_exp = BN_bin2bn(templ->rsa.public.exponent,
                                             templ->rsa.public.key_length,
                                             NULL);
@@ -1153,6 +1261,7 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
     }
 
     key->rsa.bits = genctx->rsa.gen.bits;
+    key->rsa.keylength = (key->rsa.bits + 7) / 8;
     ibmca_debug_op_ctx(genctx, "bits: %lu", key->rsa.bits);
 
     if (ibmca_keymgmt_rsa_alloc_pub(key) == 0) {
@@ -1160,7 +1269,7 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
         return NULL;
     }
 
-    if (ibmca_keymgmt_rsa_alloc_priv(key) == 0) {
+    if (ibmca_keymgmt_rsa_alloc_priv_crt(key) == 0) {
         ibmca_keymgmt_free(key);
         return NULL;
     }
@@ -1189,7 +1298,7 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
     }
 
     rc = ica_rsa_key_generate_crt(genctx->provctx->ica_adapter, key->rsa.bits,
-                                  &key->rsa.public, &key->rsa.private);
+                                  &key->rsa.public, &key->rsa.private_crt);
     if (rc != 0) {
         ibmca_debug_op_ctx(genctx, "ica_rsa_key_generate_crt failed with: %s",
                            strerror(rc));
@@ -1204,7 +1313,7 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
     }
 
     /* If p < q, swap and recalculate now */
-    rc = ica_rsa_crt_key_check(&key->rsa.private);
+    rc = ica_rsa_crt_key_check(&key->rsa.private_crt);
     if (rc > 1) {
         put_error_op_ctx(genctx, IBMCA_ERR_INTERNAL_ERROR,
                          "ica_rsa_crt_key_check failed");
@@ -1256,7 +1365,7 @@ static int ibmca_keymgmt_rsa_security_bits(size_t bits)
 
 int ibmca_keymgmt_rsa_pub_as_bn(struct ibmca_key *key, BIGNUM **n, BIGNUM **e)
 {
-    if (key->rsa.public.modulus == NULL || key->rsa.public.exponent == NULL)
+    if (!ibmca_keymgmt_rsa_pub_valid(&key->rsa.public))
         return 0;
 
     *n = BN_bin2bn(key->rsa.public.modulus, key->rsa.public.key_length, NULL);
@@ -1277,14 +1386,11 @@ error:
     return 0;
 }
 
-
-static int ibmca_keymgmt_rsa_priv_as_bn(struct ibmca_key *key, BIGNUM **p,
-                                        BIGNUM **q, BIGNUM **dp, BIGNUM **dq,
-                                        BIGNUM **qinv)
+static int ibmca_keymgmt_rsa_priv_crt_as_bn(struct ibmca_key *key, BIGNUM **p,
+                                            BIGNUM **q, BIGNUM **dp,
+                                            BIGNUM **dq, BIGNUM **qinv)
 {
-    if (key->rsa.private.p == NULL || key->rsa.private.q == NULL ||
-        key->rsa.private.dp == NULL || key->rsa.private.dq == NULL ||
-        key->rsa.private.qInverse == NULL)
+    if (!ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt))
         return 0;
 
     *p = BN_secure_new();
@@ -1298,17 +1404,17 @@ static int ibmca_keymgmt_rsa_priv_as_bn(struct ibmca_key *key, BIGNUM **p,
         goto error;
     }
 
-    *p = BN_bin2bn(key->rsa.private.p,
-                   ICA_P_LEN(key->rsa.private.key_length), *p);
-    *q = BN_bin2bn(key->rsa.private.q,
-                   ICA_Q_LEN(key->rsa.private.key_length), *q);
-    *dp = BN_bin2bn(key->rsa.private.dp,
-                    ICA_DP_LEN(key->rsa.private.key_length),
+    *p = BN_bin2bn(key->rsa.private_crt.p,
+                   ICA_P_LEN(key->rsa.private_crt.key_length), *p);
+    *q = BN_bin2bn(key->rsa.private_crt.q,
+                   ICA_Q_LEN(key->rsa.private_crt.key_length), *q);
+    *dp = BN_bin2bn(key->rsa.private_crt.dp,
+                    ICA_DP_LEN(key->rsa.private_crt.key_length),
                     *dp);
-    *dq = BN_bin2bn(key->rsa.private.dq,
-                    ICA_DQ_LEN(key->rsa.private.key_length), *dq);
-    *qinv = BN_bin2bn(key->rsa.private.qInverse,
-                      ICA_QINV_LEN(key->rsa.private.key_length), *qinv);
+    *dq = BN_bin2bn(key->rsa.private_crt.dq,
+                    ICA_DQ_LEN(key->rsa.private_crt.key_length), *dq);
+    *qinv = BN_bin2bn(key->rsa.private_crt.qInverse,
+                      ICA_QINV_LEN(key->rsa.private_crt.key_length), *qinv);
     if (*p == NULL || *q == NULL || *dp == NULL ||
         *dq == NULL || *qinv == NULL) {
         put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_bin2bn failed");
@@ -1328,6 +1434,33 @@ error:
     *dq = NULL;
     BN_clear_free(*qinv);
     *qinv = NULL;
+
+    return 0;
+}
+
+int ibmca_keymgmt_rsa_priv_me_as_bn(struct ibmca_key *key, BIGNUM **d)
+{
+    if (!ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me))
+        return 0;
+
+    *d = BN_secure_new();
+    if (*d == NULL) {
+        put_error_key(key, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
+        goto error;
+    }
+
+    *d = BN_bin2bn(key->rsa.private_me.exponent, key->rsa.private_me.key_length,
+                   *d);
+    if (*d == NULL) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "BN_bin2bn failed");
+       goto error;
+    }
+
+    return 1;
+
+error:
+    BN_clear_free(*d);
+    *d = NULL;
 
     return 0;
 }
@@ -1379,8 +1512,9 @@ static int ibmca_keymgmt_rsa_get_params(void *vkey, OSSL_PARAM params[])
     for (parm = params; parm != NULL && parm->key != NULL; parm++)
         ibmca_debug_key(key, "param: %s", parm->key);
 
-    empty = (key->rsa.public.key_length == 0 ||
-             key->rsa.private.key_length == 0);
+    empty = (!ibmca_keymgmt_rsa_pub_valid(&key->rsa.public) ||
+             (!ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt) &&
+              !ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me)));
 
     if (!empty) {
         /* OSSL_PKEY_PARAM_BITS */
@@ -1439,16 +1573,30 @@ static int ibmca_keymgmt_rsa_get_params(void *vkey, OSSL_PARAM params[])
     }
 
     /* Private key parts */
-    rc = ibmca_keymgmt_rsa_priv_as_bn(key, &p, &q, &dp, &dq, &qinv);
+    rc = ibmca_keymgmt_rsa_priv_crt_as_bn(key, &p, &q, &dp, &dq, &qinv);
     if (rc == 1) {
-        rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
-        if (rc == 0)
-            goto out;
+        /* CRT format */
+        rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
+        if (rc == 0) {
+            rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+            if (rc == 0)
+                goto out;
+        }
 
         rc = ibmca_keymgmt_rsa_priv_key_to_data(key->provctx, NULL, params, d,
                                                 p, q, dp, dq, qinv);
         if (rc == 0)
             goto out;
+    } else {
+        rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
+        if (rc == 1) {
+            /* ME format */
+            rc = ibmca_keymgmt_rsa_priv_key_to_data(key->provctx, NULL, params,
+                                                    d, NULL, NULL, NULL, NULL,
+                                                    NULL);
+            if (rc == 0)
+                goto out;
+        }
     }
 
     /* Return RSA-PSS parameters only for restricted RSA-PSS keys */
@@ -1684,16 +1832,30 @@ int ibmca_keymgmt_rsa_export(void *vkey, int selection,
 
     if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         /* Private key parts */
-        rc = ibmca_keymgmt_rsa_priv_as_bn(key, &p, &q, &dp, &dq, &qinv);
+        rc = ibmca_keymgmt_rsa_priv_crt_as_bn(key, &p, &q, &dp, &dq, &qinv);
         if (rc == 1) {
-            rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
-            if (rc == 0)
-                goto error;
+            /* CRT format */
+            rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
+            if (rc == 0) {
+                rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+                if (rc == 0)
+                    goto error;
+            }
 
             rc = ibmca_keymgmt_rsa_priv_key_to_data(key->provctx, bld, NULL, d,
                                                     p, q, dp, dq, qinv);
             if (rc == 0)
                 goto error;
+        } else {
+            rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
+            if (rc == 1) {
+                /* ME format */
+                rc = ibmca_keymgmt_rsa_priv_key_to_data(key->provctx, bld, NULL,
+                                                        d, NULL, NULL, NULL,
+                                                        NULL, NULL);
+                if (rc == 0)
+                    goto error;
+            }
         }
     }
 
@@ -1773,6 +1935,7 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
         return 0;
 
     key->rsa.bits = BN_num_bits(n);
+    key->rsa.keylength = (key->rsa.bits + 7) / 8;
     ibmca_debug_key(key, "key: %p bits: %u", key, key->rsa.bits);
 
     if (ibmca_keymgmt_rsa_alloc_pub(key) == 0)
@@ -1794,52 +1957,73 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
 
     if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         /* Import private key parts */
-        if (ibmca_keymgmt_rsa_alloc_priv(key) == 0)
-            goto out;
+        rc = ibmca_keymgmt_rsa_priv_crt_key_from_data(key->provctx, params,
+                                                      &p, &q, &dp, &dq, &qinv);
+        if (rc == 1) {
+            /* CRT components */
+            if (ibmca_keymgmt_rsa_alloc_priv_crt(key) == 0)
+                goto out;
 
-        rc = ibmca_keymgmt_rsa_priv_key_from_data(key->provctx, params, &d,
-                                                  &p, &q, &dp, &dq, &qinv);
-        if (rc == 0)
-            goto out;
+            if (BN_bn2binpad(p, key->rsa.private_crt.p,
+                             ICA_P_LEN(key->rsa.private_crt.key_length)) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for private p");
+                goto out;
+            }
+            if (BN_bn2binpad(q, key->rsa.private_crt.q,
+                             ICA_Q_LEN(key->rsa.private_crt.key_length)) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for private q");
+                goto out;
+            }
+            if (BN_bn2binpad(dp, key->rsa.private_crt.dp,
+                             ICA_DP_LEN(key->rsa.private_crt.key_length)) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for private dp");
+                goto out;
+            }
+            if (BN_bn2binpad(dq, key->rsa.private_crt.dq,
+                             ICA_DQ_LEN(key->rsa.private_crt.key_length)) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for private dq");
+                goto out;
+            }
+            if (BN_bn2binpad(qinv, key->rsa.private_crt.qInverse,
+                             ICA_QINV_LEN(key->rsa.private_crt.key_length)) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for private qinv");
+                goto out;
+            }
 
-        if (BN_bn2binpad(p, key->rsa.private.p,
-                         ICA_P_LEN(key->rsa.private.key_length)) <= 0) {
-            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "BN_bn2binpad failed for private p");
-            goto out;
-        }
-        if (BN_bn2binpad(q, key->rsa.private.q,
-                         ICA_Q_LEN(key->rsa.private.key_length)) <= 0) {
-            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "BN_bn2binpad failed for private q");
-            goto out;
-        }
-        if (BN_bn2binpad(dp, key->rsa.private.dp,
-                         ICA_DP_LEN(key->rsa.private.key_length)) <= 0) {
-            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "BN_bn2binpad failed for private dp");
-            goto out;
-        }
-        if (BN_bn2binpad(dq, key->rsa.private.dq,
-                         ICA_DQ_LEN(key->rsa.private.key_length)) <= 0) {
-            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "BN_bn2binpad failed for private dq");
-            goto out;
-        }
-        if (BN_bn2binpad(qinv, key->rsa.private.qInverse,
-                         ICA_QINV_LEN(key->rsa.private.key_length)) <= 0) {
-            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "BN_bn2binpad failed for private qinv");
-            goto out;
+            /* If p < q, swap and recalculate now */
+            rc = ica_rsa_crt_key_check(&key->rsa.private_crt);
+            if (rc > 1) {
+                rc = 0;
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "ica_rsa_crt_key_check failed");
+                goto out;
+            }
         }
 
-        /* If p < q, swap and recalculate now */
-        rc = ica_rsa_crt_key_check(&key->rsa.private);
-        if (rc > 1) {
-            rc = 0;
-            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                          "ica_rsa_crt_key_check failed");
-            goto out;
+        rc = ibmca_keymgmt_rsa_priv_me_key_from_data(key->provctx, params, &d);
+        if (rc == 1) {
+            /* ME components */
+            if (ibmca_keymgmt_rsa_alloc_priv_me(key) == 0)
+                goto out;
+
+            if (BN_bn2binpad(n, key->rsa.private_me.modulus,
+                             key->rsa.private_me.key_length) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for modulus");
+                goto out;
+            }
+
+            if (BN_bn2binpad(d, key->rsa.private_me.exponent,
+                             key->rsa.private_me.key_length) <= 0) {
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "BN_bn2binpad failed for private d");
+                goto out;
+            }
         }
     }
 
@@ -1902,19 +2086,22 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
         return 0;
     }
 
-    rc = ibmca_keymgmt_rsa_priv_as_bn(key, &p, &q, &dp, &dq, &qinv);
-    if (rc == 0)
-        goto out;
+    rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
+    if (rc == 0) {
+        rc = ibmca_keymgmt_rsa_priv_crt_as_bn(key, &p, &q, &dp, &dq, &qinv);
+        if (rc == 0)
+            goto out;
 
-    rc =  ibmca_keymgmt_rsa_pub_as_bn(key, &n, &e);
-    if (rc == 0)
-        goto out;
+        rc =  ibmca_keymgmt_rsa_pub_as_bn(key, &n, &e);
+        if (rc == 0)
+            goto out;
 
-    rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
-    if (rc == 0)
-        goto out;
+        rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+        if (rc == 0)
+            goto out;
+    }
 
-    buf = P_SECURE_ZALLOC(key->provctx, key->rsa.private.key_length);
+    buf = P_SECURE_ZALLOC(key->provctx, key->rsa.keylength);
     if (buf == NULL) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
                      "Failed to allocate buffer for private key");
@@ -1922,7 +2109,7 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
     }
 
     BN_set_flags(d, BN_FLG_CONSTTIME);
-    if (BN_bn2binpad(d, buf, key->rsa.private.key_length) < 0) {
+    if (BN_bn2binpad(d, buf, key->rsa.keylength) < 0) {
         put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                      "BN_bn2binpad failed");
         goto out;
@@ -1942,8 +2129,7 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
         goto out;
     }
 
-    if (EVP_Digest(buf, key->rsa.private.key_length, d_hash, NULL, md, NULL)
-                                                                        <= 0) {
+    if (EVP_Digest(buf, key->rsa.keylength, d_hash, NULL, md, NULL) <= 0) {
         put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "EVP_Digest failed");
         goto out;
     }
@@ -1971,10 +2157,9 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
         goto out;
     }
 
-    if (inlen < key->rsa.private.key_length) {
-        memset(buf, 0, key->rsa.private.key_length - inlen);
-        if (EVP_MAC_update(ctx, buf, key->rsa.private.key_length - inlen)
-                                                                        != 1) {
+    if (inlen < key->rsa.keylength) {
+        memset(buf, 0, key->rsa.keylength - inlen);
+        if (EVP_MAC_update(ctx, buf, key->rsa.keylength - inlen) != 1) {
             put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                           "EVP_MAC_update failed");
             goto out;
@@ -2003,7 +2188,7 @@ out:
     BN_free(dq);
     BN_free(qinv);
     if (buf != NULL)
-        P_SECURE_CLEAR_FREE(key->provctx, buf, key->rsa.private.key_length);
+        P_SECURE_CLEAR_FREE(key->provctx, buf, key->rsa.keylength);
     EVP_MAC_free(hmac);
     EVP_MAC_CTX_free(ctx);
     EVP_MD_free(md);
