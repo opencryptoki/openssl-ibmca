@@ -392,8 +392,8 @@ out:
     return rc;
 }
 
-int ibmca_rsa_crt_with_blinding(struct ibmca_key *key, const unsigned char *in,
-                                unsigned char *out, size_t rsa_size)
+int ibmca_rsa_priv_with_blinding(struct ibmca_key *key, const unsigned char *in,
+                                 unsigned char *out, size_t rsa_size)
 {
     BN_BLINDING *blinding;
     bool local_blinding = false;
@@ -404,7 +404,7 @@ int ibmca_rsa_crt_with_blinding(struct ibmca_key *key, const unsigned char *in,
 
     ibmca_debug_key(key, "key: %p rsa_size: %lu", key, rsa_size);
 
-    if (rsa_size != key->rsa.private.key_length) {
+    if (rsa_size != key->rsa.keylength) {
         put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
                       "rsa_size is not modulus size");
         goto out;
@@ -445,11 +445,26 @@ int ibmca_rsa_crt_with_blinding(struct ibmca_key *key, const unsigned char *in,
         goto out;
     }
 
-    rc = ica_rsa_crt(key->provctx->ica_adapter, buf,
-                     &key->rsa.private, buf + rsa_size);
-    if (rc != 0) {
-        ibmca_debug_key(key, "ERROR: ica_rsa_crt failed with: %s",
-                        strerror(rc));
+    if (ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt)) {
+        rc = ica_rsa_crt(key->provctx->ica_adapter, buf,
+                         &key->rsa.private_crt, buf + rsa_size);
+        if (rc != 0) {
+            ibmca_debug_key(key, "ERROR: ica_rsa_crt failed with: %s",
+                            strerror(rc));
+            rc = 0;
+            goto out;
+        }
+    } else  if (ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me)) {
+        rc = ica_rsa_mod_expo(key->provctx->ica_adapter, buf,
+                         &key->rsa.private_me, buf + rsa_size);
+        if (rc != 0) {
+            ibmca_debug_key(key, "ERROR: ica_rsa_mod_expo failed with: %s",
+                            strerror(rc));
+            rc = 0;
+            goto out;
+        }
+    } else {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR, "No private key");
         rc = 0;
         goto out;
     }

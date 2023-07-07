@@ -844,7 +844,7 @@ static int ibmca_asym_cipher_rsa_decrypt(void *vctx,
     }
 
     /* Perform private key decrypt */
-    rc = ibmca_rsa_crt_with_blinding(ctx->key, in, dec_data, rsa_size);
+    rc = ibmca_rsa_priv_with_blinding(ctx->key, in, dec_data, rsa_size);
     if (rc != 1) {
         ibmca_debug_op_ctx(ctx, "ibmca_asym_cipher_rsa_with_blinding failed");
 

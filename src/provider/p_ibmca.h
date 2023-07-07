@@ -124,7 +124,9 @@ struct ibmca_key {
     union {
         struct {
             size_t bits;
-            ica_rsa_key_crt_t private;
+            size_t keylength;
+            ica_rsa_key_crt_t private_crt;
+            ica_rsa_key_mod_expo_t private_me;
             ica_rsa_key_mod_expo_t public;
             struct ibmca_pss_params pss; /* For type EVP_PKEY_RSA_PSS only */
             BN_BLINDING *blinding;
@@ -176,6 +178,9 @@ struct ibmca_op_ctx *ibmca_keymgmt_gen_init(
                                     int (*dup_cb)
                                         (const struct ibmca_op_ctx *ctx,
                                          struct ibmca_op_ctx *new_ctx));
+bool ibmca_keymgmt_rsa_pub_valid(const ica_rsa_key_mod_expo_t *public);
+bool ibmca_keymgmt_rsa_priv_crt_valid(const ica_rsa_key_crt_t *private_crt);
+bool ibmca_keymgmt_rsa_priv_me_valid(const ica_rsa_key_mod_expo_t *private_me);
 
 OSSL_FUNC_keymgmt_free_fn ibmca_keymgmt_free;
 OSSL_FUNC_keymgmt_dup_fn ibmca_keymgmt_dup;
@@ -519,8 +524,8 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
 
 int ibmca_keymgmt_rsa_pub_as_bn(struct ibmca_key *key, BIGNUM **n, BIGNUM **e);
 
-int ibmca_rsa_crt_with_blinding(struct ibmca_key *key, const unsigned char *in,
-                                unsigned char *out, size_t rsa_size);
+int ibmca_rsa_priv_with_blinding(struct ibmca_key *key, const unsigned char *in,
+                                 unsigned char *out, size_t rsa_size);
 
 int ossl_bn_rsa_do_unblind(const unsigned char *intermediate,
                            const BIGNUM *unblind,
