@@ -1512,9 +1512,9 @@ static int ibmca_keymgmt_rsa_get_params(void *vkey, OSSL_PARAM params[])
     for (parm = params; parm != NULL && parm->key != NULL; parm++)
         ibmca_debug_key(key, "param: %s", parm->key);
 
-    empty = (!ibmca_keymgmt_rsa_pub_valid(&key->rsa.public) ||
-             (!ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt) &&
-              !ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me)));
+    empty = (!ibmca_keymgmt_rsa_pub_valid(&key->rsa.public) &&
+             !ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt) &&
+             !ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me));
 
     if (!empty) {
         /* OSSL_PKEY_PARAM_BITS */
