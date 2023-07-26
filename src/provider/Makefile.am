@@ -25,7 +25,3 @@ ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = doc
 
 noinst_SCRIPTS = ibmca-provider-opensslconfig
-
-install-data-hook:
-	$(MKDIR_P) $(DESTDIR)$(logdir)
-	$(CHMOD) 0777 $(DESTDIR)$(logdir)

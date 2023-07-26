@@ -10,7 +10,7 @@ AM_INIT_AUTOMAKE([foreign])
 
 AC_PATH_PROG([CHMOD], [chmod], [/bin/chmod])
 
-logdir=$localstatedir/log/ibmca
+logdir=/tmp
 AC_SUBST(logdir)
 
 # Cmdline arguments.

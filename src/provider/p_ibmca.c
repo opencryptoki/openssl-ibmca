@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <err.h>
 #include <strings.h>
 #include <string.h>
@@ -58,6 +59,8 @@ struct ibmca_config_item {
 
 static int ibmca_config_debug(struct ibmca_prov_ctx *provctx,
                               const char *key, const char *value);
+static int ibmca_config_debug_path(struct ibmca_prov_ctx *provctx,
+                                   const char *key, const char *value);
 static int ibmca_config_fips(struct ibmca_prov_ctx *provctx,
                              const char *key, const char *value);
 static int ibmca_config_algorithms(struct ibmca_prov_ctx *provctx,
@@ -70,6 +73,7 @@ static int ibmca_config_openssl_version(struct ibmca_prov_ctx *provctx,
                                         const char *key, const char *value);
 
 static const struct ibmca_config_item config_items[] = {
+    { IBMCA_CONF_DEBUG_PATH, ibmca_config_debug_path },
     { IBMCA_CONF_DEBUG, ibmca_config_debug },
     { IBMCA_CONF_FIPS, ibmca_config_fips },
     { IBMCA_CONF_ALGORITHMS, ibmca_config_algorithms },
@@ -881,7 +885,9 @@ static int ibmca_config_debug(struct ibmca_prov_ctx *provctx,
             *p = '_';
 
         if (snprintf(debug_file, sizeof(debug_file), "%s/trace-%s.%d",
-                     IBMCA_LOGDIR, prov_name, provctx->debug_pid)
+                     provctx->debug_path != NULL ? provctx->debug_path :
+                                                   IBMCA_LOGDIR,
+                     prov_name, provctx->debug_pid)
                                         >= (int)sizeof(debug_file)) {
             put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
                           "IBMCA_LOGDIR too long: '%s'", IBMCA_LOGDIR);
@@ -902,6 +908,20 @@ static int ibmca_config_debug(struct ibmca_prov_ctx *provctx,
     }
 
     return 1;
+}
+
+static int ibmca_config_debug_path(struct ibmca_prov_ctx *provctx,
+                                   const char *key, const char *value)
+{
+    /*
+     * If the debug path is already set (e.g. due to IBMCA_DEBUG_PATH
+     * environment variable) do not override the setting.
+     */
+    if (provctx->debug_path != NULL)
+        return 1;
+
+    return ibmca_config_const_string(provctx, key, value,
+                                     &provctx->debug_path);
 }
 
 static int ibmca_config_fips(struct ibmca_prov_ctx *provctx,
@@ -1302,6 +1322,9 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *handle,
     ctx->c_free = c_free;
     ctx->ica_adapter = DRIVER_NOT_LOADED;
 
+    val = secure_getenv(IBMCA_DEBUG_PATH_ENVVAR);
+    if (val != NULL)
+        ibmca_config_debug_path(ctx, IBMCA_CONF_DEBUG_PATH, val);
     val = getenv(IBMCA_DEBUG_ENVVAR);
     if (val != NULL)
         ibmca_config_debug(ctx, IBMCA_CONF_DEBUG, val);
