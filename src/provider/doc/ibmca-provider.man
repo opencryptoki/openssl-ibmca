@@ -94,13 +94,25 @@ provider if you are on an IBM z15 or later. This would actually make it slower.
 .IP "debug = yes | no | stderr"
 .RS
 Enables debug output for the IBMCA provider. If this option is not specified,
-no debuging output is produced. If \fBdebug = stderr\fP is specified,
+no debugging output is produced. If \fBdebug = stderr\fP is specified,
 debugging messages are printed to stderr. Otherwise the debug output is written
-into a trace file in \fB[/usr/local]/var/log/ibmca/trace-<provider-name>.<pid>\fP,
-where <provider-name> is the name of the IBMCA provider from the identity
-option, and <pid> is the process ID of the current process. You can also
-enable debugging by setting the environment variable \fBIBMCA_DEBUG\fP to
-\fBon\fP or \fBstderr\fP.
+into a trace file in \fB<debug-path>/trace-<provider-name>.<pid>\fP,
+where <debug-path> is the path name of a directory to where the debug files are
+written (default: \fB/tmp\fP), <provider-name> is the name of the IBMCA provider
+from the identity option, and <pid> is the process ID of the current process.
+You can also enable debugging by setting the environment variable
+\fBIBMCA_DEBUG\fP to \fBon\fP or \fBstderr\fP.
+.RE
+.PP
+.IP "debug-path = /dir/to/debug/directory"
+.RS
+Sets the directory path to where debug files are written when debug is enabled
+via \fBdebug = yes\fP or via environment variable \fBIBMCA_DEBUG=on\fP.
+You can also set the debug path by setting the environment variable
+\fBIBMCA_DEBUG_PATH\fP to the directory path. It must be ensured that the user
+under which the application that uses the IBMCA provider runs has write access
+to that directory. If this option is not specified, the default debug path is
+\fB/tmp\fP.
 .RE
 .PP
 .IP "fips = yes | no"
@@ -153,8 +165,18 @@ If
 .B $IBMCA_DEBUG
 is set to \fBstderr\fP debug output to stderr for the IBMCA provider is enabled.
 If it is set to \fBon\fP the debug output is written into a trace file in
-\fB[/usr/local]/var/log/ibmca/trace-<provider-name>.<pid>\fP, where <pid> is
-the process ID of the current process.
+\fB<debug-path>/trace-<provider-name>.<pid>\fP, where <debug-path> is the path
+name of a directory to where the debug files are written (default: \fB/tmp\fP),
+<provider-name> is the name of the IBMCA provider from the identity option,
+and <pid> is the process ID of the current process.
+.PP
+.TP
+.BR IBMCA_DEBUG_PATH
+Sets the directory path to where debug files are written when debug is enabled
+via \fBdebug = yes\fP configuration option or via environment variable
+\fBIBMCA_DEBUG=on\fP. It must be ensured that the user under which the
+application that uses the IBMCA provider runs has write access to that
+directory.
 .PP
 .SH SEE ALSO
 .B provider(1)

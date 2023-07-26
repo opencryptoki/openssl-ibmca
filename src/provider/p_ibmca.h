@@ -27,9 +27,11 @@
 
 /* Environment variable name to enable debug */
 #define IBMCA_DEBUG_ENVVAR          "IBMCA_DEBUG"
+#define IBMCA_DEBUG_PATH_ENVVAR     "IBMCA_DEBUG_PATH"
 
 /* IBMCA provider configuration key words */
 #define IBMCA_CONF_DEBUG            "debug"
+#define IBMCA_CONF_DEBUG_PATH       "debug-path"
 #define IBMCA_CONF_ALGORITHMS       "algorithms"
 #define IBMCA_CONF_FIPS             "fips"
 #define IBMCA_CONF_FALLBACK_PROPS   "fallback-properties"
@@ -64,6 +66,7 @@ struct ibmca_prov_ctx {
     OSSL_FUNC_CRYPTO_secure_clear_free_fn *c_secure_clear_free;
     OSSL_FUNC_OPENSSL_cleanse_fn *c_cleanse;
     bool debug;
+    const char *debug_path;
     FILE *debug_file;
     pid_t debug_pid;
     pthread_mutex_t debug_mutex;

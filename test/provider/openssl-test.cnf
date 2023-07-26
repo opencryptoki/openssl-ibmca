@@ -16,6 +16,7 @@ identity = ibmca
 module = ibmca-provider.so
 activate = 1
 #debug = yes
+#debug-path = /dir/to/debug/directory
 #fips=yes
 #algorithms = RSA,EC,DH
 algorithms = ALL
