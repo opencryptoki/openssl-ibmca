@@ -1,3 +1,7 @@
+* openssl-ibmca 2.4.1
+- Provider: Change the default log directory to /tmp
+- Bug fixes
+
 * openssl-ibmca 2.4.0
 - Provider: Adjustments for OpenSSL versions 3.1 and 3.2 
 - Provider: Support RSA blinding
