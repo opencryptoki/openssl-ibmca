@@ -5,7 +5,7 @@
 # %global modulesdir %(pkg-config --variable=modulesdir libcrypto)
 
 Name:       openssl-ibmca
-Version:    2.4.0
+Version:    2.4.1
 Release:    1%{?dist}
 Summary:    An IBMCA OpenSSL dynamic provider
 

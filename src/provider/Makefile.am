@@ -1,5 +1,5 @@
-VERSION = 2:4:0
-VERSION_STR = 2.4.0
+VERSION = 2:4:1
+VERSION_STR = 2.4.1
 
 lib_LTLIBRARIES=ibmca-provider.la
 
