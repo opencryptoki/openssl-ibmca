@@ -62,9 +62,11 @@ enginectrl_SOURCES = enginectrl.c
 enginectrl_LDADD = -lcrypto -ldl
 
 AM_TESTS_ENVIRONMENT = export IBMCA_TEST_PATH=${top_builddir}/src/engine/.libs/ibmca.so IBMCA_OPENSSL_TEST_CONF=${srcdir}/openssl-test.cnf IBMCA_OPENSSL_TEST_NOINIT_CONF=${srcdir}/openssl-test-noinit.cnf PERL5LIB=${srcdir};
-EXTRA_DIST = ${TESTS_PERL} ${TESTS_CIPHERS} test.pm openssl-test.cnf	\
-dsa2k.key dsa2k_pub.key dsa4k.key dsa4k_pub.key dsa8k.key		\
-dsa8k_pub.key dsamax.key dsamax_pub.key rsa2k.key rsa4k.key rsa8k.key
+EXTRA_DIST = ${TESTS_PERL} ${TESTS_CIPHERS} test.pm openssl-test.cnf 	\
+	openssl-test-noinit.cnf dsa2k.key dsa2k_pub.key dsa4k.key	\
+	dsa4k_pub.key dsa8k.key dsa8k_pub.key dsamax.key dsamax_pub.key	\
+	rsa2k.key rsa4k.key rsa8k.key rsa16k.key dsaparam2k.key		\
+	dsaparam4k.key dsaparam8k.key dsaparammax.key
 
 libica-link.sh:
 	@echo '#!/bin/bash' > libica-link.sh
@@ -77,3 +79,5 @@ libica-link.sh:
 	@echo "fi" >> libica-link.sh
 	@echo "exit 0" >> libica-link.sh
 	@chmod u+x libica-link.sh
+
+CLEANFILES = *.out *.dec libica-link.sh
