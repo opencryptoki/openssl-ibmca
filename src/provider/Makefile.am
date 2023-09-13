@@ -8,6 +8,8 @@ ibmca_provider_la_SOURCES=p_ibmca.c p_key.c p_context.c \
 			rsa_signature.c ec_keymgmt.c ec_signature.c ec_keyexch.c \
 			dh_keymgmt.c dh_keyexch.c rsa_blinding.c rsa_sup_mul.c
 
+dist_ibmca_provider_la_SOURCES=p_ibmca.h constant_time.h
+
 ibmca_provider_la_CFLAGS=-DIBMCA_VERSION=\"${VERSION_STR}\" -DIBMCA_LOGDIR=\"$(logdir)\"
 
 if PROVIDER_FULL_LIBICA
@@ -18,7 +20,8 @@ endif
 ibmca_provider_la_LDFLAGS=-module -version-number ${VERSION} -shared -no-undefined \
 		  -avoid-version -Wl,--version-script=${srcdir}/ibmca-provider.map
 
-EXTRA_DIST = openssl.cnf.provider.sample ibmca-provider-opensslconfig
+EXTRA_DIST = openssl.cnf.provider.sample ibmca-provider-opensslconfig \
+	ibmca-provider.map
 
 ACLOCAL_AMFLAGS = -I m4
 

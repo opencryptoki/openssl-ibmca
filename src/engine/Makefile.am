@@ -16,8 +16,8 @@ ibmca_la_LIBADD=-ldl
 ibmca_la_LDFLAGS=-module -version-number ${VERSION} -shared -no-undefined \
 		  -avoid-version -Wl,--version-script=${srcdir}/ibmca.map
 
-dist_ibmca_la_SOURCES=ibmca.h e_ibmca_err.h
-EXTRA_DIST = openssl.cnf.sample
+dist_ibmca_la_SOURCES=ibmca.h e_ibmca_err.h openssl-compat.h
+EXTRA_DIST = openssl.cnf.sample ibmca.map test/ibmca_mechaList_test.c
 
 ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = doc
@@ -29,3 +29,5 @@ ibmca-engine-opensslconfig: ibmca-engine-opensslconfig.in
 
 noinst_SCRIPTS = ibmca-engine-opensslconfig
 EXTRA_DIST += ibmca-engine-opensslconfig.in
+
+CLEANFILES = ibmca-engine-opensslconfig

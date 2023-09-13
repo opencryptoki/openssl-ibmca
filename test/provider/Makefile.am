@@ -48,4 +48,12 @@ threadtest_SOURCES = threadtest.c
 threadtest_LDADD = -lcrypto -lpthread
 
 AM_TESTS_ENVIRONMENT = export IBMCA_TEST_PATH=${top_builddir}/src/provider/.libs/ IBMCA_OPENSSL_TEST_CONF=${srcdir}/openssl-test.cnf PERL5LIB=${srcdir};
-EXTRA_DIST = ${TESTS_PERL} test.pm openssl-test.cnf server-cert-rsa.pem server-key-rsa.pem server-cert-ec.pem server-key-ec.pem
+EXTRA_DIST = ${TESTS_PERL} test.pm openssl-test.cnf server-cert-rsa.pem	\
+	server-key-rsa.pem server-cert-ec.pem server-key-ec.pem		\
+	rsa-implrej-bad-empty-in.bin rsa-implrej-bad-empty-out.bin	\
+	rsa-implrej-bad-max-in.bin rsa-implrej-bad-max-out.bin		\
+	rsa-implrej-bad-prf-in.bin rsa-implrej-bad-prf-out.bin		\
+	rsa-implrej-good-in.bin rsa-implrej-good-out.bin		\
+	rsa-implrej-key.pem rsa16k.pl
+
+CLEANFILES = *.out *.dec *.pub *.key
