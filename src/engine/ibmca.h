@@ -617,6 +617,7 @@ typedef
 int (*ica_ed448_ctx_del_t)(ICA_ED448_CTX **ctx);
 
 typedef void (*ica_cleanup_t)(void);
+typedef void (*ica_allow_external_gcm_iv_in_fips_mode_t)(int allow);
 
 /* entry points into libica, filled out at DSO load time */
 extern ica_get_functionlist_t           p_ica_get_functionlist;

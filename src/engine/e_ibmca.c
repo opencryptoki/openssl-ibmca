@@ -103,6 +103,8 @@ ica_aes_gcm_intermediate_t      p_ica_aes_gcm_intermediate;
 ica_aes_gcm_last_t              p_ica_aes_gcm_last;
 #endif
 ica_cleanup_t                   p_ica_cleanup;
+ica_allow_external_gcm_iv_in_fips_mode_t
+                                p_ica_allow_external_gcm_iv_in_fips_mode;
 
 /* save libcrypto's default ec methods */
 #ifndef NO_EC
@@ -825,7 +827,15 @@ static int ibmca_init(ENGINE *e)
     BIND(ibmca_dso, ica_ed448_ctx_del);
 
     /* ica_cleanup is not always present and only needed for newer libraries */
-    p_ica_cleanup = (ica_cleanup_t)dlsym(ibmca_dso, "ica_cleanup");
+    BIND(ibmca_dso, ica_cleanup);
+
+    /*
+     * Allow external AES-GCM IV when libica runs in FIPS mode.
+     * ica_allow_external_gcm_iv_in_fips_mode() is not always present and only
+     * available with newer libraries.
+     */
+    if (BIND(ibmca_dso, ica_allow_external_gcm_iv_in_fips_mode))
+        p_ica_allow_external_gcm_iv_in_fips_mode(1);
 
     /* disable fallbacks on Libica */
     if (BIND(ibmca_dso, ica_set_fallback_mode))
