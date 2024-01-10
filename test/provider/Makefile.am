@@ -24,24 +24,27 @@ TESTS = \
 check_PROGRAMS = rsakey eckey dhkey threadtest
 
 dhkey_SOURCES = dhkey.c
+dhkey_LDADD = -lcrypto -ldl
 if PROVIDER_FULL_LIBICA
-dhkey_LDADD = -lcrypto -lica
+dhkey_CFLAGS = -DLIBICA_NAME=\"libica.so.@libicaversion@\"
 else
-dhkey_LDADD = -lcrypto -lica-cex
+dhkey_CFLAGS = -DLIBICA_NAME=\"libica-cex.so.@libicaversion@\"
 endif
 
 eckey_SOURCES = eckey.c
+eckey_LDADD = -lcrypto -ldl
 if PROVIDER_FULL_LIBICA
-eckey_LDADD = -lcrypto -lica
+eckey_CFLAGS = -DLIBICA_NAME=\"libica.so.@libicaversion@\"
 else
-eckey_LDADD = -lcrypto -lica-cex
+eckey_CFLAGS = -DLIBICA_NAME=\"libica-cex.so.@libicaversion@\"
 endif
 
 rsakey_SOURCES = rsakey.c
+rsakey_LDADD = -lcrypto -ldl
 if PROVIDER_FULL_LIBICA
-rsakey_LDADD = -lcrypto -lica
+rsakey_CFLAGS = -DLIBICA_NAME=\"libica.so.@libicaversion@\"
 else
-rsakey_LDADD = -lcrypto -lica-cex
+rsakey_CFLAGS = -DLIBICA_NAME=\"libica-cex.so.@libicaversion@\"
 endif
 
 threadtest_SOURCES = threadtest.c
