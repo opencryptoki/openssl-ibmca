@@ -116,6 +116,8 @@ AC_ARG_WITH([provider-libica-full],
 	[])
 AM_CONDITIONAL([PROVIDER_FULL_LIBICA], [test "x$useproviderfulllibica" = xyes])
 
+AC_SUBST(libicaversion, "$libicaversion")
+
 # If compiled against OpenSSL 3.0 or later, build the provider unless
 # explicitely disabled. 
 # If build against OpenSSL 1.1.1, we can not build the provider.

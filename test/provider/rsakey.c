@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dlfcn.h>
 
 #include <openssl/conf.h>
 #include <openssl/evp.h>
@@ -735,13 +736,32 @@ static const unsigned int required_ica_mechs[] = { RSA_ME,  RSA_CRT };
 static const unsigned int required_ica_mechs_len =
                         sizeof(required_ica_mechs) / sizeof(unsigned int);
 
+typedef unsigned int (*ica_get_functionlist_t)(libica_func_list_element *,
+                                               unsigned int *);
+
 int check_libica()
 {
     unsigned int mech_len, i, k, found = 0;
     libica_func_list_element *mech_list = NULL;
+    void *ibmca_dso;
+    ica_get_functionlist_t p_ica_get_functionlist;
     int rc;
 
-    rc = ica_get_functionlist(NULL, &mech_len);
+    ibmca_dso = dlopen(LIBICA_NAME, RTLD_NOW);
+    if (ibmca_dso == NULL) {
+        fprintf(stderr, "Failed to load libica '%s'!\n", LIBICA_NAME);
+        return 77;
+    }
+
+    p_ica_get_functionlist =
+            (ica_get_functionlist_t)dlsym(ibmca_dso, "ica_get_functionlist");
+    if (p_ica_get_functionlist == NULL) {
+        fprintf(stderr, "Failed to get ica_get_functionlist from '%s'!\n",
+                LIBICA_NAME);
+        return 77;
+    }
+
+    rc = p_ica_get_functionlist(NULL, &mech_len);
     if (rc != 0) {
         fprintf(stderr, "Failed to get function list from libica!\n");
         return 77;
@@ -753,7 +773,7 @@ int check_libica()
         return 77;
     }
 
-    rc = ica_get_functionlist(mech_list, &mech_len);
+    rc = p_ica_get_functionlist(mech_list, &mech_len);
     if (rc != 0) {
         fprintf(stderr, "Failed to get function list from libica!\n");
         free(mech_list);
