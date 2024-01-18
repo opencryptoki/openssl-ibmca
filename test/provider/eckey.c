@@ -895,6 +895,8 @@ int main(int argc, char **argv)
         return 77;
     }
 
+    OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL);
+
     ret = check_libica();
     if (ret != 0)
         return ret;
