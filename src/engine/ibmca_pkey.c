@@ -258,7 +258,7 @@ ret:
 
 /* ED25519 */
 
-static int ibmca_ed25519_copy(EVP_PKEY_CTX *to, EVP_PKEY_CTX *from)
+static int ibmca_ed25519_copy(EVP_PKEY_CTX *to, const EVP_PKEY_CTX *from)
 {
     return 1;
 }
@@ -402,7 +402,7 @@ ret:
 
 /* ED448 */
 
-static int ibmca_ed448_copy(EVP_PKEY_CTX *to, EVP_PKEY_CTX *from)
+static int ibmca_ed448_copy(EVP_PKEY_CTX *to, const EVP_PKEY_CTX *from)
 {
     return 1;
 }
