@@ -53,6 +53,8 @@ static OSSL_FUNC_keymgmt_gen_set_template_fn ibmca_keymgmt_rsa_gen_set_template;
 static OSSL_FUNC_keymgmt_gen_set_params_fn ibmca_keymgmt_rsa_gen_set_params;
 static OSSL_FUNC_keymgmt_gen_settable_params_fn
                                         ibmca_keymgmt_rsa_gen_settable_params;
+static OSSL_FUNC_keymgmt_gen_settable_params_fn
+                                    ibmca_keymgmt_rsa_pss_gen_settable_params;
 static OSSL_FUNC_keymgmt_gen_fn ibmca_keymgmt_rsa_gen;
 static OSSL_FUNC_keymgmt_has_fn ibmca_keymgmt_rsa_has;
 static OSSL_FUNC_keymgmt_match_fn ibmca_keymgmt_rsa_match;
@@ -1071,19 +1073,34 @@ static const OSSL_PARAM *ibmca_keymgmt_rsa_gen_settable_params(void *vgenctx,
 {
     const struct ibmca_op_ctx *genctx = vgenctx;
     const struct ibmca_prov_ctx *provctx = vprovctx;
-
     const OSSL_PARAM *params, *p;
+
+    UNUSED(genctx);
 
     if (provctx == NULL)
         return NULL;
 
-    ibmca_debug_ctx(provctx, "type: %d", genctx->type);
+    params = ibmca_rsa_op_ctx_settable_params;
+    for (p = params; p != NULL && p->key != NULL; p++)
+        ibmca_debug_ctx(provctx, "param: %s", p->key);
 
-    if (genctx->type == EVP_PKEY_RSA_PSS)
-        params = ibmca_rsa_pss_op_ctx_settable_params;
-    else
-        params = ibmca_rsa_op_ctx_settable_params;
+    return params;
+}
 
+static const OSSL_PARAM *ibmca_keymgmt_rsa_pss_gen_settable_params(
+                                                               void *vgenctx,
+                                                               void *vprovctx)
+{
+    const struct ibmca_op_ctx *genctx = vgenctx;
+    const struct ibmca_prov_ctx *provctx = vprovctx;
+    const OSSL_PARAM *params, *p;
+
+    UNUSED(genctx);
+
+    if (provctx == NULL)
+        return NULL;
+
+    params = ibmca_rsa_pss_op_ctx_settable_params;
     for (p = params; p != NULL && p->key != NULL; p++)
         ibmca_debug_ctx(provctx, "param: %s", p->key);
 
@@ -2256,7 +2273,7 @@ static const OSSL_DISPATCH ibmca_rsapss_keymgmt_functions[] = {
     { OSSL_FUNC_KEYMGMT_GEN_SET_PARAMS,
             (void (*)(void))ibmca_keymgmt_rsa_gen_set_params },
     { OSSL_FUNC_KEYMGMT_GEN_SETTABLE_PARAMS,
-            (void (*)(void))ibmca_keymgmt_rsa_gen_settable_params },
+            (void (*)(void))ibmca_keymgmt_rsa_pss_gen_settable_params },
     { OSSL_FUNC_KEYMGMT_GEN, (void (*)(void))ibmca_keymgmt_rsa_gen },
     { OSSL_FUNC_KEYMGMT_GEN_CLEANUP,
             (void (*)(void))ibmca_keymgmt_gen_cleanup },
