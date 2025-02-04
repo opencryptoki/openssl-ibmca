@@ -65,6 +65,16 @@ static OSSL_FUNC_signature_set_ctx_md_params_fn
                                ibmca_signature_rsa_set_ctx_md_params;
 static OSSL_FUNC_signature_settable_ctx_md_params_fn
                                 ibmca_signature_rsa_settable_ctx_md_params;
+#ifdef EVP_PKEY_OP_SIGNMSG
+static OSSL_FUNC_signature_sign_message_update_fn
+                                ibmca_signature_rsa_signverify_message_update;
+static OSSL_FUNC_signature_sign_message_final_fn
+                                ibmca_signature_rsa_sign_message_final;
+static OSSL_FUNC_signature_verify_message_final_fn
+                                ibmca_signature_rsa_verify_message_final;
+static OSSL_FUNC_signature_query_key_types_fn
+                                ibmca_signature_rsa_query_key_types;
+#endif
 
 static void ibmca_signature_rsa_free_cb(struct ibmca_op_ctx *ctx);
 static int ibmca_signature_rsa_dup_cb(const struct ibmca_op_ctx *ctx,
@@ -72,6 +82,15 @@ static int ibmca_signature_rsa_dup_cb(const struct ibmca_op_ctx *ctx,
 
 static const struct ibmca_pss_params ibmca_rsa_pss_defaults =
                                             IBMCA_RSA_PSS_DEFAULTS;
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+static const char *ibmca_signature_rsa_keytypes[] = { "RSA", NULL };
+
+static const char **ibmca_signature_rsa_query_key_types(void)
+{
+    return ibmca_signature_rsa_keytypes;
+}
+#endif
 
 static void *ibmca_signature_rsa_newctx(void *vprovctx, const char *propq)
 {
@@ -115,6 +134,11 @@ static void ibmca_signature_rsa_free_cb(struct ibmca_op_ctx *ctx)
     if (ctx->rsa.signature.md_ctx != NULL)
         EVP_MD_CTX_free(ctx->rsa.signature.md_ctx);
     ctx->rsa.signature.md_ctx = NULL;
+
+    if (ctx->rsa.signature.signature != NULL)
+        P_FREE(ctx->provctx, ctx->rsa.signature.signature);
+    ctx->rsa.signature.signature = NULL;
+    ctx->rsa.signature.signature_len = 0;
 }
 
 static int ibmca_signature_rsa_dup_cb(const struct ibmca_op_ctx *ctx,
@@ -160,6 +184,21 @@ static int ibmca_signature_rsa_dup_cb(const struct ibmca_op_ctx *ctx,
             return 0;
         }
     }
+
+    new_ctx->rsa.signature.signature_len = 0;
+    new_ctx->rsa.signature.signature = NULL;
+    if (ctx->rsa.signature.signature != NULL) {
+        new_ctx->rsa.signature.signature = P_MEMDUP(ctx->provctx,
+                                             ctx->rsa.signature.signature,
+                                             ctx->rsa.signature.signature_len);
+        if (new_ctx->rsa.signature.signature == NULL) {
+            put_error_op_ctx(ctx, IBMCA_ERR_MALLOC_FAILED,
+                             "P_MEMDUP failed");
+            return 0;
+        }
+        new_ctx->rsa.signature.signature_len = ctx->rsa.signature.signature_len;
+    }
+
 
     return 1;
 }
@@ -388,6 +427,10 @@ static int ibmca_signature_rsa_op_init(struct ibmca_op_ctx *ctx,
     switch (operation) {
     case EVP_PKEY_OP_SIGNCTX:
     case EVP_PKEY_OP_VERIFYCTX:
+#ifdef EVP_PKEY_OP_SIGNMSG
+    case EVP_PKEY_OP_SIGNMSG:
+    case EVP_PKEY_OP_VERIFYMSG:
+#endif
         ctx->rsa.signature.md_ctx = EVP_MD_CTX_new();
         if (ctx->rsa.signature.md_ctx == NULL) {
             put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
@@ -594,11 +637,27 @@ static int ibmca_signature_rsa_sign(void *vctx,
 
     if (ctx->key == NULL ||
         (ctx->operation != EVP_PKEY_OP_SIGN &&
+#ifdef EVP_PKEY_OP_SIGNMSG
+         ctx->operation != EVP_PKEY_OP_SIGNCTX &&
+         ctx->operation != EVP_PKEY_OP_SIGNMSG)) {
+#else
          ctx->operation != EVP_PKEY_OP_SIGNCTX)) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "sign operation not initialized");
         return 0;
     }
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+    if (ctx->operation == EVP_PKEY_OP_SIGNMSG) {
+        rc = ibmca_signature_rsa_signverify_message_update(ctx, tbs, tbslen);
+        if (rc != 1)
+            goto out;
+
+        rc = ibmca_signature_rsa_sign_message_final(ctx, sig, siglen, sigsize);
+        goto out;
+    }
+#endif
 
     rsa_size = ctx->key->get_max_param_size(ctx->key);
     *siglen = rsa_size;
@@ -815,6 +874,9 @@ static int ibmca_signature_rsa_verify(void *vctx,
     unsigned char diginfo[MAX_DIGINFO_SIZE + EVP_MAX_MD_SIZE];
     unsigned char *dec_data, *data = NULL;
     size_t dec_data_len, data_len = 0, diginfo_len, rsa_size;
+#ifdef EVP_PKEY_OP_SIGNMSG
+    OSSL_PARAM params[2];
+#endif
     int rc = 1;
 
     if (ctx == NULL || sig == NULL || tbs == NULL)
@@ -825,11 +887,36 @@ static int ibmca_signature_rsa_verify(void *vctx,
 
     if (ctx->key == NULL ||
         (ctx->operation != EVP_PKEY_OP_VERIFY &&
+#ifdef EVP_PKEY_OP_SIGNMSG
+         ctx->operation != EVP_PKEY_OP_VERIFYCTX &&
+         ctx->operation != EVP_PKEY_OP_VERIFYMSG)) {
+#else
          ctx->operation != EVP_PKEY_OP_VERIFYCTX)) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "verify operation not initialized");
         return -1;
     }
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+    if (ctx->operation == EVP_PKEY_OP_VERIFYMSG) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+                                          OSSL_SIGNATURE_PARAM_SIGNATURE,
+                                          (unsigned char *)sig, siglen);
+        params[1] = OSSL_PARAM_construct_end();
+
+        rc = ibmca_signature_rsa_set_ctx_params(ctx, params);
+        if (rc != 1)
+            goto out;
+
+        rc = ibmca_signature_rsa_signverify_message_update(ctx, tbs, tbslen);
+        if (rc != 1)
+            goto out;
+
+        rc = ibmca_signature_rsa_verify_message_final(ctx);
+        goto out;
+    }
+#endif
 
     rsa_size = ctx->key->get_max_param_size(ctx->key);
     if (siglen != rsa_size) {
@@ -1136,6 +1223,51 @@ out:
 
     return rc;
 }
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+static int ibmca_signature_rsa_signverify_message_update(void *vctx,
+                                            const unsigned char *data,
+                                            size_t datalen)
+{
+    struct ibmca_op_ctx *ctx = vctx;
+
+    return ibmca_digest_signverify_update(ctx, ctx->rsa.signature.md_ctx,
+                                          data, datalen);
+}
+
+static int ibmca_signature_rsa_sign_message_final(void *vctx,
+                                                 unsigned char *sig,
+                                                 size_t *siglen,
+                                                 size_t sigsize)
+{
+    struct ibmca_op_ctx *ctx = vctx;
+    int rc;
+
+    ctx->operation = EVP_PKEY_OP_SIGNCTX;
+    rc = ibmca_digest_sign_final(ctx, ctx->rsa.signature.md_ctx,
+                                 ibmca_signature_rsa_sign,
+                                 sig, siglen, sigsize);
+    ctx->operation = EVP_PKEY_OP_SIGNMSG;
+
+    return rc;
+}
+
+static int ibmca_signature_rsa_verify_message_final(void *vctx)
+{
+    struct ibmca_op_ctx *ctx = vctx;
+    int rc;
+
+    ctx->operation = EVP_PKEY_OP_VERIFYCTX;
+    rc = ibmca_digest_verify_final(ctx, ctx->rsa.signature.md_ctx,
+                                   ibmca_signature_rsa_verify,
+                                   ctx->rsa.signature.signature,
+                                   ctx->rsa.signature.signature_len);
+    ctx->operation = EVP_PKEY_OP_VERIFYMSG;
+
+    return rc;
+}
+#endif
+
 
 static int ibmca_signature_rsa_digest_sign_init(void *vctx, const char *mdname,
                                                 void *vkey,
@@ -1559,6 +1691,10 @@ static int ibmca_signature_rsa_set_ctx_params(void *vctx,
     const OSSL_PARAM *p;
     const char *name, *props = NULL;
     int i, rc, saltlen;
+#ifdef EVP_PKEY_OP_SIGNMSG
+    size_t len;
+    unsigned char *ptr = NULL;
+#endif
 
     if (ctx == NULL)
         return 0;
@@ -1566,6 +1702,29 @@ static int ibmca_signature_rsa_set_ctx_params(void *vctx,
     ibmca_debug_op_ctx(ctx, "ctx: %p", ctx);
     for (p = params; p != NULL && p->key != NULL; p++)
         ibmca_debug_op_ctx(ctx, "param: %s", p->key);
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+    switch (ctx->operation) {
+    case EVP_PKEY_OP_SIGNMSG:
+    case EVP_PKEY_OP_VERIFYMSG:
+        /* OSSL_SIGNATURE_PARAM_SIGNATURE */
+        rc = ibmca_param_get_octet_string(ctx->provctx, params,
+                                          OSSL_SIGNATURE_PARAM_SIGNATURE,
+                                          (void **)&ptr, &len);
+        if (rc == 0)
+            return 0;
+        if (rc > 0) {
+            if (ctx->rsa.signature.signature != NULL)
+                P_CLEAR_FREE(ctx->provctx, ctx->rsa.signature.signature,
+                        ctx->rsa.signature.signature_len);
+            ctx->rsa.signature.signature = ptr;
+            ctx->rsa.signature.signature_len = len;
+        }
+
+        /* No further params are allowed */
+        return 1;
+    }
+#endif
 
     /* OSSL_SIGNATURE_PARAM_PAD_MODE */
     p = OSSL_PARAM_locate_const((OSSL_PARAM *)params,
@@ -1805,6 +1964,13 @@ static const OSSL_PARAM ibmca_signature_rsa_settable_params_no_digest[] = {
     OSSL_PARAM_END
 };
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+static const OSSL_PARAM ibmca_signature_rsa_sigalg_settable_params[] = {
+    OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_SIGNATURE, NULL, 0),
+    OSSL_PARAM_END
+};
+#endif
+
 static const OSSL_PARAM *ibmca_signature_rsa_settable_ctx_params(
                                                     void *vctx, void *vprovctx)
 {
@@ -1814,7 +1980,15 @@ static const OSSL_PARAM *ibmca_signature_rsa_settable_ctx_params(
 
     ibmca_debug_ctx(provctx, "ctx: %p", ctx);
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+    if (ctx != NULL && ctx->operation == EVP_PKEY_OP_VERIFYMSG)
+        params = ibmca_signature_rsa_sigalg_settable_params;
+    else if (ctx != NULL && ctx->operation == EVP_PKEY_OP_SIGNMSG)
+        params = NULL;
+    else if (ctx == NULL || ctx->rsa.signature.set_md_allowed)
+#else
     if (ctx == NULL || ctx->rsa.signature.set_md_allowed)
+#endif
         params = ibmca_signature_rsa_settable_params;
     else
         params = ibmca_signature_rsa_settable_params_no_digest;
@@ -1907,9 +2081,159 @@ static const OSSL_DISPATCH ibmca_rsa_signature_functions[] = {
     { 0, NULL }
 };
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+#define IBMCA_IMPL_RSA_SIGALG(md, MD)                                          \
+    static OSSL_FUNC_signature_sign_init_fn                                    \
+                     ibmca_signature_rsa_##md##_sign_init;                     \
+    static OSSL_FUNC_signature_verify_init_fn                                  \
+                     ibmca_signature_rsa_##md##_verify_init;                   \
+    static OSSL_FUNC_signature_sign_message_init_fn                            \
+                     ibmca_signature_rsa_##md##_sign_message_init;             \
+    static OSSL_FUNC_signature_verify_message_init_fn                          \
+                     ibmca_signature_rsa_##md##_verify_message_init;           \
+                                                                               \
+    static int ibmca_signature_rsa_##md##_sign_init(void *vctx, void *vkey,    \
+                                                   const OSSL_PARAM params[])  \
+    {                                                                          \
+        struct ibmca_op_ctx *ctx = vctx;                                       \
+        struct ibmca_key *key = vkey;                                          \
+                                                                               \
+        return ibmca_signature_rsa_op_init(ctx, key, params,                   \
+                                          EVP_PKEY_OP_SIGN, #MD);              \
+    }                                                                          \
+                                                                               \
+    static int ibmca_signature_rsa_##md##_verify_init(void *vctx, void *vkey,  \
+                                                     const OSSL_PARAM params[])\
+    {                                                                          \
+        struct ibmca_op_ctx *ctx = vctx;                                       \
+        struct ibmca_key *key = vkey;                                          \
+                                                                               \
+        return ibmca_signature_rsa_op_init(ctx, key, params,                   \
+                                          EVP_PKEY_OP_VERIFY, #MD);            \
+    }                                                                          \
+                                                                               \
+    static int ibmca_signature_rsa_##md##_sign_message_init(                   \
+                                                    void *vctx, void *vkey,    \
+                                                    const OSSL_PARAM params[]) \
+    {                                                                          \
+        struct ibmca_op_ctx *ctx = vctx;                                       \
+        struct ibmca_key *key = vkey;                                          \
+                                                                               \
+        return ibmca_signature_rsa_op_init(ctx, key, params,                   \
+                                          EVP_PKEY_OP_SIGNMSG, #MD);           \
+    }                                                                          \
+                                                                               \
+       static int ibmca_signature_rsa_##md##_verify_message_init(              \
+                                                    void *vctx, void *vkey,    \
+                                                    const OSSL_PARAM params[]) \
+       {                                                                       \
+           struct ibmca_op_ctx *ctx = vctx;                                    \
+           struct ibmca_key *key = vkey;                                       \
+                                                                               \
+           return ibmca_signature_rsa_op_init(ctx, key, params,                \
+                                             EVP_PKEY_OP_VERIFYMSG, #MD);      \
+       }                                                                       \
+                                                                               \
+    static const OSSL_DISPATCH ibmca_rsa_##md##_signature_functions[] = {      \
+        /* Signature context constructor, destructor */                        \
+        { OSSL_FUNC_SIGNATURE_NEWCTX,                                          \
+                (void (*)(void))ibmca_signature_rsa_newctx },                  \
+        { OSSL_FUNC_SIGNATURE_FREECTX, (void (*)(void))ibmca_op_freectx },     \
+        { OSSL_FUNC_SIGNATURE_DUPCTX, (void (*)(void))ibmca_op_dupctx },       \
+        { OSSL_FUNC_SIGNATURE_QUERY_KEY_TYPES,                                 \
+                (void (*)(void))ibmca_signature_rsa_query_key_types },         \
+        /* Signing */                                                          \
+        { OSSL_FUNC_SIGNATURE_SIGN_INIT,                                       \
+                (void (*)(void))ibmca_signature_rsa_##md##_sign_init },        \
+        { OSSL_FUNC_SIGNATURE_SIGN,                                            \
+                (void (*)(void))ibmca_signature_rsa_sign },                    \
+        /* Verifying */                                                        \
+        { OSSL_FUNC_SIGNATURE_VERIFY_INIT,                                     \
+                (void (*)(void))ibmca_signature_rsa_##md##_verify_init },      \
+        { OSSL_FUNC_SIGNATURE_VERIFY,                                          \
+                (void (*)(void))ibmca_signature_rsa_verify },                  \
+        /* Sign Message */                                                     \
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_INIT,                               \
+                (void (*)(void))ibmca_signature_rsa_##md##_sign_message_init },\
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_UPDATE,                             \
+               (void (*)(void))ibmca_signature_rsa_signverify_message_update },\
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_FINAL,                              \
+                (void (*)(void))ibmca_signature_rsa_sign_message_final },      \
+        /* Verify Message */                                                   \
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_INIT,                             \
+              (void (*)(void))ibmca_signature_rsa_##md##_verify_message_init },\
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_UPDATE,                           \
+               (void (*)(void))ibmca_signature_rsa_signverify_message_update },\
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_FINAL,                            \
+                (void (*)(void))ibmca_signature_rsa_verify_message_final },    \
+        /* Signature parameters */                                             \
+        { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,                                  \
+                (void (*)(void))ibmca_signature_rsa_get_ctx_params },          \
+        { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,                             \
+                (void (*)(void))ibmca_signature_rsa_gettable_ctx_params },     \
+        { OSSL_FUNC_SIGNATURE_SET_CTX_PARAMS,                                  \
+                (void (*)(void))ibmca_signature_rsa_set_ctx_params },          \
+        { OSSL_FUNC_SIGNATURE_SETTABLE_CTX_PARAMS,                             \
+               (void (*)(void))ibmca_signature_rsa_settable_ctx_params },      \
+        { 0, NULL }                                                            \
+    }
+
+#define IBMCA_DEF_RSA_SIGALG(md, MD, names)                                    \
+    { names, NULL, ibmca_rsa_##md##_signature_functions,                       \
+      "IBMCA RSA " #MD " signature implementation" }
+
+IBMCA_IMPL_RSA_SIGALG(sha1, SHA1);
+IBMCA_IMPL_RSA_SIGALG(sha224, SHA2-224);
+IBMCA_IMPL_RSA_SIGALG(sha256, SHA2-256);
+IBMCA_IMPL_RSA_SIGALG(sha384, SHA2-384);
+IBMCA_IMPL_RSA_SIGALG(sha512, SHA2-512);
+IBMCA_IMPL_RSA_SIGALG(sha512_224, SHA2-512/224);
+IBMCA_IMPL_RSA_SIGALG(sha512_256, SHA2-512/256);
+IBMCA_IMPL_RSA_SIGALG(sha3_224, SHA3-224);
+IBMCA_IMPL_RSA_SIGALG(sha3_256, SHA3-256);
+IBMCA_IMPL_RSA_SIGALG(sha3_384, SHA3-384);
+IBMCA_IMPL_RSA_SIGALG(sha3_512, SHA3-512);
+
+#endif
+
 const OSSL_ALGORITHM ibmca_rsa_signature[] = {
     { "RSA:rsaEncryption:1.2.840.113549.1.1.1", NULL,
       ibmca_rsa_signature_functions, "IBMCA RSA signature implementation" },
+#ifdef EVP_PKEY_OP_SIGNMSG
+    IBMCA_DEF_RSA_SIGALG(sha1, SHA1,
+                         "RSA-SHA1:RSA-SHA-1:sha1WithRSAEncryption:"
+                         "1.2.840.113549.1.1.5"),
+    IBMCA_DEF_RSA_SIGALG(sha224, SHA2-224,
+                         "RSA-SHA2-224:RSA-SHA224:sha224WithRSAEncryption:"
+                         "1.2.840.113549.1.1.14"),
+    IBMCA_DEF_RSA_SIGALG(sha256, SHA2-256,
+                         "RSA-SHA2-256:RSA-SHA256:sha256WithRSAEncryption:"
+                         "1.2.840.113549.1.1.11"),
+    IBMCA_DEF_RSA_SIGALG(sha384, SHA2-384,
+                         "RSA-SHA2-384:RSA-SHA384:sha384WithRSAEncryption:"
+                         "1.2.840.113549.1.1.12"),
+    IBMCA_DEF_RSA_SIGALG(sha512, SHA2-512,
+                         "RSA-SHA2-512:RSA-SHA512:sha512WithRSAEncryption:"
+                         "1.2.840.113549.1.1.13"),
+    IBMCA_DEF_RSA_SIGALG(sha512_224, SHA2-512/224,
+                         "RSA-SHA2-512/224:RSA-SHA512-224:"
+                         "sha512-224WithRSAEncryption:1.2.840.113549.1.1.15"),
+    IBMCA_DEF_RSA_SIGALG(sha512_256, SHA2-512/256,
+                         "RSA-SHA2-512/256:RSA-SHA512-256:"
+                         "sha512-256WithRSAEncryption:1.2.840.113549.1.1.16"),
+    IBMCA_DEF_RSA_SIGALG(sha3_224, SHA3-224,
+                         "RSA-SHA3-224:id-rsassa-pkcs1-v1_5-with-sha3-224:"
+                         "2.16.840.1.101.3.4.3.13"),
+    IBMCA_DEF_RSA_SIGALG(sha3_256, SHA3-256,
+                         "RSA-SHA3-256:id-rsassa-pkcs1-v1_5-with-sha3-256:"
+                         "2.16.840.1.101.3.4.3.14"),
+    IBMCA_DEF_RSA_SIGALG(sha3_384, SHA3-384,
+                         "RSA-SHA3-384:id-rsassa-pkcs1-v1_5-with-sha3-384:"
+                         "2.16.840.1.101.3.4.3.15"),
+    IBMCA_DEF_RSA_SIGALG(sha3_512, SHA3-512,
+                         "RSA-SHA3-512:id-rsassa-pkcs1-v1_5-with-sha3-512:"
+                         "2.16.840.1.101.3.4.3.16"),
+#endif
     { NULL, NULL, NULL, NULL }
 };
 

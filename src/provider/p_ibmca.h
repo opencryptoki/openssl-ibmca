@@ -226,6 +226,8 @@ struct ibmca_op_ctx {
                 int saltlen;
                 struct ibmca_pss_params pss;
                 EVP_MD_CTX *md_ctx;
+                unsigned char *signature;
+                size_t signature_len;
             } signature; /* For operation EVP_PKEY_OP_SIGN/VERIFY */
         } rsa; /* For type EVP_PKEY_RSA and EVP_PKEY_RSA_PSS */
         union {
