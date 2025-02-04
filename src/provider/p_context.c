@@ -254,7 +254,13 @@ int ibmca_digest_signverify_update(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
 
     if (ctx->key == NULL || md_ctx == NULL ||
         (ctx->operation != EVP_PKEY_OP_SIGNCTX &&
+#ifdef EVP_PKEY_OP_SIGNMSG
+         ctx->operation != EVP_PKEY_OP_VERIFYCTX &&
+         ctx->operation != EVP_PKEY_OP_SIGNMSG &&
+         ctx->operation != EVP_PKEY_OP_VERIFYMSG)) {
+#else
          ctx->operation != EVP_PKEY_OP_VERIFYCTX)) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "sign operation not initialized");
         return 0;
@@ -283,7 +289,12 @@ int ibmca_digest_sign_final(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
                        ctx, ctx->key, sigsize);
 
     if (ctx->key == NULL || md_ctx == NULL ||
+#ifdef EVP_PKEY_OP_SIGNMSG
+        (ctx->operation != EVP_PKEY_OP_SIGNCTX &&
+         ctx->operation != EVP_PKEY_OP_SIGNMSG)) {
+#else
         ctx->operation != EVP_PKEY_OP_SIGNCTX) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "sign operation not initialized");
         return 0;
@@ -321,7 +332,12 @@ int ibmca_digest_verify_final(struct ibmca_op_ctx *ctx, EVP_MD_CTX *md_ctx,
                        ctx, ctx->key, siglen);
 
     if (ctx->key == NULL || md_ctx == NULL ||
+#ifdef EVP_PKEY_OP_SIGNMSG
+        (ctx->operation != EVP_PKEY_OP_VERIFYCTX &&
+         ctx->operation != EVP_PKEY_OP_VERIFYMSG)) {
+#else
         ctx->operation != EVP_PKEY_OP_VERIFYCTX) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "verify operation not initialized");
         return 0;

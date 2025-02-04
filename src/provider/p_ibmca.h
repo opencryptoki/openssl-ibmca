@@ -242,6 +242,8 @@ struct ibmca_op_ctx {
                 size_t md_size;
                 EVP_MD_CTX *md_ctx;
                 unsigned int nonce_type;
+                unsigned char *signature;
+                size_t signature_len;
             } signature; /* For operation EVP_PKEY_OP_SIGN/VERIFY */
             struct {
                 struct ibmca_key *peer_key;

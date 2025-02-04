@@ -64,10 +64,29 @@ static OSSL_FUNC_signature_set_ctx_md_params_fn
                                ibmca_signature_ec_set_ctx_md_params;
 static OSSL_FUNC_signature_settable_ctx_md_params_fn
                                 ibmca_signature_ec_settable_ctx_md_params;
+#ifdef EVP_PKEY_OP_SIGNMSG
+static OSSL_FUNC_signature_sign_message_update_fn
+                                ibmca_signature_ec_signverify_message_update;
+static OSSL_FUNC_signature_sign_message_final_fn
+                                ibmca_signature_ec_sign_message_final;
+static OSSL_FUNC_signature_verify_message_final_fn
+                                ibmca_signature_ec_verify_message_final;
+static OSSL_FUNC_signature_query_key_types_fn
+                                ibmca_signature_ec_query_key_types;
+#endif
 
 static void ibmca_signature_ec_free_cb(struct ibmca_op_ctx *ctx);
 static int ibmca_signature_ec_dup_cb(const struct ibmca_op_ctx *ctx,
                                      struct ibmca_op_ctx *new_ctx);
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+static const char *ibmca_signature_ec_keytypes[] = { "EC", NULL };
+
+static const char **ibmca_signature_ec_query_key_types(void)
+{
+    return ibmca_signature_ec_keytypes;
+}
+#endif
 
 static void*ibmca_signature_ec_newctx(void *vprovctx, const char *propq)
 {
@@ -111,6 +130,11 @@ static void ibmca_signature_ec_free_cb(struct ibmca_op_ctx *ctx)
     ctx->ec.signature.md_ctx = NULL;
 
     ctx->ec.signature.nonce_type = 0;
+
+    if (ctx->ec.signature.signature != NULL)
+        P_FREE(ctx->provctx, ctx->ec.signature.signature);
+    ctx->ec.signature.signature = NULL;
+    ctx->ec.signature.signature_len = 0;
 }
 
 static int ibmca_signature_ec_dup_cb(const struct ibmca_op_ctx *ctx,
@@ -145,6 +169,20 @@ static int ibmca_signature_ec_dup_cb(const struct ibmca_op_ctx *ctx,
     }
 
     new_ctx->ec.signature.nonce_type = ctx->ec.signature.nonce_type;
+
+    new_ctx->ec.signature.signature_len = 0;
+    new_ctx->ec.signature.signature = NULL;
+    if (ctx->ec.signature.signature != NULL) {
+        new_ctx->ec.signature.signature = P_MEMDUP(ctx->provctx,
+                                               ctx->ec.signature.signature,
+                                               ctx->ec.signature.signature_len);
+        if (new_ctx->ec.signature.signature == NULL) {
+            put_error_op_ctx(ctx, IBMCA_ERR_MALLOC_FAILED,
+                             "P_MEMDUP failed");
+            return 0;
+        }
+        new_ctx->ec.signature.signature_len = ctx->ec.signature.signature_len;
+    }
 
     return 1;
 }
@@ -224,6 +262,10 @@ static int ibmca_signature_ec_op_init(struct ibmca_op_ctx *ctx,
     switch (operation) {
     case EVP_PKEY_OP_SIGNCTX:
     case EVP_PKEY_OP_VERIFYCTX:
+#ifdef EVP_PKEY_OP_SIGNMSG
+    case EVP_PKEY_OP_SIGNMSG:
+    case EVP_PKEY_OP_VERIFYMSG:
+#endif
         ctx->ec.signature.md_ctx = EVP_MD_CTX_new();
         if (ctx->ec.signature.md_ctx == NULL) {
             put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
@@ -369,11 +411,27 @@ static int ibmca_signature_ec_sign(void *vctx,
 
     if (ctx->key == NULL ||
         (ctx->operation != EVP_PKEY_OP_SIGN &&
+#ifdef EVP_PKEY_OP_SIGNMSG
+         ctx->operation != EVP_PKEY_OP_SIGNCTX &&
+         ctx->operation != EVP_PKEY_OP_SIGNMSG)) {
+#else
          ctx->operation != EVP_PKEY_OP_SIGNCTX)) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "sign operation not initialized");
         return 0;
     }
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+     if (ctx->operation == EVP_PKEY_OP_SIGNMSG) {
+         rc = ibmca_signature_ec_signverify_message_update(ctx, tbs, tbslen);
+         if (rc != 1)
+             goto out;
+
+         rc = ibmca_signature_ec_sign_message_final(ctx, sig, siglen, sigsize);
+         goto out;
+     }
+#endif
 
     *siglen = ctx->key->get_max_param_size(ctx->key);
 
@@ -534,6 +592,9 @@ static int ibmca_signature_ec_verify(void *vctx,
     const unsigned char *p;
     unsigned char *der = NULL;
     int derlen = -1;
+#ifdef EVP_PKEY_OP_SIGNMSG
+    OSSL_PARAM params[2];
+#endif
     int rc = -1;
 
     if (ctx == NULL || sig == NULL || tbs == NULL)
@@ -544,11 +605,36 @@ static int ibmca_signature_ec_verify(void *vctx,
 
     if (ctx->key == NULL ||
         (ctx->operation != EVP_PKEY_OP_VERIFY &&
+#ifdef EVP_PKEY_OP_SIGNMSG
+         ctx->operation != EVP_PKEY_OP_VERIFYCTX &&
+         ctx->operation != EVP_PKEY_OP_VERIFYMSG)) {
+#else
          ctx->operation != EVP_PKEY_OP_VERIFYCTX)) {
+#endif
         put_error_op_ctx(ctx, IBMCA_ERR_INTERNAL_ERROR,
                          "verify operation not initialized");
         return -1;
     }
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+    if (ctx->operation == EVP_PKEY_OP_VERIFYMSG) {
+        params[0] = OSSL_PARAM_construct_octet_string(
+                                          OSSL_SIGNATURE_PARAM_SIGNATURE,
+                                          (unsigned char *)sig, siglen);
+        params[1] = OSSL_PARAM_construct_end();
+
+        rc = ibmca_signature_ec_set_ctx_params(ctx, params);
+        if (rc != 1)
+            goto out;
+
+        rc = ibmca_signature_ec_signverify_message_update(ctx, tbs, tbslen);
+        if (rc != 1)
+            goto out;
+
+        rc = ibmca_signature_ec_verify_message_final(ctx);
+        goto out;
+    }
+#endif
 
     if (ctx->ec.signature.md_size != 0) {
         if (tbslen != ctx->ec.signature.md_size) {
@@ -754,6 +840,10 @@ static int ibmca_signature_ec_set_ctx_params(void *vctx,
     const OSSL_PARAM *p;
     const char *name, *props = NULL;
     size_t md_size;
+#ifdef EVP_PKEY_OP_SIGNMSG
+    size_t len;
+    unsigned char *ptr = NULL;
+#endif
     int rc;
 
     if (ctx == NULL)
@@ -763,33 +853,61 @@ static int ibmca_signature_ec_set_ctx_params(void *vctx,
     for (p = params; p != NULL && p->key != NULL; p++)
         ibmca_debug_op_ctx(ctx, "param: %s", p->key);
 
-    /* OSSL_SIGNATURE_PARAM_PROPERTIES */
-    rc = ibmca_param_get_utf8(ctx->provctx, params,
-                              OSSL_SIGNATURE_PARAM_PROPERTIES, &props);
-    if (rc == 0)
-        return 0;
-
-    /* OSSL_SIGNATURE_PARAM_DIGEST */
-    rc = ibmca_param_get_utf8(ctx->provctx, params,
-                              OSSL_SIGNATURE_PARAM_DIGEST, &name);
-    if (rc == 0)
-        return 0;
-    if (rc > 0 &&
-        ibmca_signature_ec_set_md(ctx, name, 0, props) == 0)
-        return 0;
-
-    /* OSSL_SIGNATURE_PARAM_DIGEST_SIZE */
-    rc = ibmca_param_get_size_t(ctx->provctx, params,
-                                OSSL_SIGNATURE_PARAM_DIGEST_SIZE, &md_size);
-    if (rc == 0)
-        return 0;
-    if (rc > 0) {
-        if (!ctx->ec.signature.set_md_allowed) {
-            put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
-                             "Digest size not allowed to be set in the current state");
+    switch (ctx->operation) {
+    case EVP_PKEY_OP_SIGN:
+    case EVP_PKEY_OP_VERIFY:
+    case EVP_PKEY_OP_VERIFYRECOVER:
+    case EVP_PKEY_OP_SIGNCTX:
+    case EVP_PKEY_OP_VERIFYCTX:
+        /* OSSL_SIGNATURE_PARAM_PROPERTIES */
+        rc = ibmca_param_get_utf8(ctx->provctx, params,
+                                  OSSL_SIGNATURE_PARAM_PROPERTIES, &props);
+        if (rc == 0)
             return 0;
+
+        /* OSSL_SIGNATURE_PARAM_DIGEST */
+        rc = ibmca_param_get_utf8(ctx->provctx, params,
+                                  OSSL_SIGNATURE_PARAM_DIGEST, &name);
+        if (rc == 0)
+            return 0;
+        if (rc > 0 &&
+            ibmca_signature_ec_set_md(ctx, name, 0, props) == 0)
+            return 0;
+
+        /* OSSL_SIGNATURE_PARAM_DIGEST_SIZE */
+        rc = ibmca_param_get_size_t(ctx->provctx, params,
+                                    OSSL_SIGNATURE_PARAM_DIGEST_SIZE, &md_size);
+        if (rc == 0)
+            return 0;
+        if (rc > 0) {
+            if (!ctx->ec.signature.set_md_allowed) {
+                put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                                 "Digest size not allowed to be set in the "
+                                 "current state");
+                return 0;
+            }
+            ctx->ec.signature.md_size = md_size;
         }
-        ctx->ec.signature.md_size = md_size;
+        break;
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+    case EVP_PKEY_OP_SIGNMSG:
+    case EVP_PKEY_OP_VERIFYMSG:
+        /* OSSL_SIGNATURE_PARAM_SIGNATURE */
+        rc = ibmca_param_get_octet_string(ctx->provctx, params,
+                                          OSSL_SIGNATURE_PARAM_SIGNATURE,
+                                          (void **)&ptr, &len);
+        if (rc == 0)
+            return 0;
+        if (rc > 0) {
+            if (ctx->ec.signature.signature != NULL)
+                P_CLEAR_FREE(ctx->provctx, ctx->ec.signature.signature,
+                        ctx->ec.signature.signature_len);
+            ctx->ec.signature.signature = ptr;
+            ctx->ec.signature.signature_len = len;
+        }
+        break;
+#endif
     }
 
 #ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
@@ -844,6 +962,16 @@ static const OSSL_PARAM ibmca_signature_ec_settable_params_no_digest[] = {
     OSSL_PARAM_END
 };
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+static const OSSL_PARAM ibmca_signature_ec_sigalg_settable_params[] = {
+    OSSL_PARAM_octet_string(OSSL_SIGNATURE_PARAM_SIGNATURE, NULL, 0),
+#ifdef OSSL_SIGNATURE_PARAM_NONCE_TYPE
+    OSSL_PARAM_uint(OSSL_SIGNATURE_PARAM_NONCE_TYPE, NULL),
+#endif
+    OSSL_PARAM_END
+};
+#endif
+
 static const OSSL_PARAM *ibmca_signature_ec_settable_ctx_params(
                                                 void *vctx, void *vprovctx)
 {
@@ -853,7 +981,15 @@ static const OSSL_PARAM *ibmca_signature_ec_settable_ctx_params(
 
     ibmca_debug_ctx(provctx, "ctx: %p", ctx);
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+    if (ctx != NULL && ctx->operation == EVP_PKEY_OP_VERIFYMSG)
+        params = ibmca_signature_ec_sigalg_settable_params;
+    else if (ctx != NULL && ctx->operation == EVP_PKEY_OP_SIGNMSG)
+        params = NULL;
+    else if (ctx == NULL || ctx->ec.signature.set_md_allowed)
+#else
     if (ctx == NULL || ctx->ec.signature.set_md_allowed)
+#endif
         params = ibmca_signature_ec_settable_params;
     else
         params = ibmca_signature_ec_settable_params_no_digest;
@@ -863,6 +999,50 @@ static const OSSL_PARAM *ibmca_signature_ec_settable_ctx_params(
 
     return params;
 }
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+static int ibmca_signature_ec_signverify_message_update(void *vctx,
+                                            const unsigned char *data,
+                                            size_t datalen)
+{
+    struct ibmca_op_ctx *ctx = vctx;
+
+    return ibmca_digest_signverify_update(ctx, ctx->ec.signature.md_ctx,
+                                          data, datalen);
+}
+
+static int ibmca_signature_ec_sign_message_final(void *vctx,
+                                                 unsigned char *sig,
+                                                 size_t *siglen,
+                                                 size_t sigsize)
+{
+    struct ibmca_op_ctx *ctx = vctx;
+    int rc;
+
+    ctx->operation = EVP_PKEY_OP_SIGNCTX;
+    rc = ibmca_digest_sign_final(ctx, ctx->ec.signature.md_ctx,
+                                 ibmca_signature_ec_sign,
+                                sig, siglen, sigsize);
+    ctx->operation = EVP_PKEY_OP_SIGNMSG;
+
+    return rc;
+}
+
+static int ibmca_signature_ec_verify_message_final(void *vctx)
+{
+    struct ibmca_op_ctx *ctx = vctx;
+    int rc;
+
+    ctx->operation = EVP_PKEY_OP_VERIFYCTX;
+    rc = ibmca_digest_verify_final(ctx, ctx->ec.signature.md_ctx,
+                                   ibmca_signature_ec_verify,
+                                   ctx->ec.signature.signature,
+                                   ctx->ec.signature.signature_len);
+    ctx->operation = EVP_PKEY_OP_VERIFYMSG;
+
+    return rc;
+}
+#endif
 
 static int ibmca_signature_ec_digest_sign_init(void *vctx, const char *mdname,
                                                void *vkey,
@@ -996,8 +1176,150 @@ static const OSSL_DISPATCH ibmca_ecdsa_signature_functions[] = {
     { 0, NULL }
 };
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+#define IBMCA_IMPL_ECDSA_SIGALG(md, MD)                                        \
+    static OSSL_FUNC_signature_sign_init_fn                                    \
+                     ibmca_signature_ec_##md##_sign_init;                      \
+    static OSSL_FUNC_signature_verify_init_fn                                  \
+                     ibmca_signature_ec_##md##_verify_init;                    \
+    static OSSL_FUNC_signature_sign_message_init_fn                            \
+                     ibmca_signature_ec_##md##_sign_message_init;              \
+    static OSSL_FUNC_signature_verify_message_init_fn                          \
+                     ibmca_signature_ec_##md##_verify_message_init;            \
+                                                                               \
+    static int ibmca_signature_ec_##md##_sign_init(void *vctx, void *vkey,     \
+                                                   const OSSL_PARAM params[])  \
+    {                                                                          \
+        struct ibmca_op_ctx *ctx = vctx;                                       \
+        struct ibmca_key *key = vkey;                                          \
+                                                                               \
+        return ibmca_signature_ec_op_init(ctx, key, params,                    \
+                                          EVP_PKEY_OP_SIGN, #MD);              \
+    }                                                                          \
+                                                                               \
+    static int ibmca_signature_ec_##md##_verify_init(void *vctx, void *vkey,   \
+                                                     const OSSL_PARAM params[])\
+    {                                                                          \
+        struct ibmca_op_ctx *ctx = vctx;                                       \
+        struct ibmca_key *key = vkey;                                          \
+                                                                               \
+        return ibmca_signature_ec_op_init(ctx, key, params,                    \
+                                          EVP_PKEY_OP_VERIFY, #MD);            \
+    }                                                                          \
+                                                                               \
+    static int ibmca_signature_ec_##md##_sign_message_init(                    \
+                                                    void *vctx, void *vkey,    \
+                                                    const OSSL_PARAM params[]) \
+    {                                                                          \
+        struct ibmca_op_ctx *ctx = vctx;                                       \
+        struct ibmca_key *key = vkey;                                          \
+                                                                               \
+        return ibmca_signature_ec_op_init(ctx, key, params,                    \
+                                          EVP_PKEY_OP_SIGNMSG, #MD);           \
+    }                                                                          \
+                                                                               \
+       static int ibmca_signature_ec_##md##_verify_message_init(               \
+                                                    void *vctx, void *vkey,    \
+                                                    const OSSL_PARAM params[]) \
+       {                                                                       \
+           struct ibmca_op_ctx *ctx = vctx;                                    \
+           struct ibmca_key *key = vkey;                                       \
+                                                                               \
+           return ibmca_signature_ec_op_init(ctx, key, params,                 \
+                                             EVP_PKEY_OP_VERIFYMSG, #MD);      \
+       }                                                                       \
+                                                                               \
+    static const OSSL_DISPATCH ibmca_ecdsa_##md##_signature_functions[] = {    \
+        /* Signature context constructor, destructor */                        \
+        { OSSL_FUNC_SIGNATURE_NEWCTX,                                          \
+                (void (*)(void))ibmca_signature_ec_newctx },                   \
+        { OSSL_FUNC_SIGNATURE_FREECTX, (void (*)(void))ibmca_op_freectx },     \
+        { OSSL_FUNC_SIGNATURE_DUPCTX, (void (*)(void))ibmca_op_dupctx },       \
+        { OSSL_FUNC_SIGNATURE_QUERY_KEY_TYPES,                                 \
+                (void (*)(void))ibmca_signature_ec_query_key_types },          \
+        /* Signing */                                                          \
+        { OSSL_FUNC_SIGNATURE_SIGN_INIT,                                       \
+                (void (*)(void))ibmca_signature_ec_##md##_sign_init },         \
+        { OSSL_FUNC_SIGNATURE_SIGN,                                            \
+                (void (*)(void))ibmca_signature_ec_sign },                     \
+        /* Verifying */                                                        \
+        { OSSL_FUNC_SIGNATURE_VERIFY_INIT,                                     \
+                (void (*)(void))ibmca_signature_ec_##md##_verify_init },       \
+        { OSSL_FUNC_SIGNATURE_VERIFY,                                          \
+                (void (*)(void))ibmca_signature_ec_verify },                   \
+        /* Sign Message */                                                     \
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_INIT,                               \
+                (void (*)(void))ibmca_signature_ec_##md##_sign_message_init }, \
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_UPDATE,                             \
+                (void (*)(void))ibmca_signature_ec_signverify_message_update },\
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_FINAL,                              \
+                (void (*)(void))ibmca_signature_ec_sign_message_final },       \
+        /* Verify Message */                                                   \
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_INIT,                             \
+               (void (*)(void))ibmca_signature_ec_##md##_verify_message_init },\
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_UPDATE,                           \
+                (void (*)(void))ibmca_signature_ec_signverify_message_update },\
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_FINAL,                            \
+                (void (*)(void))ibmca_signature_ec_verify_message_final },     \
+        /* Signature parameters */                                             \
+        { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,                                  \
+                (void (*)(void))ibmca_signature_ec_get_ctx_params },           \
+        { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,                             \
+                (void (*)(void))ibmca_signature_ec_gettable_ctx_params },      \
+        { OSSL_FUNC_SIGNATURE_SET_CTX_PARAMS,                                  \
+                (void (*)(void))ibmca_signature_ec_set_ctx_params },           \
+        { OSSL_FUNC_SIGNATURE_SETTABLE_CTX_PARAMS,                             \
+               (void (*)(void))ibmca_signature_ec_settable_ctx_params },       \
+        { 0, NULL }                                                            \
+    }
+
+#define IBMCA_DEF_ECDSA_SIGALG(md, MD, names)                                  \
+    { names, NULL, ibmca_ecdsa_##md##_signature_functions,                     \
+      "IBMCA ECDSA " #MD " implementation" }
+
+IBMCA_IMPL_ECDSA_SIGALG(sha1, SHA1);
+IBMCA_IMPL_ECDSA_SIGALG(sha224, SHA2-224);
+IBMCA_IMPL_ECDSA_SIGALG(sha256, SHA2-256);
+IBMCA_IMPL_ECDSA_SIGALG(sha384, SHA2-384);
+IBMCA_IMPL_ECDSA_SIGALG(sha512, SHA2-512);
+IBMCA_IMPL_ECDSA_SIGALG(sha3_224, SHA3-224);
+IBMCA_IMPL_ECDSA_SIGALG(sha3_256, SHA3-256);
+IBMCA_IMPL_ECDSA_SIGALG(sha3_384, SHA3-384);
+IBMCA_IMPL_ECDSA_SIGALG(sha3_512, SHA3-512);
+
+#endif
+
 const OSSL_ALGORITHM ibmca_ec_signature[] = {
     { "ECDSA", NULL, ibmca_ecdsa_signature_functions,
       "IBMCA ECDSA implementation" },
+#ifdef EVP_PKEY_OP_SIGNMSG
+    IBMCA_DEF_ECDSA_SIGALG(sha1, SHA1,
+                           "ECDSA-SHA1:ECDSA-SHA-1:ecdsa-with-SHA1:"
+                           "1.2.840.10045.4.1"),
+    IBMCA_DEF_ECDSA_SIGALG(sha224, SHA2-224,
+                           "ECDSA-SHA2-224:ECDSA-SHA224:ecdsa-with-SHA224:"
+                           "1.2.840.10045.4.3.1"),
+    IBMCA_DEF_ECDSA_SIGALG(sha256, SHA2-256,
+                           "ECDSA-SHA2-256:ECDSA-SHA256:ecdsa-with-SHA256:"
+                           "1.2.840.10045.4.3.2"),
+    IBMCA_DEF_ECDSA_SIGALG(sha384, SHA2-384,
+                           "ECDSA-SHA2-384:ECDSA-SHA384:ecdsa-with-SHA384:"
+                           "1.2.840.10045.4.3.3"),
+    IBMCA_DEF_ECDSA_SIGALG(sha512, SHA2-512,
+                           "ECDSA-SHA2-512:ECDSA-SHA512:ecdsa-with-SHA512:"
+                           "1.2.840.10045.4.3.4"),
+    IBMCA_DEF_ECDSA_SIGALG(sha3_224, SHA3-224,
+                           "ECDSA-SHA3-224:ecdsa_with_SHA3-224:"
+                           "id-ecdsa-with-sha3-224:2.16.840.1.101.3.4.3.9"),
+    IBMCA_DEF_ECDSA_SIGALG(sha3_256, SHA3-256,
+                           "ECDSA-SHA3-256:ecdsa_with_SHA3-256:"
+                           "id-ecdsa-with-sha3-256:2.16.840.1.101.3.4.3.10"),
+    IBMCA_DEF_ECDSA_SIGALG(sha3_384, SHA3-384,
+                           "ECDSA-SHA3-384:ecdsa_with_SHA3-384:"
+                           "id-ecdsa-with-sha3-384:2.16.840.1.101.3.4.3.11"),
+    IBMCA_DEF_ECDSA_SIGALG(sha3_512, SHA3-512,
+                           "ECDSA-SHA3-512:ecdsa_with_SHA3-512:"
+                           "id-ecdsa-with-sha3-512:2.16.840.1.101.3.4.3.12"),
+#endif
     { NULL, NULL, NULL, NULL }
 };
