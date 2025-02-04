@@ -352,6 +352,366 @@ out:
     return ok;
 }
 
+#ifdef EVP_PKEY_OP_SIGNMSG
+static int sign_message(const char* provider, EVP_PKEY *ec_pkey,
+                        const char *alg_name, const unsigned char *tbs,
+                        size_t tbs_len, unsigned char *sig, size_t *sig_len)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_SIGNATURE *alg = NULL;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, ec_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    alg = EVP_SIGNATURE_fetch(NULL, alg_name, props);
+    if (alg == NULL) {
+        fprintf(stderr, "EVP_SIGNATURE_fetch for %s failed\n", alg_name);
+        goto out;
+    }
+
+    if (EVP_PKEY_sign_message_init(ctx, alg, NULL) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign_message_init failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+    if (EVP_PKEY_sign_message_update(ctx, tbs, tbs_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign_message_update (1) failed\n");
+        ctx = NULL;
+        goto out;
+    }
+
+    if (EVP_PKEY_sign_message_update(ctx, tbs, tbs_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign_message_update (2) failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_sign_message_final(ctx, sig, sig_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign_message_final failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (alg != NULL)
+        EVP_SIGNATURE_free(alg);
+
+    return ok;
+}
+
+static int verify_message(const char* provider, const char *curvename,
+                          EVP_PKEY *ec_pkey, const char *alg_name,
+                          const unsigned char *tbs, size_t tbs_len,
+                          unsigned char *sig, size_t sig_len)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_SIGNATURE *alg = NULL;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, ec_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    alg = EVP_SIGNATURE_fetch(NULL, alg_name, props);
+    if (alg == NULL) {
+        fprintf(stderr, "EVP_SIGNATURE_fetch for %s failed\n", alg_name);
+        goto out;
+    }
+
+    if (EVP_PKEY_verify_message_init(ctx, alg, NULL) <= 0) {
+        fprintf(stderr, "EVP_PKEY_verify_message_init failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+
+    if (EVP_PKEY_CTX_set_signature(ctx, sig, sig_len) != 1) {
+        fprintf(stderr, "EVP_PKEY_CTX_set_signature failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_verify_message_update(ctx, tbs, tbs_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_verify_message_update (1) failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_verify_message_update(ctx, tbs, tbs_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_verify_message_update (2) failed\n");
+        goto out;
+    }
+
+    ok = EVP_PKEY_verify_message_final(ctx);
+    if (ok == -1) {
+        /* error */
+        fprintf(stderr, "Failed to verify-message signature with %s (%s provider)\n",
+                curvename, provider != NULL ? provider : "default");
+        ok = 0;
+        goto out;
+    } else if (ok == 0) {
+        /* incorrect signature */
+        fprintf(stderr, "Message-Signature incorrect with %s (%s provider)\n",
+                curvename, provider != NULL ? provider : "default");
+        goto out;
+    } else {
+        /* signature ok */
+        printf("Message-Signature correct with %s (%s provider)\n", curvename,
+                provider != NULL ? provider : "default");
+        ok = 1;
+    }
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (alg != NULL)
+        EVP_SIGNATURE_free(alg);
+
+    return ok;
+}
+
+static int sign_message_single(const char* provider, EVP_PKEY *ec_pkey,
+                               const char *alg_name, const unsigned char *tbs,
+                               size_t tbs_len, unsigned char *sig,
+                               size_t *sig_len)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_SIGNATURE *alg = NULL;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, ec_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    alg = EVP_SIGNATURE_fetch(NULL, alg_name, props);
+    if (alg == NULL) {
+        fprintf(stderr, "EVP_SIGNATURE_fetch for %s failed\n", alg_name);
+        goto out;
+    }
+
+    if (EVP_PKEY_sign_message_init(ctx, alg, NULL) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign_message_init failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+    if (EVP_PKEY_sign(ctx, sig, sig_len, tbs, tbs_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (alg != NULL)
+        EVP_SIGNATURE_free(alg);
+
+    return ok;
+}
+
+static int verify_message_single(const char* provider, const char *curvename,
+                                 EVP_PKEY *ec_pkey, const char *alg_name,
+                                 const unsigned char *tbs, size_t tbs_len,
+                                 unsigned char *sig, size_t sig_len)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_SIGNATURE *alg = NULL;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, ec_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    alg = EVP_SIGNATURE_fetch(NULL, alg_name, props);
+    if (alg == NULL) {
+        fprintf(stderr, "EVP_SIGNATURE_fetch for %s failed\n", alg_name);
+        goto out;
+    }
+
+    if (EVP_PKEY_verify_message_init(ctx, alg, NULL) <= 0) {
+        fprintf(stderr, "EVP_PKEY_verify_message_init failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+
+    ok = EVP_PKEY_verify(ctx, sig, sig_len, tbs, tbs_len);
+    if (ok == -1) {
+        /* error */
+        fprintf(stderr, "Failed to verify-message-single signature with %s (%s provider)\n",
+                curvename, provider != NULL ? provider : "default");
+        ok = 0;
+        goto out;
+    } else if (ok == 0) {
+        /* incorrect signature */
+        fprintf(stderr, "Message-Signature single incorrect with %s (%s provider)\n",
+                curvename, provider != NULL ? provider : "default");
+        goto out;
+    } else {
+        /* signature ok */
+        printf("Message-Signature single correct with %s (%s provider)\n", curvename,
+                provider != NULL ? provider : "default");
+        ok = 1;
+    }
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (alg != NULL)
+        EVP_SIGNATURE_free(alg);
+
+    return ok;
+}
+
+static int sign_message_prehashed(const char* provider, EVP_PKEY *ec_pkey,
+                                  const char *alg_name,
+                                  const unsigned char *tbs, size_t tbs_len,
+                                  unsigned char *sig, size_t *sig_len)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_SIGNATURE *alg = NULL;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, ec_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    alg = EVP_SIGNATURE_fetch(NULL, alg_name, props);
+    if (alg == NULL) {
+        fprintf(stderr, "EVP_SIGNATURE_fetch for %s failed\n", alg_name);
+        goto out;
+    }
+
+    if (EVP_PKEY_sign_init_ex2(ctx, alg, NULL) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign_init_ex2 failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+    if (EVP_PKEY_sign(ctx, sig, sig_len, tbs, tbs_len) <= 0) {
+        fprintf(stderr, "EVP_PKEY_sign failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (alg != NULL)
+        EVP_SIGNATURE_free(alg);
+
+    return ok;
+}
+
+static int verify_message_prehashed(const char* provider, const char *curvename,
+                                    EVP_PKEY *ec_pkey, const char *alg_name,
+                                    const unsigned char *tbs, size_t tbs_len,
+                                    unsigned char *sig, size_t sig_len)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    EVP_SIGNATURE *alg = NULL;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, ec_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    alg = EVP_SIGNATURE_fetch(NULL, alg_name, props);
+    if (alg == NULL) {
+        fprintf(stderr, "EVP_SIGNATURE_fetch for %s failed\n", alg_name);
+        goto out;
+    }
+
+    if (EVP_PKEY_verify_init_ex2(ctx, alg, NULL) <= 0) {
+        fprintf(stderr, "EVP_PKEY_verify_init_ex2 failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+
+    ok = EVP_PKEY_verify(ctx, sig, sig_len, tbs, tbs_len);
+    if (ok == -1) {
+        /* error */
+        fprintf(stderr, "Failed to verify-message-prehashed signature with %s (%s provider)\n",
+                curvename, provider != NULL ? provider : "default");
+        ok = 0;
+        goto out;
+    } else if (ok == 0) {
+        /* incorrect signature */
+        fprintf(stderr, "Message-Signature prehashed incorrect with %s (%s provider)\n",
+                curvename, provider != NULL ? provider : "default");
+        goto out;
+    } else {
+        /* signature ok */
+        printf("Message-Signature prehashed correct with %s (%s provider)\n", curvename,
+                provider != NULL ? provider : "default");
+        ok = 1;
+    }
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (alg != NULL)
+        EVP_SIGNATURE_free(alg);
+
+    return ok;
+}
+#endif
+
 static int derive_key(const char* provider, EVP_PKEY *ec_pkey,
                       EVP_PKEY *peer_pkey, int kdf, const char *kdf_md,
                       size_t kdf_outlen, unsigned char *derived_key,
@@ -555,6 +915,58 @@ static int check_eckey(int nid, const char *curvename)
     } else {
         printf("Deterministic signature is correct\n");
     }
+#endif
+
+#ifdef EVP_PKEY_OP_SIGNMSG
+    /* SignMessage with IBMCA provider */
+    siglen = sizeof(sigbuf);
+    if (!sign_message("ibmca", ec_pkey, "ECDSA-SHA256",
+                      digest, sizeof(digest), sigbuf, &siglen))
+        goto out;
+
+    /* VerifyMessage with default provider */
+    if (!verify_message(NULL, curvename, ec_pkey, "ECDSA-SHA256",
+                        digest, sizeof(digest), sigbuf, siglen))
+        goto out;
+
+    /* VerifyMessage with IBMCA provider */
+    if (!verify_message("ibmca", curvename, ec_pkey, "ECDSA-SHA256",
+                        digest, sizeof(digest), sigbuf, siglen))
+        goto out;
+
+
+    /* SignMessage one-shot with IBMCA provider */
+    siglen = sizeof(sigbuf);
+    if (!sign_message_single("ibmca", ec_pkey, "ECDSA-SHA256",
+                             digest, sizeof(digest), sigbuf, &siglen))
+        goto out;
+
+    /* VerifyMessage one-shot with default provider */
+    if (!verify_message_single(NULL, curvename, ec_pkey, "ECDSA-SHA256",
+                               digest, sizeof(digest), sigbuf, siglen))
+        goto out;
+
+    /* VerifyMessage one-shot with IBMCA provider */
+    if (!verify_message_single("ibmca", curvename, ec_pkey, "ECDSA-SHA256",
+                               digest, sizeof(digest), sigbuf, siglen))
+        goto out;
+
+
+    /* Sign pre-hashed message with IBMCA provider */
+    siglen = sizeof(sigbuf);
+    if (!sign_message_prehashed("ibmca", ec_pkey, "ECDSA-SHA256",
+                                digest, sizeof(digest), sigbuf, &siglen))
+        goto out;
+
+    /* Verify pre-hashed message with default provider */
+    if (!verify_message_prehashed(NULL, curvename, ec_pkey, "ECDSA-SHA256",
+                                  digest, sizeof(digest), sigbuf, siglen))
+        goto out;
+
+    /* Verify pre-hashed message with IBMCA provider */
+    if (!verify_message_prehashed("ibmca", curvename, ec_pkey, "ECDSA-SHA256",
+                                  digest, sizeof(digest), sigbuf, siglen))
+        goto out;
 #endif
 
     /* Keygen with IBMCA provider (using ec_pkey as template) */
