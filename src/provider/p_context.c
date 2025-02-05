@@ -392,9 +392,10 @@ const OSSL_PARAM *ibmca_gettable_ctx_md_params(const struct ibmca_op_ctx *ctx,
     ibmca_debug_op_ctx(ctx, "ctx: %p", ctx);
 
     if (md == NULL) {
-        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
-                         "Digest sign/verify context not initialized");
-        return 0;
+        if (ctx != NULL)
+            put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                             "Digest sign/verify context not initialized");
+        return NULL;
     }
 
     params = EVP_MD_gettable_ctx_params(md);
@@ -413,9 +414,10 @@ const OSSL_PARAM *ibmca_settable_ctx_md_params(const struct ibmca_op_ctx *ctx,
     ibmca_debug_op_ctx(ctx, "ctx: %p", ctx);
 
     if (md == NULL) {
-        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
-                         "Digest sign/verify context not initialized");
-        return 0;
+        if (ctx != NULL)
+            put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                            "Digest sign/verify context not initialized");
+        return NULL;
     }
 
     params = EVP_MD_settable_ctx_params(md);
