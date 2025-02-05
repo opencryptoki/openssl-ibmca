@@ -1814,7 +1814,7 @@ static const OSSL_PARAM *ibmca_signature_rsa_settable_ctx_params(
 
     ibmca_debug_ctx(provctx, "ctx: %p", ctx);
 
-    if (ctx->rsa.signature.set_md_allowed)
+    if (ctx == NULL || ctx->rsa.signature.set_md_allowed)
         params = ibmca_signature_rsa_settable_params;
     else
         params = ibmca_signature_rsa_settable_params_no_digest;
