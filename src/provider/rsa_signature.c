@@ -228,6 +228,13 @@ static int ibmca_signature_rsa_set_md(struct ibmca_op_ctx *ctx,
         return 0;
     }
 
+    if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                         "XOF Digest '%s' is not allowed", mdname);
+        EVP_MD_free(md);
+        return 0;
+    }
+
     if (ctx->key->type == EVP_PKEY_RSA_PSS &&
         ctx->rsa.signature.pss.restricted &&
         EVP_MD_get_type(md) != ctx->rsa.signature.pss.digest_nid) {
@@ -261,6 +268,13 @@ static int ibmca_signature_rsa_set_mgf1_md(struct ibmca_op_ctx *ctx,
     if (md == NULL) {
         put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
                          "Digest '%s' could not be fetched", mdname);
+        return 0;
+    }
+
+    if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                         "XOF Digest '%s' is not allowed", mdname);
+        EVP_MD_free(md);
         return 0;
     }
 

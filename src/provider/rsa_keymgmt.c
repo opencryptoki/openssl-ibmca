@@ -106,6 +106,13 @@ static int ibmca_keymgmt_rsa_pss_parms_from_data(
             return 0;
         }
 
+        if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                          "XOF Digest '%s' is not allowed", name);
+            EVP_MD_free(md);
+            return 0;
+        }
+
         pss->digest_nid = EVP_MD_get_type(md);
         EVP_MD_free(md);
         pss->restricted = true;
@@ -139,6 +146,13 @@ static int ibmca_keymgmt_rsa_pss_parms_from_data(
             put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
                           "RSA PSS '%s'='%s' could not be fetched",
                           OSSL_PKEY_PARAM_RSA_MGF1_DIGEST, name);
+            return 0;
+        }
+
+        if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+            put_error_ctx(provctx, IBMCA_ERR_INVALID_PARAM,
+                          "XOF Digest '%s' is not allowed", name);
+            EVP_MD_free(md);
             return 0;
         }
 

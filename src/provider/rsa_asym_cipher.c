@@ -303,6 +303,15 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
                                   "Failed to fetch default OAEP digest");
                     return 0;
                 }
+
+                if ((EVP_MD_get_flags(ctx->rsa.cipher.oaep_md) &
+                                                        EVP_MD_FLAG_XOF) != 0) {
+                    put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                                     "XOF Digest '%s' is not allowed", name);
+                    EVP_MD_free(ctx->rsa.cipher.oaep_md);
+                    ctx->rsa.cipher.oaep_md = NULL;
+                    return 0;
+                }
             }
             break;
         case RSA_PKCS1_PSS_PADDING: /* PSS is for signatures only */
@@ -337,6 +346,15 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
                               "Invalid RSA OAEP digest: '%s'", name);
             return 0;
         }
+
+        if ((EVP_MD_get_flags(ctx->rsa.cipher.oaep_md) &
+                                                EVP_MD_FLAG_XOF) != 0) {
+            put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                             "XOF Digest '%s' is not allowed", name);
+            EVP_MD_free(ctx->rsa.cipher.oaep_md);
+            ctx->rsa.cipher.oaep_md = NULL;
+            return 0;
+        }
     }
 
     /* OSSL_ASYM_CIPHER_PARAM_MGF1_DIGEST_PROPS */
@@ -359,6 +377,15 @@ static int ibmca_asym_cipher_rsa_set_ctx_params(void *vctx,
         if (ctx->rsa.cipher.mgf1_md == NULL) {
             put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
                               "Invalid RSA MGF1 digest: '%s'", name);
+            return 0;
+        }
+
+        if ((EVP_MD_get_flags(ctx->rsa.cipher.mgf1_md) &
+                                                EVP_MD_FLAG_XOF) != 0) {
+            put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                             "XOF Digest '%s' is not allowed", name);
+            EVP_MD_free(ctx->rsa.cipher.mgf1_md);
+            ctx->rsa.cipher.mgf1_md = NULL;
             return 0;
         }
     }

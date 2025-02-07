@@ -685,6 +685,13 @@ static int ibmca_keyexch_dh_set_ctx_params(void *vctx,
             return 0;
         }
 
+        if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+            put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                             "XOF Digest '%s' is not allowed", name);
+            EVP_MD_free(md);
+            return 0;
+        }
+
         if (ctx->dh.derive.kdf_md != NULL)
             EVP_MD_free(ctx->dh.derive.kdf_md);
         ctx->dh.derive.kdf_md = md;

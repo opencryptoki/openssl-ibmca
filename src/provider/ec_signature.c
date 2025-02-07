@@ -212,6 +212,13 @@ static int ibmca_signature_ec_set_md(struct ibmca_op_ctx *ctx,
         return 0;
     }
 
+    if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+        put_error_op_ctx(ctx, IBMCA_ERR_INVALID_PARAM,
+                         "XOF Digest '%s' is not allowed", mdname);
+        EVP_MD_free(md);
+        return 0;
+    }
+
     if (ctx->ec.signature.md != NULL)
         EVP_MD_free(ctx->ec.signature.md);
 
