@@ -879,7 +879,7 @@ static int ibmca_config_debug(struct ibmca_prov_ctx *provctx,
     if (provctx->debug == true) {
         provctx->debug_pid = getpid();
 
-        strncpy(prov_name, provctx->name, sizeof(prov_name));
+        strncpy(prov_name, provctx->name, sizeof(prov_name) - 1);
         prov_name[sizeof(prov_name) - 1] = '\0';
         while ((p = strchr(prov_name, '/')) != NULL)
             *p = '_';
