@@ -30,9 +30,12 @@ void setup(void)
 #endif
 }
 
+typedef void (*ica_cleanup_t) (void);
+
 int initwithlib(ENGINE *e, const char *lib, int checkexists, int expectedinitval)
 {
     void *hdl;
+    void (*ica_cleanup)(void);
 
     if (checkexists) {
         hdl = dlopen(lib, RTLD_LAZY);
@@ -40,6 +43,9 @@ int initwithlib(ENGINE *e, const char *lib, int checkexists, int expectedinitval
             fprintf(stderr, "Skipping initialization with non-existent library \"%s\"\n", lib);
             return 1;
         }
+        *(void **)(&ica_cleanup) = dlsym(hdl, "ica_cleanup");
+        if (ica_cleanup != NULL)
+            ica_cleanup();
         dlclose(hdl);
     }
     if (ENGINE_ctrl_cmd_string(e, "libica", lib, 0) != 1) {

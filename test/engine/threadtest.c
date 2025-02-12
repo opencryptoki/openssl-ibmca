@@ -145,6 +145,7 @@ int main(int argc, char **argv)
 
     if (setup() != 1) {
         fprintf(stderr, "Failed to set up test.  Skipping...\n");
+        free(threads);
         return 77;
     }
     
@@ -170,5 +171,6 @@ int main(int argc, char **argv)
             }
         }
     }
+    free(threads);
     return errors ? 99 : 0;
 }
