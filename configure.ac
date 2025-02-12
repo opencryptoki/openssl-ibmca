@@ -25,6 +25,11 @@ else
 	CFLAGS="$CFLAGS -O2 -Wall"
 fi
 
+AC_ARG_ENABLE([sanitizer],
+		AS_HELP_STRING([--enable-sanitizer],[enable sanitizer build (may not work in all environments) @<:@default=no@:>@]),
+		[],
+		[enable_sanitizer=no])
+
 AC_ARG_ENABLE([engine],
 		[AS_HELP_STRING([--enable-engine], [build IBMCA engine (OpenSSL 1.1.1, default is yes)])],
 		[if test "x$enableval" = "xyes" ; then
@@ -151,6 +156,19 @@ if test "x$enable_provider" = xyes; then
 fi
 
 AC_CHECK_DECLS([ica_cleanup],,,[#include <ica_api.h>])
+
+if test "x$enable_sanitizer" = "xyes"; then
+	AC_CHECK_LIB([asan], [strcpy], [LDFLAGS="-lasan $LDFLAGS"],
+			[AC_MSG_ERROR(['libasan' library is missing on your system. Please install 'libasan'.])])
+	AC_CHECK_LIB([ubsan], [strcpy], [LDFLAGS="-lubsan $LDFLAGS"],
+			[AC_MSG_ERROR(['libubsan' library is missing on your system. Please install 'libubsan'.])])
+	if test "x$enable_debug" = "xyes"; then
+		CFLAGS="$CFLAGS -O2 -g3 -DDEBUG"
+	fi
+	CFLAGS="$CFLAGS -fstack-protector-all -fsanitize=address,signed-integer-overflow,undefined -Wformat -Wformat-security -Werror=format-security -Warray-bounds -Werror=array-bounds -D_FORTIFY_SOURCE=2"
+	AC_DEFINE([WITH_SANITIZER])
+	AC_MSG_RESULT([*** Enabling sanitizer at user request ***])
+fi
 
 AC_CONFIG_FILES([
 	Makefile
