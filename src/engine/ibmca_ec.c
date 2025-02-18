@@ -337,7 +337,9 @@ int ibmca_ecdh_compute_key(unsigned char **pout, size_t *poutlen,
     }
 
     /* Create ICA_EC_KEY object for private key */
+    ERR_set_mark();
     ica_privkey = ibmca_ec_make_and_cache_ica_key((EC_KEY*)ecdh, &privlen);
+    ERR_pop_to_mark();
     if (ica_privkey == NULL) {
         /* This curve is not supported by libica. */
     #ifdef OLDER_OPENSSL
@@ -502,7 +504,9 @@ ECDSA_SIG *ibmca_ecdsa_sign_sig(const unsigned char *dgst, int dgst_len,
     }
 
     /* Create ICA_EC_KEY object */
+    ERR_set_mark();
     icakey = ibmca_ec_make_and_cache_ica_key(eckey, &privlen);
+    ERR_pop_to_mark();
     if (icakey == NULL) {
         /* This curve is not supported by libica. */
  #ifdef OLDER_OPENSSL
@@ -633,7 +637,9 @@ int ibmca_ecdsa_verify_sig(const unsigned char *dgst, int dgst_len,
     }
 
     /* Create ICA_EC_KEY object */
+    ERR_set_mark();
     icakey = ibmca_ec_make_and_cache_ica_key(eckey, &privlen);
+    ERR_pop_to_mark();
     if (icakey == NULL) {
         /* This curve is not supported by libica. */
  #ifdef OLDER_OPENSSL
