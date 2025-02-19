@@ -17,6 +17,7 @@
 
 #include <stdlib.h>
 #include <pthread.h>
+#include <openssl/err.h>
 #include "ibmca.h"
 #include "e_ibmca_err.h"
 
