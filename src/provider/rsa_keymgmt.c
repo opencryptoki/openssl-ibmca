@@ -75,6 +75,10 @@ static OSSL_FUNC_keymgmt_import_types_fn ibmca_keymgmt_rsa_pss_import_types;
 static void ibmca_keymgmt_rsa_free_cb(struct ibmca_key *key);
 static int ibmca_keymgmt_rsa_dup_cb(const struct ibmca_key *key,
                                     struct ibmca_key *new_key);
+static int ibmca_keymgmt_rsa_calc_priv_d(const struct ibmca_prov_ctx *provctx,
+                                         BIGNUM *n, BIGNUM *e,
+                                         BIGNUM *p, BIGNUM *q,
+                                         BIGNUM **d);
 
 static int ibmca_keymgmt_rsa_pss_parms_from_data(
                                         const struct ibmca_prov_ctx *provctx,
@@ -257,72 +261,155 @@ static int ibmca_keymgmt_rsa_pub_key_to_data(
     return 1;
 }
 
+static int ibmca_keymgmt_rsa_derive_crt_from_pq(
+                                        const struct ibmca_prov_ctx *provctx,
+                                        BIGNUM *n, BIGNUM *e, BIGNUM *p,
+                                        BIGNUM *q, BIGNUM *dp, BIGNUM *dq,
+                                        BIGNUM *qinv)
+{
+    BIGNUM *d = NULL, *p1 = NULL, *q1 = NULL;
+    BN_CTX *ctx = NULL;
+    int rc = 0;
+
+    ctx = BN_CTX_secure_new();
+    if (ctx == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED,
+                      "BN_CTX_secure_new failed");
+        goto out;
+    }
+
+    p1 = BN_CTX_get(ctx);
+    q1 = BN_CTX_get(ctx);
+    if (p1 == NULL || q1 == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_CTX_get failed");
+        goto out;
+    }
+
+    BN_set_flags(p1, BN_FLG_CONSTTIME);
+    BN_set_flags(q1, BN_FLG_CONSTTIME);
+
+    if (!BN_sub(p1, p, BN_value_one()) || /* p-1 */
+        !BN_sub(q1, q, BN_value_one())) { /* q-1 */
+        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_sub failed");
+        goto out;
+    }
+
+    BN_set_flags(dp, BN_FLG_CONSTTIME);
+    BN_set_flags(dq, BN_FLG_CONSTTIME);
+    BN_set_flags(qinv, BN_FLG_CONSTTIME);
+
+    rc = ibmca_keymgmt_rsa_calc_priv_d(provctx, n, e, p, q, &d);
+    if (rc != 1)
+        goto out;
+
+    rc = 0;
+
+    /*
+     * See SP800-56Br1 6.3.1.3 rsakpg1 - crt (Step 5)
+     *
+     * (Step 5a) dP = d mod (p-1)
+     */
+    if (!BN_mod(dp, d, p1, ctx)) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR, "BN_mod failed");
+        goto out;
+    }
+
+    /* (Step 5b) dQ = d mod (q-1) */
+    if (!BN_mod(dq, d, q1, ctx)) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR, "BN_mod failed");
+        goto out;
+    }
+
+    /* (Step 5c) qInv = (inverse of q) mod p */
+    if (BN_mod_inverse(qinv, q, p, ctx) == NULL) {
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
+                      "BN_mod_inverse failed");
+        goto out;
+    }
+
+    rc = 1;
+
+out:
+    BN_CTX_free(ctx);
+    BN_free(d);
+
+    return rc;
+}
+
 static int ibmca_keymgmt_rsa_priv_crt_key_from_data(
                                         const struct ibmca_prov_ctx *provctx,
-                                        const OSSL_PARAM params[], BIGNUM **p,
-                                        BIGNUM **q, BIGNUM **dp,
-                                        BIGNUM **dq, BIGNUM **qinv)
+                                        const OSSL_PARAM params[],
+                                        BIGNUM *n, BIGNUM *e,
+                                        BIGNUM **p, BIGNUM **q,
+                                        BIGNUM **dp, BIGNUM **dq, BIGNUM **qinv)
 {
-    int rc;
+    int rc, derive_from_pq = 0;
 
-    /* OSSL_PKEY_PARAM_RSA_FACTOR1 */
     *p = BN_secure_new();
-    if (*p == NULL) {
+    *q = BN_secure_new();
+    *dp = BN_secure_new();
+    *dq = BN_secure_new();
+    *qinv = BN_secure_new();
+    if (*p == NULL || *q == NULL || *dp == NULL || *dp == NULL ||
+        *qinv == NULL) {
         put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
         goto error;
     }
+
+    /* OSSL_PKEY_PARAM_RSA_FACTOR1 */
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_FACTOR1, p);
     if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_FACTOR2 */
-    *q = BN_secure_new();
-    if (*q == NULL) {
-        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
-        goto error;
-    }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_FACTOR2, q);
     if (rc <= 0)
         goto error;
 
     /* OSSL_PKEY_PARAM_RSA_EXPONENT1 */
-    *dp = BN_secure_new();
-    if (*dp == NULL) {
-        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
-        goto error;
-    }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_EXPONENT1,
                             dp);
     if (rc <= 0)
-        goto error;
+        goto check_from_pq;
 
     /* OSSL_PKEY_PARAM_RSA_EXPONENT2 */
-    *dq = BN_secure_new();
-    if (*dq == NULL) {
-        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
-        goto error;
-    }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_EXPONENT2,
                             dq);
     if (rc <= 0)
-        goto error;
+        goto check_from_pq;
 
     /* OSSL_PKEY_PARAM_RSA_COEFFICIENT1 */
-    *qinv = BN_secure_new();
-    if (*qinv == NULL) {
-        put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
-        goto error;
-    }
     rc = ibmca_param_get_bn(provctx, params, OSSL_PKEY_PARAM_RSA_COEFFICIENT1,
                             qinv);
     if (rc <= 0)
-        goto error;
+        goto check_from_pq;
 
     return 1;
+
+check_from_pq:
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+    /* OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ */
+    rc = ibmca_param_get_int(provctx, params,
+                             OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ,
+                             &derive_from_pq);
+    if (rc <= 0)
+        goto error;
+#endif
+
+    if (derive_from_pq) {
+        rc = ibmca_keymgmt_rsa_derive_crt_from_pq(provctx, n, e, *p, *q,
+                                                  *dp, *dq, *qinv);
+        if (rc != 1)
+            goto error;
+
+        return 1;
+    }
 
 error:
     BN_clear_free(*p);
     *p = NULL;
+    BN_clear_free(*q);
+    *q = NULL;
     BN_clear_free(*dp);
     *dp = NULL;
     BN_clear_free(*dq);
@@ -1496,8 +1583,9 @@ error:
     return 0;
 }
 
-static int ibmca_keymgmt_rsa_calc_priv_d(struct ibmca_key *key, BIGNUM *n,
-                                         BIGNUM *e, BIGNUM *p, BIGNUM *q,
+static int ibmca_keymgmt_rsa_calc_priv_d(const struct ibmca_prov_ctx *provctx,
+                                         BIGNUM *n, BIGNUM *e,
+                                         BIGNUM *p, BIGNUM *q,
                                          BIGNUM **d)
 {
     BN_CTX *bn_ctx;
@@ -1514,7 +1602,7 @@ static int ibmca_keymgmt_rsa_calc_priv_d(struct ibmca_key *key, BIGNUM *n,
         BN_sub(*d, *d, q) == 0 ||
         BN_add_word(*d, 1) == 0 ||
         BN_mod_inverse(*d, e, *d, bn_ctx) == NULL) {
-        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+        put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
                       "Failed to calculate private key part d");
         BN_CTX_free(bn_ctx);
         BN_clear_free(*d);
@@ -1609,7 +1697,7 @@ static int ibmca_keymgmt_rsa_get_params(void *vkey, OSSL_PARAM params[])
         /* CRT format */
         rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
         if (rc == 0) {
-            rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+            rc = ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q, &d);
             if (rc == 0)
                 goto out;
         }
@@ -1868,7 +1956,8 @@ int ibmca_keymgmt_rsa_export(void *vkey, int selection,
             /* CRT format */
             rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
             if (rc == 0) {
-                rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+                rc = ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q,
+                                                   &d);
                 if (rc == 0)
                     goto error;
             }
@@ -1989,6 +2078,7 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
     if ((selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0) {
         /* Import private key parts */
         rc = ibmca_keymgmt_rsa_priv_crt_key_from_data(key->provctx, params,
+                                                      n, e,
                                                       &p, &q, &dp, &dq, &qinv);
         if (rc == 1) {
             /* CRT components */
@@ -2127,7 +2217,7 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
         if (rc == 0)
             goto out;
 
-        rc = ibmca_keymgmt_rsa_calc_priv_d(key, n, e, p, q, &d);
+        rc = ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q, &d);
         if (rc == 0)
             goto out;
     }
