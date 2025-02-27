@@ -26,6 +26,7 @@
 #include <openssl/obj_mac.h>
 #include <openssl/provider.h>
 #include <openssl/err.h>
+#include <openssl/core_names.h>
 
 #include <ica_api.h>
 
@@ -754,6 +755,98 @@ out:
 }
 #endif
 
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+static int export_import_key_from_pq(const char* provider, EVP_PKEY *rsa_pkey)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM *export_params = NULL;
+    OSSL_PARAM import_params[7];
+    OSSL_PARAM *export_params2 = NULL;
+    EVP_PKEY *rsa_pkey2 = NULL;
+    int ok = 0, i, k, derive_from_pq = 1;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_name failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_todata(rsa_pkey, EVP_PKEY_KEYPAIR, &export_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_todata failed\n");
+        goto out;
+    }
+
+    for (i = 0, k = 0; export_params[i].key != NULL && k < 5; i++) {
+        if (strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_N) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_E) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_D) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR1) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR2) == 0) {
+            import_params[k] = export_params[i];
+            k++;
+        }
+    }
+    import_params[k++] =
+            OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ,
+                                     &derive_from_pq);
+    import_params[k++] = OSSL_PARAM_construct_end();
+
+    if (EVP_PKEY_fromdata_init(ctx) <= 0) {
+        fprintf(stderr, "EVP_PKEY_fromdata_init failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_fromdata(ctx, &rsa_pkey2, EVP_PKEY_KEYPAIR,
+                          import_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_fromdata failed\n");
+        goto out;
+    }
+
+    /*
+     * Export the new key again to compare the key components. EVP_PKEY_eq()
+     * would only compare the public key components, but not the private
+     * components.
+     */
+    if (EVP_PKEY_todata(rsa_pkey2, EVP_PKEY_KEYPAIR, &export_params2) != 1) {
+        fprintf(stderr, "EVP_PKEY_todata failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+    for (i = 0; export_params[i].key != NULL; i++) {
+        for (k = 0; export_params2[k].key != NULL; k++) {
+            if (strcmp(export_params[i].key, export_params2[k].key) == 0) {
+                if (export_params[i].data_size != export_params2[k].data_size ||
+                    memcmp(export_params[i].data, export_params2[k].data,
+                           export_params[i].data_size) != 0) {
+                    fprintf(stderr, "Key component '%s' is different\n",
+                            export_params[i].key);
+                    ok = 0;
+                }
+                break;
+            }
+        }
+    }
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+    if (export_params != NULL)
+        OSSL_PARAM_free(export_params);
+    if (export_params2 != NULL)
+        OSSL_PARAM_free(export_params2);
+    if (rsa_pkey2 != NULL)
+        EVP_PKEY_free(rsa_pkey2);
+
+    return ok;
+}
+#endif
+
 static int check_rsakey(int bits, const char *algo, const char *name)
 {
     int            ok = 0;
@@ -888,6 +981,14 @@ static int check_rsakey(int bits, const char *algo, const char *name)
         goto out;
 
 skip:
+#endif
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+    if (!export_import_key_from_pq("ibmca", rsa_pkey))
+        goto out;
+
+    if (!export_import_key_from_pq(NULL, rsa_pkey))
+        goto out;
 #endif
 
     ok = 1;
