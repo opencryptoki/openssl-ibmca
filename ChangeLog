@@ -1,3 +1,11 @@
+* openssl-ibmca 2.5.0
+- Provider: Add support for OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ on import
+- Provider: Add support for SignMessage and VerifyMessage API for ECDSA and RSA
+- Provider: Allow the DHKEM-IKM option for EC keygen, but use fallback provider
+- Provider: Allow ECDSA deterministic signatures, but use fallback
+- Engine: Enable external AES-GCM IV when libica is in FIPS mode
+- Bug fixes
+
 * openssl-ibmca 2.4.1
 - Provider: Change the default log directory to /tmp
 - Bug fixes
