@@ -5,7 +5,7 @@ language: c
 
 before_install:
     - sudo apt-get -qq update
-    - sudo apt-get install -y libica3 libica-dev
+    - sudo apt-get install -y libica3 libica-dev pv
 
 jobs:
     include:
@@ -19,26 +19,26 @@ before_script:
     - git clone https://github.com/openssl/openssl.git
     - pushd openssl
     - git checkout master
-    - ./config -w
-    - make -j 5 -s
+    - ./config -w 2> >(tee)
+    - make -j 5 -s | pv -t -i 1 -f 2> >(tee)
     - export OPENSSL_DIR=$PWD
     - export PATH=$OPENSSL_DIR/apps/:$PATH
     - export LD_LIBRARY_PATH=$OPENSSL_DIR/:$LD_LIBRARY_PATH
     - popd
-    - openssl version
+    - openssl version 2> >(tee)
     - git clone https://github.com/opencryptoki/libica.git
     - pushd libica
-    - ./bootstrap.sh
-    - ./configure CFLAGS="-I$OPENSSL_DIR/include -L$OPENSSL_DIR"
-    - make -j 5 V=0
+    - ./bootstrap.sh 2> >(tee)
+    - ./configure CFLAGS="-I$OPENSSL_DIR/include -L$OPENSSL_DIR" 2> >(tee)
+    - make -j 5 V=0 2> >(tee)
     - export LIBICA_DIR=$PWD
     - export LD_LIBRARY_PATH=$LIBICA_DIR/src/.libs:$LD_LIBRARY_PATH
     - popd
-    - $LIBICA_DIR/src/icainfo
+    - $LIBICA_DIR/src/icainfo 2> >(tee)
 
 script:
-    - ./bootstrap.sh
-    - ./configure CFLAGS="-I$OPENSSL_DIR/include -L$OPENSSL_DIR -I$LIBICA_DIR/include -L$LIBICA_DIR/src/.libs" $CONFIG_OPTS
-    - make -j 5 V=0
-    - make check V=0
+    - ./bootstrap.sh 2> >(tee)
+    - ./configure CFLAGS="-I$OPENSSL_DIR/include -L$OPENSSL_DIR -I$LIBICA_DIR/include -L$LIBICA_DIR/src/.libs" $CONFIG_OPTS 2> >(tee)
+    - make -j 5 V=0 2> >(tee)
+    - make check V=0 | pv -t -i 1 -f 2> >(tee)
 
