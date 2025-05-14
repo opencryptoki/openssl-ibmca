@@ -31,13 +31,13 @@ AC_ARG_ENABLE([sanitizer],
 		[enable_sanitizer=no])
 
 AC_ARG_ENABLE([engine],
-		[AS_HELP_STRING([--enable-engine], [build IBMCA engine (OpenSSL 1.1.1, default is yes)])],
+		[AS_HELP_STRING([--enable-engine], [build IBMCA engine (OpenSSL >= 1.1.1, default is yes, if openssl/engine.h is available, else the default is false)])],
 		[if test "x$enableval" = "xyes" ; then
 			enable_engine="yes"
 		 else
 		 	enable_engine="no"
 		 fi],
-		[enable_engine="yes"])
+		[enable_engine="check"])
 
 AC_ARG_ENABLE([provider],
 		[AS_HELP_STRING([--enable-provider], [build IBMCA provider (OpenSSL >= 3.0, default is yes if built against OpenSSL 3.0 or later, else the default is false)])],
@@ -75,6 +75,7 @@ AC_CHECK_LIB([crypto], [OSSL_LIB_CTX_new], [openssl_3_0="yes"], [openssl_3_0="no
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h netdb.h netinet/in.h stddef.h stdlib.h \
                  string.h strings.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h unistd.h])
 AC_CHECK_HEADER([ica_api.h], [], AC_MSG_ERROR([*** libica-devel >= 3.6.0 is required ***]))
+AC_CHECK_HEADER([openssl/engine.h], [has_engine_h="yes"], [has_engine_h="no"])
 
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -135,6 +136,18 @@ else
 		AC_MSG_ERROR([*** openssl >= 3.0 is required to build the IBMCA provider ***]);
 	fi
 	enable_provider=no
+fi
+
+# If <openssl/engine.h> is not available, do not build the engine
+if test "x$has_engine_h" = xyes; then
+	if test "x$enable_engine" != xno; then
+		enable_engine=yes
+	fi
+else
+	if test "x$enable_engine" = xyes; then
+		AC_MSG_ERROR([*** openssl/engine.h is required to build the IBMCA engine ***]);
+	fi
+	enable_engine=no
 fi
 
 AM_CONDITIONAL([IBMCA_ENGINE], [test "x$enable_engine" == xyes])
