@@ -1,11 +1,11 @@
 os: linux
-dist: focal
+dist: noble
 
 language: c
 
 before_install:
     - sudo apt-get -qq update
-    - sudo apt-get install -y libica3 libica-dev pv
+    - sudo apt-get install -y libica4 libica-dev pv
 
 jobs:
     include:
