@@ -13,7 +13,7 @@ jobs:
          os: linux
          arch: s390x
          compiler: gcc
-         env: CONFIG_OPTS="--enable-engine --enable-provider"
+         env: CONFIG_OPTS="--disable-engine --enable-provider"
  
 before_script:
     - git clone https://github.com/openssl/openssl.git
