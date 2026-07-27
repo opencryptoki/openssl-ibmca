@@ -245,7 +245,7 @@ void *ibmca_memdup(const struct ibmca_prov_ctx *provctx, const void *data,
 {
     void *ret;
 
-    if (data == NULL || size >= INT_MAX)
+    if (data == NULL || size >= INT_MAX || provctx == NULL)
         return NULL;
 
     ret = provctx->c_malloc(size, file, line);
@@ -261,7 +261,7 @@ void *ibmca_secure_memdup(const struct ibmca_prov_ctx *provctx,
 {
     void *ret;
 
-    if (data == NULL || size >= INT_MAX)
+    if (data == NULL || size >= INT_MAX || provctx == NULL)
         return NULL;
 
     ret = provctx->c_secure_malloc(size, file, line);
