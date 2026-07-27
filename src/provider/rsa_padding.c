@@ -473,14 +473,18 @@ int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
         }
 
         if (ibmca_rsa_prf(provctx, synthetic, inlen, "message", 7, kdk, kdklen,
-                          inlen * 8) != 1)
-            goto out;
+                          inlen * 8) != 1) {
+            P_FREE(provctx, synthetic);
+            return 0;
+        }
 
         /* decide how long the random message should be */
         if (ibmca_rsa_prf(provctx, candidate_lengths, sizeof(candidate_lengths),
                          "length", 6, kdk, kdklen,
-                         MAX_LEN_GEN_TRIES * sizeof(len_candidate) * 8) != 1)
-            goto out;
+                         MAX_LEN_GEN_TRIES * sizeof(len_candidate) * 8) != 1) {
+            P_FREE(provctx, synthetic);
+            return 0;
+        }
 
         /*
          * max message size is the size of the modulus size minus 2 bytes for
@@ -561,7 +565,6 @@ int ibmca_rsa_check_pkcs1_padding_type2(const struct ibmca_prov_ctx *provctx,
 
     *outlen = j;
 
-out:
     if (synthetic != NULL)
         P_FREE(provctx, synthetic);
 
