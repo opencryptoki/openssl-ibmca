@@ -431,7 +431,7 @@ int ibmca_param_build_set_octet_ptr(const struct ibmca_prov_ctx *provctx,
     }
 
 out:
-    ibmca_debug_ctx(provctx, "param '%s': [octet string] (%lu bytes)", key,
+    ibmca_debug_ctx(provctx, "param '%s': [octet string] (%zu bytes)", key,
                     len);
     return 1;
 }
@@ -460,7 +460,7 @@ int ibmca_param_build_set_size_t(const struct ibmca_prov_ctx *provctx,
     }
 
 out:
-    ibmca_debug_ctx(provctx, "param '%s': %lu", key, val);
+    ibmca_debug_ctx(provctx, "param '%s': %zu", key, val);
     return 1;
 }
 
@@ -553,7 +553,7 @@ int ibmca_param_get_size_t(const struct ibmca_prov_ctx *provctx,
         return 0;
     }
 
-    ibmca_debug_ctx(provctx, "param '%s': %lu", key, *val);
+    ibmca_debug_ctx(provctx, "param '%s': %zu", key, *val);
     return 1;
 }
 
@@ -595,7 +595,7 @@ int ibmca_param_get_octet_string(const struct ibmca_prov_ctx *provctx,
         return 0;
     }
 
-    ibmca_debug_ctx(provctx, "param '%s': [octet string] (%lu bytes)",
+    ibmca_debug_ctx(provctx, "param '%s': [octet string] (%zu bytes)",
                     key, *len);
     return 1;
 }
