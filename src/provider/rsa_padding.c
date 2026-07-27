@@ -184,7 +184,7 @@ static int ibmca_rsa_prf(const struct ibmca_prov_ctx *provctx,
     }
 
     ctx = EVP_MAC_CTX_new(hmac);
-    if (hmac == NULL) {
+    if (ctx == NULL) {
         put_error_ctx(provctx, IBMCA_ERR_INTERNAL_ERROR,
                       "EVP_MAC_CTX_new failed");
         goto out;
