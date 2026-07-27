@@ -613,7 +613,7 @@ static void ibmca_teardown(void *vprovctx)
     if (provctx->ica_adapter > DRIVER_NOT_LOADED)
         ica_close_adapter(provctx->ica_adapter);
 
-    for (i = 0; i < OSSL_OP__HIGHEST; i++) {
+    for (i = 0; i <= OSSL_OP__HIGHEST; i++) {
         if (provctx->algorithms[i] != NULL)
             P_FREE(provctx, provctx->algorithms[i]);
     }
