@@ -227,7 +227,7 @@ int ibmca_op_alloc_tbuf(struct ibmca_op_ctx *ctx, size_t tbuf_len)
         if (ctx->tbuf_len >= tbuf_len)
             return 1;
 
-        P_FREE(ctx->provctx, ctx->tbuf);
+        P_SECURE_CLEAR_FREE(ctx->provctx, ctx->tbuf, ctx->tbuf_len);
         ctx->tbuf_len = 0;
     }
 
