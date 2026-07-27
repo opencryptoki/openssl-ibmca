@@ -191,7 +191,7 @@ void ibmca_debug_print(struct ibmca_prov_ctx *provctx, const char *func,
         if (ibmca_config_debug(provctx, IBMCA_CONF_DEBUG, "on") == 0)
             goto out;
 
-        fprintf(provctx->debug_file,
+        fprintf(provctx->debug_file != NULL ? provctx->debug_file : stderr,
                 "*** Forked off from parent process %u ***\n", old_pid);
     }
 
