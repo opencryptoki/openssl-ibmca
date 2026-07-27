@@ -232,6 +232,8 @@ static ICA_EC_KEY *ibmca_ec_make_and_cache_ica_key(EC_KEY *ec_key,
      */
     if (pthread_mutex_lock(&ec_ex_data_mutex) != 0) {
         IBMCAerr(IBMCA_F_ICA_EC_KEY_NEW, IBMCA_R_EC_INTERNAL_ERROR);
+        p_ica_ec_key_free(data->ica_key);
+        OPENSSL_free(data);
         return NULL;
     }
 
@@ -250,6 +252,7 @@ static ICA_EC_KEY *ibmca_ec_make_and_cache_ica_key(EC_KEY *ec_key,
     if (EC_KEY_set_ex_data(ec_key, ec_ex_data_index, data) != 1) {
         IBMCAerr(IBMCA_F_ICA_EC_KEY_NEW, IBMCA_R_EC_INTERNAL_ERROR);
         pthread_mutex_unlock(&ec_ex_data_mutex);
+        p_ica_ec_key_free(data->ica_key);
         OPENSSL_free(data);
         return NULL;
     }
@@ -283,7 +286,7 @@ void ibmca_ec_destroy(void)
  #ifdef OLDER_OPENSSL
     if (ibmca_ecdh)
         ECDH_METHOD_free(ibmca_ecdh);
-    if (ibmca_ecdh)
+    if (ibmca_ecdsa)
         ECDSA_METHOD_free(ibmca_ecdsa);
  #else
     if (ec_ex_data_index >= 0) {
