@@ -144,11 +144,15 @@ err:
     rc = 0;                     /* error condition */
 
 end:
+    if (input != NULL)
+        OPENSSL_cleanse(input, key->key_length);
+    free(input);
+    if (output != NULL)
+        OPENSSL_cleanse(output, key->key_length);
+    free(output);
     free(key->exponent);
     free(key->modulus);
     free(key);
-    free(input);
-    free(output);
 
     return rc;
 }
@@ -282,14 +286,18 @@ err:
     rc = 0;                     /* error condition */
 
 end:
+    if (input != NULL)
+        OPENSSL_cleanse(input, key->key_length);
+    free(input);
+    if (output != NULL)
+        OPENSSL_cleanse(output, key->key_length);
+    free(output);
     free(key->p);
     free(key->q);
     free(key->dp);
     free(key->dq);
     free(key->qInverse);
     free(key);
-    free(input);
-    free(output);
 
     return rc;
 }
