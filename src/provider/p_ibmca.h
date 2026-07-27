@@ -540,7 +540,7 @@ int ibmca_rsa_priv_with_blinding(struct ibmca_key *key, const unsigned char *in,
 int ossl_bn_rsa_do_unblind(const unsigned char *intermediate,
                            const BIGNUM *unblind,
                            const unsigned char *to_mod,
-                           unsigned char *buf, int num,
+                           unsigned char *buf, size_t num,
                            BN_MONT_CTX *m_ctx, BN_ULONG n0);
 
 extern const OSSL_ALGORITHM ibmca_ec_keymgmt[];
