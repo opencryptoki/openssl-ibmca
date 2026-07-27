@@ -63,8 +63,8 @@ typedef uint128_t limb2_t;
 #  error "Not supported"
 # endif
 
-static inline void memcpy_r_allign(void *dest, int dest_bs,
-                                   const void *src, int src_bs, int size)
+static inline void memcpy_r_allign(void *dest, size_t dest_bs,
+                                   const void *src, size_t src_bs, size_t size)
 {
     memcpy((unsigned char *)dest + (dest_bs - size),
            (unsigned char *)src + (src_bs - size), size);
@@ -568,7 +568,7 @@ static ossl_inline uint32_t be32(uint32_t host)
 int ossl_bn_rsa_do_unblind(const unsigned char *intermediate,
                            const BIGNUM *unblind,
                            const unsigned char *to_mod,
-                           unsigned char *buf, int num,
+                           unsigned char *buf, size_t num,
                            BN_MONT_CTX *m_ctx, BN_ULONG n0)
 {
     limb_t *l_im = NULL, *l_mul = NULL, *l_mod = NULL;
@@ -579,17 +579,20 @@ int ossl_bn_rsa_do_unblind(const unsigned char *intermediate,
     size_t i;
     unsigned char *tmp;
 
+    if (num == 0 || num > SSIZE_MAX)
+        return 0;
+
     l_im_count  = (num   + LIMB_BYTE_SIZE - 1) / LIMB_BYTE_SIZE;
     l_mul_count = (BN_num_bytes(unblind)   + LIMB_BYTE_SIZE - 1) / LIMB_BYTE_SIZE;
     l_mod_count = (num + LIMB_BYTE_SIZE - 1) / LIMB_BYTE_SIZE;
 
     l_size = l_im_count > l_mul_count ? l_im_count : l_mul_count;
-    if (l_size * LIMB_BYTE_SIZE == (size_t)num)
+    if (l_size * LIMB_BYTE_SIZE == num)
         l_im = (limb_t *)intermediate;
     else
         l_im  = OPENSSL_zalloc(l_size * LIMB_BYTE_SIZE);
     l_mul = OPENSSL_zalloc(l_size * LIMB_BYTE_SIZE);
-    if (l_mod_count * LIMB_BYTE_SIZE == (size_t)num)
+    if (l_mod_count * LIMB_BYTE_SIZE == num)
         l_mod = (limb_t *)to_mod;
     else
         l_mod = OPENSSL_zalloc(l_mod_count * LIMB_BYTE_SIZE);
@@ -636,7 +639,7 @@ int ossl_bn_rsa_do_unblind(const unsigned char *intermediate,
         l_buf = be32(l_ret[i]);
 #endif
         if (i == 0) {
-            int delta = LIMB_BYTE_SIZE - ((l_mod_count * LIMB_BYTE_SIZE) - num);
+            size_t delta = LIMB_BYTE_SIZE - ((l_mod_count * LIMB_BYTE_SIZE) - num);
 
             memcpy(tmp, ((char *)&l_buf) + LIMB_BYTE_SIZE - delta, delta);
             tmp += delta;
