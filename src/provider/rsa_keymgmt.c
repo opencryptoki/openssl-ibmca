@@ -350,7 +350,7 @@ static int ibmca_keymgmt_rsa_priv_crt_key_from_data(
     *dp = BN_secure_new();
     *dq = BN_secure_new();
     *qinv = BN_secure_new();
-    if (*p == NULL || *q == NULL || *dp == NULL || *dp == NULL ||
+    if (*p == NULL || *q == NULL || *dp == NULL || *dq == NULL ||
         *qinv == NULL) {
         put_error_ctx(provctx, IBMCA_ERR_MALLOC_FAILED, "BN_secure_new failed");
         goto error;
