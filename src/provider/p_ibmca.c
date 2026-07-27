@@ -173,7 +173,7 @@ void ibmca_debug_print(struct ibmca_prov_ctx *provctx, const char *func,
         return;
 
     if (snprintf(tmp_fmt, sizeof(tmp_fmt), "DBG: %s %u %s: %s",
-                 time_buf, (unsigned int)gettid(), func, fmt) >
+                 time_buf, (unsigned int)gettid(), func, fmt) >=
                                                     (int)sizeof(tmp_fmt))
         return;
 
