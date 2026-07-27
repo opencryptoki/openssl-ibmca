@@ -94,10 +94,13 @@ static int ibmca_x25519_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
 ret:
     if (rc == 0) {
         free(key);
+        if (private != NULL)
+            OPENSSL_cleanse(private, sizeof(priv));
         free(private);
     }
     if (ctx != NULL)
         p_ica_x25519_ctx_del(&ctx);
+    OPENSSL_cleanse(priv, sizeof(priv));
     return rc;
 }
 
@@ -194,10 +197,13 @@ static int ibmca_x448_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
 ret:
     if (rc == 0) {
         free(key);
+        if (private != NULL)
+            OPENSSL_cleanse(private, sizeof(priv));
         free(private);
     }
     if (ctx != NULL)
         p_ica_x448_ctx_del(&ctx);
+    OPENSSL_cleanse(priv, sizeof(priv));
     return rc;
 }
 
@@ -299,10 +305,13 @@ static int ibmca_ed25519_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
 ret:
     if (rc == 0) {
         free(key);
+        if (private != NULL)
+            OPENSSL_cleanse(private, sizeof(priv));
         free(private);
     }
     if (ctx != NULL)
         p_ica_ed25519_ctx_del(&ctx);
+    OPENSSL_cleanse(priv, sizeof(priv));
     return rc;
 }
 
@@ -443,10 +452,13 @@ static int ibmca_ed448_keygen(EVP_PKEY_CTX *c, EVP_PKEY *pkey)
 ret:
     if (rc == 0) {
         free(key);
+        if (private != NULL)
+            OPENSSL_cleanse(private, sizeof(priv));
         free(private);
     }
     if (ctx != NULL)
         p_ica_ed448_ctx_del(&ctx);
+    OPENSSL_cleanse(priv, sizeof(priv));
     return rc;
 }
 
