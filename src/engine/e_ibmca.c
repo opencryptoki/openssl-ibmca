@@ -1104,7 +1104,7 @@ static int ibmca_rand_bytes(unsigned char *buf, int num)
     unsigned int rc;
 
     rc = p_ica_random_number_generate(num, buf);
-    if (rc < 0) {
+    if (rc != 0) {
         IBMCAerr(IBMCA_F_IBMCA_RAND_BYTES, IBMCA_R_REQUEST_FAILED);
         return 0;
     }
