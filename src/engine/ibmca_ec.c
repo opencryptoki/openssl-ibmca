@@ -610,7 +610,7 @@ int ibmca_ecdsa_verify_sig(const unsigned char *dgst, int dgst_len,
     const BIGNUM *bn_r, *bn_s;
     unsigned int privlen;
     ICA_EC_KEY *icakey = NULL;
-    int rc, n;
+    int rc, n, r_bytes, s_bytes;
     int ret = -1;
 #ifndef OLDER_OPENSSL
     int (*verify_sw)(int type, const unsigned char *dgst, int dgst_len,
@@ -674,13 +674,24 @@ do_verify:
     ECDSA_SIG_get0(sig, &bn_r, &bn_s);
  #endif
 
+    if (privlen == 0 || privlen > IBMCA_EC_MAX_D_LEN)
+        goto end;
+
+    r_bytes = BN_num_bytes(bn_r);
+    s_bytes = BN_num_bytes(bn_s);
+    if (r_bytes <= 0 || s_bytes <= 0 ||
+        r_bytes > (int)privlen || s_bytes > (int)privlen) {
+        ret = 0; /* invalid signature encoding/size */
+        goto end;
+    }
+
     /* Format r as byte array with leading 0x00's if necessary */
-    n = privlen - BN_num_bytes(bn_r);
+    n = (int)privlen - r_bytes;
     memset(sig_array, 0, n);
     BN_bn2bin(bn_r, &(sig_array[n]));
 
     /* Format s as byte array with leading 0x00's if necessary */
-    n = privlen - BN_num_bytes(bn_s);
+    n = (int)privlen - s_bytes;
     memset(&(sig_array[privlen]), 0, n);
     BN_bn2bin(bn_s, &(sig_array[privlen+n]));
 
