@@ -129,7 +129,7 @@ static ICA_EC_KEY *ibmca_ec_make_ica_key(EC_KEY *ec_key, int *nid,
     unsigned char D[IBMCA_EC_MAX_D_LEN];
     unsigned char X[IBMCA_EC_MAX_D_LEN];
     unsigned char Y[IBMCA_EC_MAX_D_LEN];
-    int rc, n;
+    int rc, n, d_bytes, x_bytes, y_bytes;
 
     /* Get group */
     if ((group = EC_KEY_get0_group(ec_key)) == NULL) {
@@ -151,11 +151,22 @@ static ICA_EC_KEY *ibmca_ec_make_ica_key(EC_KEY *ec_key, int *nid,
         return NULL;
     }
 
+    if (*privlen == 0 || *privlen > IBMCA_EC_MAX_D_LEN) {
+        IBMCAerr(IBMCA_F_ICA_EC_KEY_NEW, IBMCA_R_EC_INVALID_PARM);
+        goto error;
+    }
+
     /* Get private (D) value from EC_KEY (if available) */
     bn_d = EC_KEY_get0_private_key(ec_key);
     if (bn_d != NULL) {
+        d_bytes = BN_num_bytes(bn_d);
+        if (d_bytes <= 0 || d_bytes > (int)*privlen) {
+            IBMCAerr(IBMCA_F_ICA_EC_KEY_NEW, IBMCA_R_EC_INVALID_PARM);
+            goto error;
+        }
+
         /* Format (D) as char array, with leading zeros if necessary */
-        n = *privlen - BN_num_bytes(bn_d);
+        n = (int)*privlen - d_bytes;
         memset(D, 0, n);
         BN_bn2bin(bn_d, &(D[n]));
 
@@ -178,13 +189,21 @@ static ICA_EC_KEY *ibmca_ec_make_ica_key(EC_KEY *ec_key, int *nid,
             goto error;
         }
 
+        x_bytes = BN_num_bytes(bn_x);
+        y_bytes = BN_num_bytes(bn_y);
+        if (x_bytes < 0 || x_bytes > (int)*privlen ||
+            y_bytes < 0 || y_bytes > (int)*privlen) {
+            IBMCAerr(IBMCA_F_ICA_EC_KEY_NEW, IBMCA_R_EC_INVALID_PARM);
+            goto error;
+        }
+
         /* Format (X) as char array with leading nulls if necessary */
-        n = *privlen - BN_num_bytes(bn_x);
+        n = (int)*privlen - x_bytes;
         memset(X, 0, n);
         BN_bn2bin(bn_x, &X[n]);
 
         /* Format (Y) as char array with leading nulls if necessary */
-        n = *privlen - BN_num_bytes(bn_y);
+        n = (int)*privlen - y_bytes;
         memset(Y, 0, n);
         BN_bn2bin(bn_y, &Y[n]);
 
@@ -311,6 +330,7 @@ int ibmca_ecdh_compute_key(unsigned char **pout, size_t *poutlen,
     const EC_GROUP *group;
     BIGNUM *bn_x = NULL, *bn_y = NULL;
     unsigned int n, privlen;
+    int x_bytes, y_bytes;
     unsigned char X[IBMCA_EC_MAX_D_LEN];
     unsigned char Y[IBMCA_EC_MAX_D_LEN];
     unsigned char *z_buf = NULL;
@@ -389,6 +409,11 @@ do_derive:
  #endif
     }
 
+    if (privlen == 0 || privlen > IBMCA_EC_MAX_D_LEN) {
+        IBMCAerr(IBMCA_F_IBMCA_ECDH_COMPUTE_KEY, IBMCA_R_EC_INVALID_PARM);
+        goto end;
+    }
+
     /* Get (X,Y) from EC_POINT */
     bn_x = BN_new();
     bn_y = BN_new();
@@ -397,13 +422,21 @@ do_derive:
         goto end;
     }
 
+    x_bytes = BN_num_bytes(bn_x);
+    y_bytes = BN_num_bytes(bn_y);
+    if (x_bytes < 0 || x_bytes > (int)privlen ||
+        y_bytes < 0 || y_bytes > (int)privlen) {
+        IBMCAerr(IBMCA_F_IBMCA_ECDH_COMPUTE_KEY, IBMCA_R_EC_INVALID_PARM);
+        goto end;
+    }
+
     /* Format (X) as char array, with leading zeros if necessary */
-    n = privlen - BN_num_bytes(bn_x);
+    n = privlen - x_bytes;
     memset(X, 0, n);
     BN_bn2bin(bn_x, &(X[n]));
 
     /* Format (Y) as char array, with leading zeros if necessary */
-    n = privlen - BN_num_bytes(bn_y);
+    n = privlen - y_bytes;
     memset(Y, 0, n);
     BN_bn2bin(bn_y, &(Y[n]));
 
