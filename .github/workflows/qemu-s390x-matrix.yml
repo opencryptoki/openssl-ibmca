@@ -1,0 +1,123 @@
+# QEMU s390x distro matrix workflow
+#
+# Runs openssl-ibmca builds and tests on real s390x Ubuntu containers using
+# QEMU user-mode emulation via uraimo/run-on-arch-action.
+# Each matrix entry uses the distro-provided OpenSSL and libica packages so
+# we exercise a range of OpenSSL versions without cross-compiling anything.
+#
+# Ubuntu / OpenSSL version mapping used here:
+#   ubuntu24.04 (noble)  -> OpenSSL 3.0.x (LTS)
+#   ubuntu26.04 (future) -> OpenSSL 3.4+
+#
+# Supported distros are limited to those with a Dockerfile in the pinned
+# version of uraimo/run-on-arch-action (ubuntu24.10 and ubuntu25.04 are
+# not available in that release).
+#
+# NOTE: The ibmca ENGINE is not tested here.  QEMU s390x user-mode emulation
+# implements the KMC instruction (AES-CBC/ECB) but not KMF/KMO (AES-CFB/OFB).
+# The distro libica4 package detects KMF/KMO as available via the KMC
+# side-effect and then SIGILLs on the first actual CFB/OFB cipher call.
+# The fix is tracked upstream in libica.  Engine testing is covered by the
+# cross-compile workflow (cross-compile-s390x.yml) which builds both OpenSSL
+# and libica from their master branches where the fix will land.
+
+name: QEMU s390x distro matrix
+
+on:
+  pull_request:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Only cancel superseded pull request runs, never runs for master
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  qemu-s390x:
+    name: s390x / ${{ matrix.distro }} (OpenSSL ${{ matrix.openssl_version }})
+    runs-on: ubuntu-26.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: ubuntu24.04
+            openssl_version: "3.0.x"
+          - distro: ubuntu26.04
+            openssl_version: "3.4+"
+
+    steps:
+      # ------------------------------------------------------------------ #
+      # 1.  Checkout                                                         #
+      # ------------------------------------------------------------------ #
+      - name: Checkout openssl-ibmca
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # ------------------------------------------------------------------ #
+      # 2.  Build & test inside the s390x container                         #
+      # ------------------------------------------------------------------ #
+      - name: Build and test on s390x (${{ matrix.distro }})
+        uses: uraimo/run-on-arch-action@1e2c619f81e6d8609845ea1d2f443a778df1ac68 # v3
+        with:
+          arch: s390x
+          distro: ${{ matrix.distro }}
+
+          # Cache the container image between runs to speed up the workflow.
+          githubToken: ${{ github.token }}
+
+          # Bind-mount the checked-out workspace into the container.
+          dockerRunArgs: |
+            --volume "${{ github.workspace }}:/workspace"
+
+          # Install required packages inside the container.
+          install: |
+            apt-get update -qq
+            apt-get install -y --no-install-recommends \
+              openssl \
+              libssl-dev \
+              libica4 \
+              libica-dev \
+              autoconf \
+              automake \
+              libtool \
+              pkg-config \
+              perl \
+              make \
+              gcc
+
+          # Build openssl-ibmca (provider only) and run the provider test suite.
+          # --disable-engine: the ibmca engine cannot be tested under QEMU user-mode
+          # emulation because the distro libica4 SIGILLs on CFB/OFB cipher calls
+          # (KMF/KMO instructions not implemented by QEMU).  Engine tests are
+          # covered by the cross-compile workflow on a full libica master build.
+          run: |
+            set -e
+            cd /workspace
+
+            echo "--- OpenSSL version ---"
+            openssl version -a
+
+            echo "--- Bootstrap ---"
+            ./bootstrap.sh
+
+            echo "--- Configure (provider only, engine disabled) ---"
+            ./configure \
+              --disable-engine \
+              --enable-provider
+
+            echo "--- Build ---"
+            make -j$(nproc) V=0
+
+            echo "--- make check ---"
+            rc=0
+            make check V=1 || rc=$?
+
+            echo "--- provider test log ---"
+            cat test/provider/test-suite.log 2>/dev/null || true
+
+            exit $rc
