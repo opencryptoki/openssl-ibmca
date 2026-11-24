@@ -1,0 +1,162 @@
+# Cross-compile workflow for s390x
+#
+# Runs on an x86_64 GitHub-hosted Ubuntu runner.
+# Builds OpenSSL (master), libica (master), and openssl-ibmca from source
+# using the s390x cross-compiler, then runs `make check` under QEMU user-mode
+# emulation so the resulting binaries can actually execute.
+
+name: Cross-compile s390x (OpenSSL master + libica master)
+
+on:
+  pull_request:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Only cancel superseded pull request runs, never runs for master
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cross-compile-s390x:
+    name: Cross-compile & test (s390x)
+    runs-on: ubuntu-26.04
+
+    env:
+      # Cross-compile target triple used by the GNU toolchain
+      CROSS_TARGET: s390x-linux-gnu
+      # Convenience variables set during the build steps
+      OPENSSL_DIR: ${{ github.workspace }}/openssl
+      LIBICA_DIR:  ${{ github.workspace }}/libica
+
+    steps:
+      # ------------------------------------------------------------------ #
+      # 1.  Checkout                                                         #
+      # ------------------------------------------------------------------ #
+      - name: Checkout openssl-ibmca
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # ------------------------------------------------------------------ #
+      # 2.  Install host-side build tooling                                 #
+      # ------------------------------------------------------------------ #
+      - name: Install cross-compiler and QEMU user-mode emulation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-s390x-linux-gnu \
+            g++-s390x-linux-gnu \
+            binutils-s390x-linux-gnu \
+            qemu-user \
+            qemu-user-binfmt \
+            libc6-dev-s390x-cross \
+            autoconf automake libtool pkg-config \
+            perl
+
+      # ------------------------------------------------------------------ #
+      # 3.  Build OpenSSL (master) for s390x                                #
+      # ------------------------------------------------------------------ #
+      - name: Clone OpenSSL
+        run: git clone --depth 1 https://github.com/openssl/openssl.git "$OPENSSL_DIR"
+
+      - name: Configure OpenSSL for s390x
+        working-directory: ${{ env.OPENSSL_DIR }}
+        run: |
+          ./Configure \
+            linux64-s390x \
+            --cross-compile-prefix=${CROSS_TARGET}- \
+            --prefix=/usr/${CROSS_TARGET} \
+            --openssldir=/usr/${CROSS_TARGET}/ssl \
+            no-tests \
+            -w
+
+      - name: Build OpenSSL
+        working-directory: ${{ env.OPENSSL_DIR }}
+        run: make -j$(nproc) -s
+
+      # ------------------------------------------------------------------ #
+      # 4.  Build libica (master) for s390x                                 #
+      # ------------------------------------------------------------------ #
+      - name: Clone libica
+        run: git clone --depth 1 https://github.com/opencryptoki/libica.git "$LIBICA_DIR"
+
+      - name: Bootstrap libica
+        working-directory: ${{ env.LIBICA_DIR }}
+        run: ./bootstrap.sh
+
+      - name: Configure libica for s390x
+        working-directory: ${{ env.LIBICA_DIR }}
+        run: |
+          ./configure \
+            --host=${CROSS_TARGET} \
+            CC=${CROSS_TARGET}-gcc \
+            CFLAGS="-I${OPENSSL_DIR}/include" \
+            LDFLAGS="-L${OPENSSL_DIR}"
+
+      - name: Build libica
+        working-directory: ${{ env.LIBICA_DIR }}
+        run: make -j$(nproc) V=0
+
+      # ------------------------------------------------------------------ #
+      # 5.  Build openssl-ibmca for s390x                                   #
+      # ------------------------------------------------------------------ #
+      - name: Bootstrap openssl-ibmca
+        run: ./bootstrap.sh
+
+      - name: Configure openssl-ibmca for s390x
+        run: |
+          ./configure \
+            --host=${CROSS_TARGET} \
+            CC=${CROSS_TARGET}-gcc \
+            CFLAGS="-I${OPENSSL_DIR}/include -I${LIBICA_DIR}/include" \
+            LDFLAGS="-L${OPENSSL_DIR} -L${LIBICA_DIR}/src/.libs" \
+            --disable-engine \
+            --enable-provider
+
+      - name: Build openssl-ibmca
+        run: make -j$(nproc) V=0
+
+      # ------------------------------------------------------------------ #
+      # 6.  Run make check under QEMU user-mode emulation                   #
+      #                                                                      #
+      # When binfmt_misc transparently invokes qemu-s390x, QEMU_SET_ENV is  #
+      # NOT passed through — only QEMU_LD_PREFIX is honoured.               #
+      # QEMU_LD_PREFIX acts as a chroot prefix for the guest dynamic linker, #
+      # so it must point at a directory that contains a working s390x glibc. #
+      # libc6-s390x-cross (already installed) provides exactly that under   #
+      # /usr/s390x-linux-gnu.  We copy the cross-built OpenSSL and libica   #
+      # shared libraries into that sysroot's lib directory so they are found #
+      # alongside glibc at run time.                                         #
+      # ------------------------------------------------------------------ #
+      - name: Set up QEMU_LD_PREFIX sysroot
+        run: |
+          SYSROOT=/usr/${CROSS_TARGET}
+
+          # Copy cross-built OpenSSL shared libraries into the sysroot.
+          sudo cp -P ${OPENSSL_DIR}/libcrypto.so* ${OPENSSL_DIR}/libssl.so* \
+            "${SYSROOT}/lib/"
+
+          # Copy cross-built libica shared libraries into the sysroot.
+          sudo cp -P ${LIBICA_DIR}/src/.libs/libica*.so* \
+            "${SYSROOT}/lib/"
+
+          echo "QEMU_LD_PREFIX=${SYSROOT}" >> $GITHUB_ENV
+
+          # The Perl tests invoke 'openssl' by bare name. Put the cross-built
+          # s390x openssl binary first on PATH so binfmt+QEMU picks it up
+          # instead of the host x86_64 openssl.
+          echo "${OPENSSL_DIR}/apps" >> $GITHUB_PATH
+
+      - name: Show OpenSSL version (via QEMU)
+        run: |
+          ${OPENSSL_DIR}/apps/openssl version
+
+      - name: Run make check
+        run: make check V=1
+
+      - name: Print test log
+        if: always()
+        run: cat test/provider/test-suite.log 2>/dev/null || true
