@@ -23,6 +23,7 @@
 #include <openssl/conf.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
+#include <openssl/bn.h>
 #include <openssl/obj_mac.h>
 #include <openssl/provider.h>
 #include <openssl/err.h>
@@ -170,6 +171,66 @@ static int generate_key(const char* provider, const char *algo, int bits,
 out:
     if (ctx != NULL)
         EVP_PKEY_CTX_free(ctx);
+
+    return ok;
+}
+
+/*
+ * Verify that the private exponent d of a key is correct: e * d = 1 mod (p-1)
+ * and mod (q-1) (thus also mod lcm(p-1, q-1)), and 0 < d < phi(n).
+ */
+static int check_private_exponent(EVP_PKEY *rsa_pkey)
+{
+    BIGNUM *e = NULL, *d = NULL, *p = NULL, *q = NULL;
+    BIGNUM *p1 = NULL, *q1 = NULL, *t = NULL;
+    BN_CTX *bn_ctx = NULL;
+    int ok = 0;
+
+    if (EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_E, &e) != 1 ||
+        EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_D, &d) != 1 ||
+        EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_FACTOR1, &p) != 1 ||
+        EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_FACTOR2, &q) != 1) {
+        fprintf(stderr, "EVP_PKEY_get_bn_param failed\n");
+        goto out;
+    }
+
+    bn_ctx = BN_CTX_new();
+    p1 = BN_dup(p);
+    q1 = BN_dup(q);
+    t = BN_new();
+    if (bn_ctx == NULL || p1 == NULL || q1 == NULL || t == NULL ||
+        !BN_sub_word(p1, 1) || !BN_sub_word(q1, 1)) {
+        fprintf(stderr, "BN allocation failed\n");
+        goto out;
+    }
+
+    if (!BN_mod_mul(t, e, d, p1, bn_ctx) || !BN_is_one(t) ||
+        !BN_mod_mul(t, e, d, q1, bn_ctx) || !BN_is_one(t)) {
+        fprintf(stderr, "d is not the inverse of e\n");
+        goto out;
+    }
+
+    /* phi(n) = (p-1)(q-1) */
+    if (!BN_mul(t, p1, q1, bn_ctx)) {
+        fprintf(stderr, "BN_mul failed\n");
+        goto out;
+    }
+    if (BN_is_zero(d) || BN_is_negative(d) || BN_cmp(d, t) >= 0) {
+        fprintf(stderr, "d is not in the range (0, phi(n))\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    BN_free(e);
+    BN_clear_free(d);
+    BN_clear_free(p);
+    BN_clear_free(q);
+    BN_clear_free(p1);
+    BN_clear_free(q1);
+    BN_free(t);
+    BN_CTX_free(bn_ctx);
 
     return ok;
 }
@@ -847,6 +908,211 @@ out:
 }
 #endif
 
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+static int decrypt_implicit_rejection(const char *provider, EVP_PKEY *rsa_pkey,
+                                      const unsigned char *in, size_t inlen,
+                                      unsigned char *out, size_t *outlen)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    unsigned int implicit_rejection = 1;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, rsa_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_decrypt_init(ctx) <= 0) {
+        fprintf(stderr, "EVP_PKEY_decrypt_init failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_PADDING) <= 0) {
+        fprintf(stderr, "EVP_PKEY_CTX_set_rsa_padding failed\n");
+        goto out;
+    }
+
+    params[0] = OSSL_PARAM_construct_uint(
+                                OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION,
+                                &implicit_rejection);
+    params[1] = OSSL_PARAM_construct_end();
+    if (EVP_PKEY_CTX_set_params(ctx, params) != 1) {
+        fprintf(stderr, "EVP_PKEY_CTX_set_params failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_decrypt(ctx, out, outlen, in, inlen) <= 0) {
+        fprintf(stderr, "EVP_PKEY_decrypt failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+
+    return ok;
+}
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+/*
+ * Import only n, e, p and q (no d, no CRT components) with DERIVE_FROM_PQ into
+ * the IBMCA provider.
+ */
+static int import_key_from_pq_only(EVP_PKEY *rsa_pkey, EVP_PKEY **new_pkey)
+{
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM *export_params = NULL;
+    OSSL_PARAM import_params[6];
+    int ok = 0, i, k, derive_from_pq = 1;
+
+    ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", "?provider=ibmca");
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_name failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_todata(rsa_pkey, EVP_PKEY_KEYPAIR, &export_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_todata failed\n");
+        goto out;
+    }
+
+    for (i = 0, k = 0; export_params[i].key != NULL && k < 4; i++) {
+        if (strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_N) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_E) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR1) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR2) == 0) {
+            import_params[k] = export_params[i];
+            k++;
+        }
+    }
+    import_params[k++] =
+            OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ,
+                                     &derive_from_pq);
+    import_params[k++] = OSSL_PARAM_construct_end();
+
+    if (EVP_PKEY_fromdata_init(ctx) <= 0 ||
+        EVP_PKEY_fromdata(ctx, new_pkey, EVP_PKEY_KEYPAIR,
+                          import_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_fromdata failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (export_params != NULL)
+        OSSL_PARAM_free(export_params);
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+
+    return ok;
+}
+#endif
+
+/*
+ * Decrypt (nearly certainly) invalid PKCS#1 v1.5 ciphertexts with implicit
+ * rejection. In this case, a pseudo-random message is returned that is derived
+ * from the private exponent d of the key. The result is thus the same for
+ * all providers and for all copies of the key, only if they all use the
+ * correct d.
+ *
+ * Use the default provider as reference and compare it with the IBMCA
+ * provider using the original key, a duplicate of the key, and a key that was
+ * imported with only n, e, p and q (thus has no d imported).
+ */
+static int check_implicit_rejection(EVP_PKEY *rsa_pkey)
+{
+    EVP_PKEY *pkey_dup = NULL, *pkey_pq = NULL;
+    unsigned char in[1024], ref[1024], out[1024];
+    size_t keylen, inlen, reflen, outlen;
+    int ok = 0, i;
+    size_t k;
+
+    keylen = EVP_PKEY_get_size(rsa_pkey);
+    if (keylen < 11 + 8 || keylen > sizeof(in)) {
+        fprintf(stderr, "Unexpected key size %lu\n", (unsigned long)keylen);
+        goto out;
+    }
+
+    pkey_dup = EVP_PKEY_dup(rsa_pkey);
+    if (pkey_dup == NULL) {
+        fprintf(stderr, "EVP_PKEY_dup failed\n");
+        goto out;
+    }
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+    if (!import_key_from_pq_only(rsa_pkey, &pkey_pq))
+        goto out;
+#endif
+
+    for (i = 0; i < 3; i++) {
+        /* Deterministic ciphertext, always smaller than the modulus */
+        inlen = keylen;
+        in[0] = 0;
+        for (k = 1; k < inlen; k++)
+            in[k] = (unsigned char)(k * 131 + i * 17 + 7);
+
+        reflen = sizeof(ref);
+        if (!decrypt_implicit_rejection(NULL, rsa_pkey, in, inlen,
+                                        ref, &reflen))
+            goto out;
+
+        outlen = sizeof(out);
+        if (!decrypt_implicit_rejection("ibmca", rsa_pkey, in, inlen,
+                                        out, &outlen))
+            goto out;
+        if (outlen != reflen || memcmp(out, ref, reflen) != 0) {
+            fprintf(stderr, "Implicit rejection result differs for the "
+                    "original key (ciphertext %d)\n", i);
+            goto out;
+        }
+
+        outlen = sizeof(out);
+        if (!decrypt_implicit_rejection("ibmca", pkey_dup, in, inlen,
+                                        out, &outlen))
+            goto out;
+        if (outlen != reflen || memcmp(out, ref, reflen) != 0) {
+            fprintf(stderr, "Implicit rejection result differs for the "
+                    "duplicated key (ciphertext %d)\n", i);
+            goto out;
+        }
+
+        if (pkey_pq != NULL) {
+            outlen = sizeof(out);
+            if (!decrypt_implicit_rejection("ibmca", pkey_pq, in, inlen,
+                                            out, &outlen))
+                goto out;
+            if (outlen != reflen || memcmp(out, ref, reflen) != 0) {
+                fprintf(stderr, "Implicit rejection result differs for the "
+                        "key imported from p and q (ciphertext %d)\n", i);
+                goto out;
+            }
+        }
+    }
+
+    ok = 1;
+
+out:
+    if (pkey_dup != NULL)
+        EVP_PKEY_free(pkey_dup);
+    if (pkey_pq != NULL)
+        EVP_PKEY_free(pkey_pq);
+
+    return ok;
+}
+#endif
+
 static int check_rsakey(int bits, const char *algo, const char *name)
 {
     int            ok = 0;
@@ -872,6 +1138,11 @@ static int check_rsakey(int bits, const char *algo, const char *name)
     if (!generate_key("ibmca", algo, bits, pss_md, pss_mgf1_md, pss_saltlen,
                       NULL, &rsa_pkey))
         goto out;
+
+    /* Check the private exponent d of the generated key */
+    if (!check_private_exponent(rsa_pkey))
+        goto out;
+    printf("Private exponent d correct with %s (ibmca provider)\n", name);
 
     /* Sign with IBMCA provider */
     siglen = sizeof(sigbuf);
@@ -991,6 +1262,15 @@ skip:
         goto out;
 #endif
 
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    /* RSA-PSS keys can not be used for encryption/decryption */
+    if (strcmp(algo, "RSA") == 0) {
+        if (!check_implicit_rejection(rsa_pkey))
+            goto out;
+        printf("Implicit rejection correct with %s (ibmca provider)\n", name);
+    }
+#endif
+
     ok = 1;
 
  out:
@@ -1001,6 +1281,205 @@ skip:
 
     return ok;
 }
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+/*
+ * Import only n, e, p and q (no d, no CRT components) with DERIVE_FROM_PQ into
+ * the IBMCA provider, and verify that the derived private key components are
+ * correct: d, dP and dQ must be inverses of e modulo phi(n), p-1 and q-1, and
+ * qInv must be the inverse of q modulo p.
+ */
+static int import_from_pq_check_components(EVP_PKEY *rsa_pkey)
+{
+    char props[] = "?provider=ibmca";
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM *export_params = NULL;
+    OSSL_PARAM import_params[6];
+    EVP_PKEY *pkey2 = NULL;
+    BIGNUM *e = NULL, *d = NULL, *p = NULL, *q = NULL, *dp = NULL, *dq = NULL;
+    BIGNUM *qinv = NULL, *p1 = NULL, *q1 = NULL, *t = NULL;
+    BN_CTX *bn_ctx = NULL;
+    int ok = 0, i, k, derive_from_pq = 1;
+
+    ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_name failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_todata(rsa_pkey, EVP_PKEY_KEYPAIR, &export_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_todata failed\n");
+        goto out;
+    }
+
+    for (i = 0, k = 0; export_params[i].key != NULL && k < 4; i++) {
+        if (strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_N) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_E) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR1) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR2) == 0) {
+            import_params[k] = export_params[i];
+            k++;
+        }
+    }
+    import_params[k++] =
+            OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ,
+                                     &derive_from_pq);
+    import_params[k++] = OSSL_PARAM_construct_end();
+
+    if (EVP_PKEY_fromdata_init(ctx) <= 0 ||
+        EVP_PKEY_fromdata(ctx, &pkey2, EVP_PKEY_KEYPAIR, import_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_fromdata failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_E, &e) != 1 ||
+        EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_D, &d) != 1 ||
+        EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_FACTOR1, &p) != 1 ||
+        EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_FACTOR2, &q) != 1 ||
+        EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_EXPONENT1, &dp) != 1 ||
+        EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_EXPONENT2, &dq) != 1 ||
+        EVP_PKEY_get_bn_param(pkey2, OSSL_PKEY_PARAM_RSA_COEFFICIENT1,
+                              &qinv) != 1) {
+        fprintf(stderr, "EVP_PKEY_get_bn_param failed\n");
+        goto out;
+    }
+
+    bn_ctx = BN_CTX_new();
+    p1 = BN_dup(p);
+    q1 = BN_dup(q);
+    t = BN_new();
+    if (bn_ctx == NULL || p1 == NULL || q1 == NULL || t == NULL ||
+        !BN_sub_word(p1, 1) || !BN_sub_word(q1, 1)) {
+        fprintf(stderr, "BN allocation failed\n");
+        goto out;
+    }
+
+    /* e * dP = 1 mod (p-1), e * dQ = 1 mod (q-1) */
+    if (!BN_mod_mul(t, e, dp, p1, bn_ctx) || !BN_is_one(t)) {
+        fprintf(stderr, "dP is not the inverse of e mod (p-1)\n");
+        goto out;
+    }
+    if (!BN_mod_mul(t, e, dq, q1, bn_ctx) || !BN_is_one(t)) {
+        fprintf(stderr, "dQ is not the inverse of e mod (q-1)\n");
+        goto out;
+    }
+
+    /* e * d = 1 mod (p-1) and mod (q-1), thus also mod lcm(p-1, q-1) */
+    if (!BN_mod_mul(t, e, d, p1, bn_ctx) || !BN_is_one(t) ||
+        !BN_mod_mul(t, e, d, q1, bn_ctx) || !BN_is_one(t)) {
+        fprintf(stderr, "d is not the inverse of e\n");
+        goto out;
+    }
+
+    /* qInv * q = 1 mod p */
+    if (!BN_mod_mul(t, qinv, q, p, bn_ctx) || !BN_is_one(t)) {
+        fprintf(stderr, "qInv is not the inverse of q mod p\n");
+        goto out;
+    }
+
+    /* The components must also be properly reduced: 0 < x < modulus */
+    if (BN_is_zero(dp) || BN_is_negative(dp) || BN_cmp(dp, p1) >= 0) {
+        fprintf(stderr, "dP is not in the range (0, p-1)\n");
+        goto out;
+    }
+    if (BN_is_zero(dq) || BN_is_negative(dq) || BN_cmp(dq, q1) >= 0) {
+        fprintf(stderr, "dQ is not in the range (0, q-1)\n");
+        goto out;
+    }
+    if (BN_is_zero(qinv) || BN_is_negative(qinv) || BN_cmp(qinv, p) >= 0) {
+        fprintf(stderr, "qInv is not in the range (0, p)\n");
+        goto out;
+    }
+    /* d = e^-1 mod phi(n), phi(n) = (p-1)(q-1) */
+    if (!BN_mul(t, p1, q1, bn_ctx)) {
+        fprintf(stderr, "BN_mul failed\n");
+        goto out;
+    }
+    if (BN_is_zero(d) || BN_is_negative(d) || BN_cmp(d, t) >= 0) {
+        fprintf(stderr, "d is not in the range (0, phi(n))\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    BN_free(e);
+    BN_clear_free(d);
+    BN_clear_free(p);
+    BN_clear_free(q);
+    BN_clear_free(dp);
+    BN_clear_free(dq);
+    BN_clear_free(qinv);
+    BN_clear_free(p1);
+    BN_clear_free(q1);
+    BN_free(t);
+    BN_CTX_free(bn_ctx);
+    if (export_params != NULL)
+        OSSL_PARAM_free(export_params);
+    if (pkey2 != NULL)
+        EVP_PKEY_free(pkey2);
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+
+    return ok;
+}
+
+/*
+ * Generate a key with a non-default public exponent using the default
+ * provider, and derive the private key components from p and q in the IBMCA
+ * provider. This covers the single-word prime, single-word composite and
+ * multi-word public exponent branches of the CRT derivation.
+ *
+ * Returns 1 on success, 0 on failure, and -1 if the subtest was skipped
+ * because the default provider could not generate a key with this exponent.
+ */
+static int check_rsakey_pub_exp(int bits, const char *e_hex)
+{
+    BIGNUM *e = NULL;
+    EVP_PKEY *rsa_pkey = NULL;
+    unsigned char e_buf[16];
+    OSSL_PARAM params[2];
+    int ok = 0;
+
+    if (BN_hex2bn(&e, e_hex) == 0 ||
+        BN_bn2nativepad(e, e_buf, sizeof(e_buf)) < 0) {
+        fprintf(stderr, "Failed to convert public exponent\n");
+        goto out;
+    }
+
+    params[0] = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_RSA_E, e_buf,
+                                        sizeof(e_buf));
+    params[1] = OSSL_PARAM_construct_end();
+
+    if (!generate_key(NULL, "RSA", bits, NULL, NULL, 0, params, &rsa_pkey)) {
+        /* The default provider may not support this exponent */
+        fprintf(stderr, "Skipping public exponent 0x%s: keygen failed\n",
+                e_hex);
+        ERR_clear_error();
+        ok = -1;
+        goto out;
+    }
+
+    if (!export_import_key_from_pq("ibmca", rsa_pkey))
+        goto out;
+
+    if (!import_from_pq_check_components(rsa_pkey))
+        goto out;
+
+    printf("Key components derived from p and q correct for e=0x%s "
+           "(ibmca provider)\n", e_hex);
+    ok = 1;
+
+out:
+    BN_free(e);
+    if (rsa_pkey != NULL)
+        EVP_PKEY_free(rsa_pkey);
+
+    ERR_print_errors_fp(stderr);
+
+    return ok;
+}
+#endif
 
 static const unsigned int required_ica_mechs[] = { RSA_ME,  RSA_CRT };
 static const unsigned int required_ica_mechs_len =
@@ -1122,5 +1601,36 @@ int main(int argc, char **argv)
             ret = 99;
         }
     }
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+    {
+        /* 3, 17, 65537 (prime), 15, 4097 (composite), 65-bit (multi-word) */
+        static const char *pub_exps[] = {
+            "3", "11", "10001", "0F", "1001", "1000000000000000D"
+        };
+        int num_exps = (int)(sizeof(pub_exps) / sizeof(pub_exps[0]));
+        int rc, skipped = 0;
+
+        for (i = 0; i < num_exps; ++i) {
+            rc = check_rsakey_pub_exp(1024, pub_exps[i]);
+            if (rc == 0) {
+                fprintf(stderr, "Failure for public exponent 0x%s\n",
+                        pub_exps[i]);
+                ret = 99;
+            } else if (rc < 0) {
+                skipped++;
+            }
+        }
+
+        if (skipped > 0)
+            fprintf(stderr, "WARNING: %d of %d public exponent subtests were "
+                    "skipped\n", skipped, num_exps);
+        if (skipped == num_exps) {
+            fprintf(stderr, "Failure: no public exponent subtest was run\n");
+            ret = 99;
+        }
+    }
+#endif
+
     return ret;
 }
