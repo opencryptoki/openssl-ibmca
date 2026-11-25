@@ -1596,6 +1596,8 @@ static int ibmca_keymgmt_rsa_calc_priv_d(const struct ibmca_prov_ctx *provctx,
      */
     bn_ctx = BN_CTX_new();
     *d = BN_secure_new();
+    if (*d != NULL)
+        BN_set_flags(*d, BN_FLG_CONSTTIME);
     if (bn_ctx == NULL || *d == NULL ||
         BN_copy(*d, n) == NULL ||
         BN_sub(*d, *d, p) == 0 ||
