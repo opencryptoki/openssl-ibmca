@@ -175,6 +175,66 @@ out:
     return ok;
 }
 
+/*
+ * Verify that the private exponent d of a key is correct: e * d = 1 mod (p-1)
+ * and mod (q-1) (thus also mod lcm(p-1, q-1)), and 0 < d < phi(n).
+ */
+static int check_private_exponent(EVP_PKEY *rsa_pkey)
+{
+    BIGNUM *e = NULL, *d = NULL, *p = NULL, *q = NULL;
+    BIGNUM *p1 = NULL, *q1 = NULL, *t = NULL;
+    BN_CTX *bn_ctx = NULL;
+    int ok = 0;
+
+    if (EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_E, &e) != 1 ||
+        EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_D, &d) != 1 ||
+        EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_FACTOR1, &p) != 1 ||
+        EVP_PKEY_get_bn_param(rsa_pkey, OSSL_PKEY_PARAM_RSA_FACTOR2, &q) != 1) {
+        fprintf(stderr, "EVP_PKEY_get_bn_param failed\n");
+        goto out;
+    }
+
+    bn_ctx = BN_CTX_new();
+    p1 = BN_dup(p);
+    q1 = BN_dup(q);
+    t = BN_new();
+    if (bn_ctx == NULL || p1 == NULL || q1 == NULL || t == NULL ||
+        !BN_sub_word(p1, 1) || !BN_sub_word(q1, 1)) {
+        fprintf(stderr, "BN allocation failed\n");
+        goto out;
+    }
+
+    if (!BN_mod_mul(t, e, d, p1, bn_ctx) || !BN_is_one(t) ||
+        !BN_mod_mul(t, e, d, q1, bn_ctx) || !BN_is_one(t)) {
+        fprintf(stderr, "d is not the inverse of e\n");
+        goto out;
+    }
+
+    /* phi(n) = (p-1)(q-1) */
+    if (!BN_mul(t, p1, q1, bn_ctx)) {
+        fprintf(stderr, "BN_mul failed\n");
+        goto out;
+    }
+    if (BN_is_zero(d) || BN_is_negative(d) || BN_cmp(d, t) >= 0) {
+        fprintf(stderr, "d is not in the range (0, phi(n))\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    BN_free(e);
+    BN_clear_free(d);
+    BN_clear_free(p);
+    BN_clear_free(q);
+    BN_clear_free(p1);
+    BN_clear_free(q1);
+    BN_free(t);
+    BN_CTX_free(bn_ctx);
+
+    return ok;
+}
+
 static int sign_single(const char* provider, EVP_PKEY *rsa_pkey,
                        int pss_padding, const char *pss_mgf1_md,
                        int pss_saltlen, const unsigned char *tbs,
@@ -873,6 +933,11 @@ static int check_rsakey(int bits, const char *algo, const char *name)
     if (!generate_key("ibmca", algo, bits, pss_md, pss_mgf1_md, pss_saltlen,
                       NULL, &rsa_pkey))
         goto out;
+
+    /* Check the private exponent d of the generated key */
+    if (!check_private_exponent(rsa_pkey))
+        goto out;
+    printf("Private exponent d correct with %s (ibmca provider)\n", name);
 
     /* Sign with IBMCA provider */
     siglen = sizeof(sigbuf);
