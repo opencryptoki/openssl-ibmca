@@ -79,6 +79,7 @@ static int ibmca_keymgmt_rsa_calc_priv_d(const struct ibmca_prov_ctx *provctx,
                                          BIGNUM *n, BIGNUM *e,
                                          BIGNUM *p, BIGNUM *q,
                                          BIGNUM **d);
+static int ibmca_keymgmt_rsa_add_priv_me(struct ibmca_key *key);
 
 static int ibmca_keymgmt_rsa_pss_parms_from_data(
                                         const struct ibmca_prov_ctx *provctx,
@@ -261,11 +262,16 @@ static int ibmca_keymgmt_rsa_pub_key_to_data(
     return 1;
 }
 
+/*
+ * Derives dP, dQ and qInv from p and q. The private exponent d that was
+ * calculated on the way is returned in *d_out, so that the caller does not
+ * need to calculate it again. The caller must free it with BN_clear_free().
+ */
 static int ibmca_keymgmt_rsa_derive_crt_from_pq(
                                         const struct ibmca_prov_ctx *provctx,
                                         BIGNUM *n, BIGNUM *e, BIGNUM *p,
                                         BIGNUM *q, BIGNUM *dp, BIGNUM *dq,
-                                        BIGNUM *qinv)
+                                        BIGNUM *qinv, BIGNUM **d_out)
 {
     BIGNUM *d = NULL, *p1 = NULL, *q1 = NULL;
     BN_CTX *ctx = NULL;
@@ -327,11 +333,13 @@ static int ibmca_keymgmt_rsa_derive_crt_from_pq(
         goto out;
     }
 
+    *d_out = d;
+    d = NULL;
     rc = 1;
 
 out:
     BN_CTX_free(ctx);
-    BN_free(d);
+    BN_clear_free(d);
 
     return rc;
 }
@@ -341,9 +349,16 @@ static int ibmca_keymgmt_rsa_priv_crt_key_from_data(
                                         const OSSL_PARAM params[],
                                         BIGNUM *n, BIGNUM *e,
                                         BIGNUM **p, BIGNUM **q,
-                                        BIGNUM **dp, BIGNUM **dq, BIGNUM **qinv)
+                                        BIGNUM **dp, BIGNUM **dq, BIGNUM **qinv,
+                                        BIGNUM **d_derived)
 {
     int rc, derive_from_pq = 0;
+
+    /*
+     * *d_derived is only set if the CRT components were derived from p and q.
+     * In this case it is the calculated private exponent d.
+     */
+    *d_derived = NULL;
 
     *p = BN_secure_new();
     *q = BN_secure_new();
@@ -398,7 +413,7 @@ check_from_pq:
 
     if (derive_from_pq) {
         rc = ibmca_keymgmt_rsa_derive_crt_from_pq(provctx, n, e, *p, *q,
-                                                  *dp, *dq, *qinv);
+                                                  *dp, *dq, *qinv, d_derived);
         if (rc != 1)
             goto error;
 
@@ -1439,6 +1454,14 @@ static void *ibmca_keymgmt_rsa_gen(void *vgenctx, OSSL_CALLBACK *osslcb,
         return NULL;
     }
 
+    /* Calculate and store d once, so that it is not recalculated later on */
+    if (ibmca_keymgmt_rsa_add_priv_me(key) == 0) {
+        ibmca_debug_op_ctx(genctx,
+                           "ERROR: ibmca_keymgmt_rsa_add_priv_me failed");
+        ibmca_keymgmt_free(key);
+        return NULL;
+    }
+
     p = 3;
     n = 0;
     if (osslcb != NULL && osslcb(cb_params, cbarg) == 0) {
@@ -1583,6 +1606,76 @@ error:
     return 0;
 }
 
+/* Store n and d as ME private key of the key */
+static int ibmca_keymgmt_rsa_set_priv_me(struct ibmca_key *key, BIGNUM *n,
+                                         BIGNUM *d)
+{
+    if (ibmca_keymgmt_rsa_alloc_priv_me(key) == 0)
+        return 0;
+
+    if (BN_bn2binpad(n, key->rsa.private_me.modulus,
+                     key->rsa.private_me.key_length) <= 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "BN_bn2binpad failed for modulus");
+        return 0;
+    }
+
+    if (BN_bn2binpad(d, key->rsa.private_me.exponent,
+                     key->rsa.private_me.key_length) <= 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "BN_bn2binpad failed for private d");
+        return 0;
+    }
+
+    return 1;
+}
+
+/*
+ * If the key has valid CRT private key components, but no private exponent d,
+ * calculate d once and store it as ME private key. This avoids that d needs to
+ * be recalculated from the secret factors p and q each time it is needed
+ * (e.g. for each RSA decryption with implicit rejection), which could leak
+ * information about p and q via timing.
+ * Does nothing if the key already has d, or if it has no CRT components.
+ */
+static int ibmca_keymgmt_rsa_add_priv_me(struct ibmca_key *key)
+{
+    BIGNUM *n = NULL, *e = NULL, *d = NULL;
+    BIGNUM *p = NULL, *q = NULL, *dp = NULL, *dq = NULL, *qinv = NULL;
+    int rc = 0;
+
+    if (ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me) ||
+        !ibmca_keymgmt_rsa_priv_crt_valid(&key->rsa.private_crt))
+        return 1;
+
+    if (ibmca_keymgmt_rsa_pub_as_bn(key, &n, &e) == 0 ||
+        ibmca_keymgmt_rsa_priv_crt_as_bn(key, &p, &q, &dp, &dq, &qinv) == 0) {
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "Failed to get key components to calculate d");
+        goto out;
+    }
+
+    if (ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q, &d) == 0)
+        goto out;
+
+    if (ibmca_keymgmt_rsa_set_priv_me(key, n, d) == 0)
+        goto out;
+
+    rc = 1;
+
+out:
+    BN_free(n);
+    BN_free(e);
+    BN_clear_free(d);
+    BN_clear_free(p);
+    BN_clear_free(q);
+    BN_clear_free(dp);
+    BN_clear_free(dq);
+    BN_clear_free(qinv);
+
+    return rc;
+}
+
 static int ibmca_keymgmt_rsa_calc_priv_d(const struct ibmca_prov_ctx *provctx,
                                          BIGNUM *n, BIGNUM *e,
                                          BIGNUM *p, BIGNUM *q,
@@ -1699,9 +1792,9 @@ static int ibmca_keymgmt_rsa_get_params(void *vkey, OSSL_PARAM params[])
         /* CRT format */
         rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
         if (rc == 0) {
-            rc = ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q, &d);
-            if (rc == 0)
-                goto out;
+            put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                          "Private exponent d is not available");
+            goto out;
         }
 
         rc = ibmca_keymgmt_rsa_priv_key_to_data(key->provctx, NULL, params, d,
@@ -1958,10 +2051,9 @@ int ibmca_keymgmt_rsa_export(void *vkey, int selection,
             /* CRT format */
             rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
             if (rc == 0) {
-                rc = ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q,
-                                                   &d);
-                if (rc == 0)
-                    goto error;
+                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                              "Private exponent d is not available");
+                goto error;
             }
 
             rc = ibmca_keymgmt_rsa_priv_key_to_data(key->provctx, bld, NULL, d,
@@ -2031,7 +2123,7 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
     struct ibmca_key *key = vkey;
     const OSSL_PARAM *parm;
     BIGNUM *n = NULL, *e = NULL, *d = NULL, *p = NULL, *q = NULL;
-    BIGNUM *dp = NULL, *dq = NULL, *qinv = NULL;
+    BIGNUM *dp = NULL, *dq = NULL, *qinv = NULL, *d_derived = NULL;
     int rc = 0;
 
     if (key == NULL)
@@ -2084,7 +2176,8 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
         /* Import private key parts */
         rc = ibmca_keymgmt_rsa_priv_crt_key_from_data(key->provctx, params,
                                                       n, e,
-                                                      &p, &q, &dp, &dq, &qinv);
+                                                      &p, &q, &dp, &dq, &qinv,
+                                                      &d_derived);
         if (rc == 1) {
             /* CRT components */
             rc = 0;
@@ -2134,26 +2227,24 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
         }
 
         rc = ibmca_keymgmt_rsa_priv_me_key_from_data(key->provctx, params, &d);
+        if (rc != 1 && d_derived != NULL) {
+            /* d was not imported, use d calculated to derive the CRT parts */
+            d = d_derived;
+            d_derived = NULL;
+            rc = 1;
+        }
         if (rc == 1) {
             /* ME components */
+            if (ibmca_keymgmt_rsa_set_priv_me(key, n, d) == 0) {
+                rc = 0;
+                goto out;
+            }
+        }
+
+        /* If d is still not available, calculate and store it once now */
+        if (ibmca_keymgmt_rsa_add_priv_me(key) == 0) {
             rc = 0;
-
-            if (ibmca_keymgmt_rsa_alloc_priv_me(key) == 0)
-                goto out;
-
-            if (BN_bn2binpad(n, key->rsa.private_me.modulus,
-                             key->rsa.private_me.key_length) <= 0) {
-                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                              "BN_bn2binpad failed for modulus");
-                goto out;
-            }
-
-            if (BN_bn2binpad(d, key->rsa.private_me.exponent,
-                             key->rsa.private_me.key_length) <= 0) {
-                put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
-                              "BN_bn2binpad failed for private d");
-                goto out;
-            }
+            goto out;
         }
     }
 
@@ -2172,6 +2263,7 @@ out:
     BN_free(n);
     BN_free(e);
     BN_free(d);
+    BN_clear_free(d_derived);
     BN_free(p);
     BN_free(q);
     BN_free(dp);
@@ -2185,8 +2277,7 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
                                  const unsigned char *in, size_t inlen,
                                  unsigned char *kdk, size_t kdklen)
 {
-    BIGNUM *n = NULL, *e = NULL, *d = NULL;
-    BIGNUM *p = NULL, *q = NULL, *dp = NULL, *dq = NULL, *qinv = NULL;
+    BIGNUM *d = NULL;
     unsigned char *buf = NULL;
     EVP_MAC_CTX *ctx = NULL;
     EVP_MAC *hmac = NULL;
@@ -2218,17 +2309,9 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
 
     rc = ibmca_keymgmt_rsa_priv_me_as_bn(key, &d);
     if (rc == 0) {
-        rc = ibmca_keymgmt_rsa_priv_crt_as_bn(key, &p, &q, &dp, &dq, &qinv);
-        if (rc == 0)
-            goto out;
-
-        rc =  ibmca_keymgmt_rsa_pub_as_bn(key, &n, &e);
-        if (rc == 0)
-            goto out;
-
-        rc = ibmca_keymgmt_rsa_calc_priv_d(key->provctx, n, e, p, q, &d);
-        if (rc == 0)
-            goto out;
+        put_error_key(key, IBMCA_ERR_INTERNAL_ERROR,
+                      "Private exponent d is not available");
+        goto out;
     }
 
     buf = P_SECURE_ZALLOC(key->provctx, key->rsa.keylength);
@@ -2309,14 +2392,7 @@ int ibmca_keymgmt_rsa_derive_kdk(struct ibmca_key *key,
     ret = 1;
 
 out:
-    BN_free(n);
-    BN_free(e);
-    BN_free(d);
-    BN_free(p);
-    BN_free(q);
-    BN_free(dp);
-    BN_free(dq);
-    BN_free(qinv);
+    BN_clear_free(d);
     if (buf != NULL)
         P_SECURE_CLEAR_FREE(key->provctx, buf, key->rsa.keylength);
     EVP_MAC_free(hmac);
