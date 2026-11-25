@@ -612,8 +612,8 @@ static int ibmca_keymgmt_rsa_alloc_priv_me(struct ibmca_key *key)
 
     key->rsa.private_me.modulus = P_ZALLOC(key->provctx,
                                            key->rsa.private_me.key_length);
-    key->rsa.private_me.exponent = P_ZALLOC(key->provctx,
-                                            key->rsa.private_me.key_length);
+    key->rsa.private_me.exponent = P_SECURE_ZALLOC(key->provctx,
+                                           key->rsa.private_me.key_length);
 
     if (!ibmca_keymgmt_rsa_priv_me_valid(&key->rsa.private_me)) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
@@ -669,8 +669,8 @@ static void ibmca_keymgmt_rsa_free_priv_me(struct ibmca_key *key)
                      key->rsa.private_me.key_length);
     key->rsa.private_me.modulus = NULL;
     if (key->rsa.private_me.exponent != NULL)
-        P_CLEAR_FREE(key->provctx, key->rsa.private_me.exponent,
-                     key->rsa.private_me.key_length);
+        P_SECURE_CLEAR_FREE(key->provctx, key->rsa.private_me.exponent,
+                            key->rsa.private_me.key_length);
     key->rsa.private_me.exponent = NULL;
     key->rsa.private_me.key_length = 0;
 }
@@ -800,9 +800,9 @@ static int ibmca_keymgmt_rsa_dup_priv_me(const struct ibmca_key *key,
     new_key->rsa.private_me.modulus = P_MEMDUP(key->provctx,
                                                key->rsa.private_me.modulus,
                                                key->rsa.private_me.key_length);
-    new_key->rsa.private_me.exponent = P_MEMDUP(key->provctx,
-                                                key->rsa.private_me.exponent,
-                                                key->rsa.private_me.key_length);
+    new_key->rsa.private_me.exponent = P_SECURE_MEMDUP(key->provctx,
+                                            key->rsa.private_me.exponent,
+                                            key->rsa.private_me.key_length);
 
     if (!ibmca_keymgmt_rsa_priv_me_valid(&new_key->rsa.private_me)) {
         put_error_key(key, IBMCA_ERR_MALLOC_FAILED,
