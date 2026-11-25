@@ -908,6 +908,211 @@ out:
 }
 #endif
 
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+static int decrypt_implicit_rejection(const char *provider, EVP_PKEY *rsa_pkey,
+                                      const unsigned char *in, size_t inlen,
+                                      unsigned char *out, size_t *outlen)
+{
+    char props[200];
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM params[2];
+    unsigned int implicit_rejection = 1;
+    int ok = 0;
+
+    sprintf(props, "%sprovider=%s", provider != NULL ? "?" : "",
+            provider != NULL ? provider : "default");
+
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, rsa_pkey, props);
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_pkey failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_decrypt_init(ctx) <= 0) {
+        fprintf(stderr, "EVP_PKEY_decrypt_init failed\n");
+        goto out;
+    }
+
+    if (!check_provider(ctx, provider))
+        goto out;
+
+    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_PADDING) <= 0) {
+        fprintf(stderr, "EVP_PKEY_CTX_set_rsa_padding failed\n");
+        goto out;
+    }
+
+    params[0] = OSSL_PARAM_construct_uint(
+                                OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION,
+                                &implicit_rejection);
+    params[1] = OSSL_PARAM_construct_end();
+    if (EVP_PKEY_CTX_set_params(ctx, params) != 1) {
+        fprintf(stderr, "EVP_PKEY_CTX_set_params failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_decrypt(ctx, out, outlen, in, inlen) <= 0) {
+        fprintf(stderr, "EVP_PKEY_decrypt failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+
+    return ok;
+}
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+/*
+ * Import only n, e, p and q (no d, no CRT components) with DERIVE_FROM_PQ into
+ * the IBMCA provider.
+ */
+static int import_key_from_pq_only(EVP_PKEY *rsa_pkey, EVP_PKEY **new_pkey)
+{
+    EVP_PKEY_CTX *ctx = NULL;
+    OSSL_PARAM *export_params = NULL;
+    OSSL_PARAM import_params[6];
+    int ok = 0, i, k, derive_from_pq = 1;
+
+    ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", "?provider=ibmca");
+    if (ctx == NULL) {
+        fprintf(stderr, "EVP_PKEY_CTX_new_from_name failed\n");
+        goto out;
+    }
+
+    if (EVP_PKEY_todata(rsa_pkey, EVP_PKEY_KEYPAIR, &export_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_todata failed\n");
+        goto out;
+    }
+
+    for (i = 0, k = 0; export_params[i].key != NULL && k < 4; i++) {
+        if (strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_N) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_E) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR1) == 0 ||
+            strcmp(export_params[i].key, OSSL_PKEY_PARAM_RSA_FACTOR2) == 0) {
+            import_params[k] = export_params[i];
+            k++;
+        }
+    }
+    import_params[k++] =
+            OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ,
+                                     &derive_from_pq);
+    import_params[k++] = OSSL_PARAM_construct_end();
+
+    if (EVP_PKEY_fromdata_init(ctx) <= 0 ||
+        EVP_PKEY_fromdata(ctx, new_pkey, EVP_PKEY_KEYPAIR,
+                          import_params) != 1) {
+        fprintf(stderr, "EVP_PKEY_fromdata failed\n");
+        goto out;
+    }
+
+    ok = 1;
+
+out:
+    if (export_params != NULL)
+        OSSL_PARAM_free(export_params);
+    if (ctx != NULL)
+        EVP_PKEY_CTX_free(ctx);
+
+    return ok;
+}
+#endif
+
+/*
+ * Decrypt (nearly certainly) invalid PKCS#1 v1.5 ciphertexts with implicit
+ * rejection. In this case, a pseudo-random message is returned that is derived
+ * from the private exponent d of the key. The result is thus the same for
+ * all providers and for all copies of the key, only if they all use the
+ * correct d.
+ *
+ * Use the default provider as reference and compare it with the IBMCA
+ * provider using the original key, a duplicate of the key, and a key that was
+ * imported with only n, e, p and q (thus has no d imported).
+ */
+static int check_implicit_rejection(EVP_PKEY *rsa_pkey)
+{
+    EVP_PKEY *pkey_dup = NULL, *pkey_pq = NULL;
+    unsigned char in[1024], ref[1024], out[1024];
+    size_t keylen, inlen, reflen, outlen;
+    int ok = 0, i;
+    size_t k;
+
+    keylen = EVP_PKEY_get_size(rsa_pkey);
+    if (keylen < 11 + 8 || keylen > sizeof(in)) {
+        fprintf(stderr, "Unexpected key size %lu\n", (unsigned long)keylen);
+        goto out;
+    }
+
+    pkey_dup = EVP_PKEY_dup(rsa_pkey);
+    if (pkey_dup == NULL) {
+        fprintf(stderr, "EVP_PKEY_dup failed\n");
+        goto out;
+    }
+
+#ifdef OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ
+    if (!import_key_from_pq_only(rsa_pkey, &pkey_pq))
+        goto out;
+#endif
+
+    for (i = 0; i < 3; i++) {
+        /* Deterministic ciphertext, always smaller than the modulus */
+        inlen = keylen;
+        in[0] = 0;
+        for (k = 1; k < inlen; k++)
+            in[k] = (unsigned char)(k * 131 + i * 17 + 7);
+
+        reflen = sizeof(ref);
+        if (!decrypt_implicit_rejection(NULL, rsa_pkey, in, inlen,
+                                        ref, &reflen))
+            goto out;
+
+        outlen = sizeof(out);
+        if (!decrypt_implicit_rejection("ibmca", rsa_pkey, in, inlen,
+                                        out, &outlen))
+            goto out;
+        if (outlen != reflen || memcmp(out, ref, reflen) != 0) {
+            fprintf(stderr, "Implicit rejection result differs for the "
+                    "original key (ciphertext %d)\n", i);
+            goto out;
+        }
+
+        outlen = sizeof(out);
+        if (!decrypt_implicit_rejection("ibmca", pkey_dup, in, inlen,
+                                        out, &outlen))
+            goto out;
+        if (outlen != reflen || memcmp(out, ref, reflen) != 0) {
+            fprintf(stderr, "Implicit rejection result differs for the "
+                    "duplicated key (ciphertext %d)\n", i);
+            goto out;
+        }
+
+        if (pkey_pq != NULL) {
+            outlen = sizeof(out);
+            if (!decrypt_implicit_rejection("ibmca", pkey_pq, in, inlen,
+                                            out, &outlen))
+                goto out;
+            if (outlen != reflen || memcmp(out, ref, reflen) != 0) {
+                fprintf(stderr, "Implicit rejection result differs for the "
+                        "key imported from p and q (ciphertext %d)\n", i);
+                goto out;
+            }
+        }
+    }
+
+    ok = 1;
+
+out:
+    if (pkey_dup != NULL)
+        EVP_PKEY_free(pkey_dup);
+    if (pkey_pq != NULL)
+        EVP_PKEY_free(pkey_pq);
+
+    return ok;
+}
+#endif
+
 static int check_rsakey(int bits, const char *algo, const char *name)
 {
     int            ok = 0;
@@ -1055,6 +1260,15 @@ skip:
 
     if (!export_import_key_from_pq(NULL, rsa_pkey))
         goto out;
+#endif
+
+#ifdef OSSL_ASYM_CIPHER_PARAM_IMPLICIT_REJECTION
+    /* RSA-PSS keys can not be used for encryption/decryption */
+    if (strcmp(algo, "RSA") == 0) {
+        if (!check_implicit_rejection(rsa_pkey))
+            goto out;
+        printf("Implicit rejection correct with %s (ibmca provider)\n", name);
+    }
 #endif
 
     ok = 1;
