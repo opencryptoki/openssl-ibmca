@@ -2054,6 +2054,9 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
     if (rc == 0)
         return 0;
 
+    /* Fail on any error below, until everything is imported successfully */
+    rc = 0;
+
     key->rsa.bits = BN_num_bits(n);
     key->rsa.keylength = (key->rsa.bits + 7) / 8;
     ibmca_debug_key(key, "key: %p bits: %u", key, key->rsa.bits);
@@ -2082,6 +2085,8 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
                                                       &p, &q, &dp, &dq, &qinv);
         if (rc == 1) {
             /* CRT components */
+            rc = 0;
+
             if (ibmca_keymgmt_rsa_alloc_priv_crt(key) == 0)
                 goto out;
 
@@ -2129,6 +2134,8 @@ int ibmca_keymgmt_rsa_import(void *vkey, int selection,
         rc = ibmca_keymgmt_rsa_priv_me_key_from_data(key->provctx, params, &d);
         if (rc == 1) {
             /* ME components */
+            rc = 0;
+
             if (ibmca_keymgmt_rsa_alloc_priv_me(key) == 0)
                 goto out;
 
