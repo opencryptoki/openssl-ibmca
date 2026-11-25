@@ -1594,7 +1594,7 @@ static int ibmca_keymgmt_rsa_calc_priv_d(const struct ibmca_prov_ctx *provctx,
      * phi(n) = (p - 1 )(q - 1) = n - p - q + 1
      * d = e ^{-1} mod phi(n).
      */
-    bn_ctx = BN_CTX_new();
+    bn_ctx = BN_CTX_secure_new();
     *d = BN_secure_new();
     if (*d != NULL)
         BN_set_flags(*d, BN_FLG_CONSTTIME);
